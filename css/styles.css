@@ -179,7 +179,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .hero h1 { font-family: var(--serif); font-size: 42px; line-height: .98; margin: 10px 0 8px; font-weight: 600; letter-spacing: .5px; }
 .hero .dates { font-size: 13px; opacity: .9; font-weight: 600; letter-spacing: .3px;
   display: inline-flex; align-items: center; gap: 9px; }
-.hero .dates::before { content: ""; width: 18px; height: 1px; background: var(--gold-soft); display: inline-block; }
+/* (no decorative leading rule: it read as an em dash) */
 .hero .cities-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
 .hero .city-chip { background: rgba(255,255,255,.09); border: 1px solid rgba(246,241,232,.20);
   border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; letter-spacing: .2px; }

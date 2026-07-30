@@ -96,10 +96,20 @@
     catch (e) { console.warn("removeFile", e); return false; }
   }
 
+  /* ---- Push subscriptions --------------------------------------------------- */
+  async function savePushSub(row) {
+    try { await client.from("push_subs").upsert(row, { onConflict: "endpoint" }); return true; }
+    catch (e) { console.warn("savePushSub", e); return false; }
+  }
+  async function removePushSub(endpoint) {
+    try { await client.from("push_subs").delete().eq("endpoint", endpoint); return true; }
+    catch (e) { console.warn("removePushSub", e); return false; }
+  }
+
   /* ---- Realtime: subscribe to this trip's rows on all tables ---------------- */
   function subscribe(trip, onChange) {
     try {
-      const tables = ["trips", "days", "votes", "expenses", "decisions", "stay_options", "ideas", "flights", "notes", "confirmations", "photos"];
+      const tables = ["trips", "days", "votes", "expenses", "decisions", "stay_options", "ideas", "flights", "notes", "confirmations", "photos", "announcements"];
       let ch = client.channel("caravan-" + trip);
       tables.forEach((t) => {
         const col = t === "trips" ? "code" : "trip";
@@ -113,7 +123,7 @@
     init, isReady: () => ready, configured,
     createTrip, getTrip, updateTrip, deleteTrip,
     list, insert, update, remove, clearTable,
-    castVote, upsertFlight,
+    castVote, upsertFlight, savePushSub, removePushSub,
     uploadFile, removeFile,
     subscribe,
   };

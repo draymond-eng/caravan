@@ -196,3 +196,37 @@ drop policy if exists "caravan-files delete" on storage.objects;
 create policy "caravan-files read"   on storage.objects for select using (bucket_id = 'caravan-files');
 create policy "caravan-files insert" on storage.objects for insert with check (bucket_id = 'caravan-files');
 create policy "caravan-files delete" on storage.objects for delete using (bucket_id = 'caravan-files');
+
+-- =============================================================================
+-- Push notifications + announcements (run this block on existing projects too)
+-- =============================================================================
+create table if not exists public.announcements (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null references public.trips(code) on delete cascade,
+  title      text default '',
+  body       text not null,
+  author     text default '',
+  created_at timestamptz default now()
+);
+create index if not exists announcements_trip_idx on public.announcements(trip);
+
+create table if not exists public.push_subs (
+  endpoint   text primary key,
+  trip       text not null references public.trips(code) on delete cascade,
+  voter      text default '',
+  p256dh     text not null,
+  auth       text not null,
+  created_at timestamptz default now()
+);
+create index if not exists push_subs_trip_idx on public.push_subs(trip);
+
+alter table public.announcements enable row level security;
+alter table public.push_subs     enable row level security;
+do $$ begin
+  create policy "open announcements" on public.announcements for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "open push_subs" on public.push_subs for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+alter publication supabase_realtime add table public.announcements;

@@ -1,6 +1,6 @@
 /* Caravan - service worker. App-shell caching so the app opens offline.
    Bump CACHE when you change core files. */
-const CACHE = "caravan-v15";
+const CACHE = "caravan-v16";
 const CORE = [
   "./",
   "./index.html",
@@ -25,6 +25,33 @@ self.addEventListener("activate", (e) => {
     caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+/* ---- Push notifications ---------------------------------------------------
+   A host posts an update and every installed phone on that trip gets it on the
+   lock screen. Tapping the notification opens straight to that trip.
+   -------------------------------------------------------------------------- */
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "SquadTrip", {
+    body: d.body || "",
+    icon: "./assets/icon-512.png",
+    badge: "./assets/icon-512.png",
+    tag: d.tag || "squadtrip",
+    renotify: true,
+    data: { url: d.url || "./" },
+  }));
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+    const hit = wins.find((w) => w.url.indexOf(target) !== -1);
+    if (hit) return hit.focus();
+    return clients.openWindow(target);
+  }));
 });
 
 self.addEventListener("fetch", (e) => {

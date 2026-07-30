@@ -226,7 +226,7 @@
   const state = {
     me: null, packing: {}, cityFilter: "all",
     days: [], allVotes: [], expenses: [], decisions: [], stayOptions: [],
-    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [],
+    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [],
     liveRate: null,
   };
 
@@ -298,6 +298,7 @@
     J("confirmations", Backend.list("confirmations", TRIP_CODE, "created_at", false).then((r) => state.confirmations = r));
     J("photos", Backend.list("photos", TRIP_CODE, "created_at", false).then((r) => state.photos = r));
     J("guides", Backend.list("guides", TRIP_CODE).then((r) => state.guides = r));
+    J("announcements", Backend.list("announcements", TRIP_CODE, "created_at", false).then((r) => state.announcements = r));
     await Promise.all(jobs);
   }
 
@@ -410,13 +411,22 @@
       if (LSG.get("installDone", false)) return;
     }
     if (isStandalone()) {
+      const alertsOn = pushState() === "on";
       $("#installBody").innerHTML = `
         <div style="text-align:center;font-size:46px;margin:4px 0 8px">✅</div>
         <h3 style="text-align:center;margin:0 0 8px">You're all set</h3>
-        <p class="section-sub" style="text-align:center;margin:0 0 16px">SquadTrip is installed on this phone. Trip updates land here.</p>
-        <button class="btn primary" id="instClose" style="width:100%">Nice</button>`;
+        <p class="section-sub" style="text-align:center;margin:0 0 16px">SquadTrip is installed on this phone.${alertsOn ? " Alerts are on, so you'll know the moment plans change." : " Turn on alerts and you'll know the moment plans change."}</p>
+        ${alertsOn ? "" : `<button class="btn primary" id="instAlerts" style="width:100%;margin-bottom:8px">Turn on alerts</button>`}
+        <div id="instAlertMsg" class="r-sub" style="text-align:center;margin-bottom:8px"></div>
+        <button class="btn ghost" id="instClose" style="width:100%">${alertsOn ? "Nice" : "Not now"}</button>`;
       $("#installModal").classList.add("open");
       $("#instClose").addEventListener("click", closeInstall);
+      const ia = $("#instAlerts"); if (ia) ia.addEventListener("click", async () => {
+        $("#instAlertMsg").textContent = "Asking your phone…";
+        const r = await enablePush();
+        $("#instAlertMsg").textContent = r.msg;
+        if (r.ok) { renderCurrent(); setTimeout(closeInstall, 900); }
+      });
       return;
     }
     const ua = navigator.userAgent;
@@ -453,6 +463,149 @@
     });
   }
   function closeInstall() { $("#installModal").classList.remove("open"); }
+
+  /* ---- Push notifications --------------------------------------------------
+     Subscribe this device to the trip's alerts. iOS only allows this from a
+     home-screen install, which is why the install prompt comes first.
+     -------------------------------------------------------------------------- */
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  function pushState() {
+    if (!pushSupported()) return "unsupported";
+    if (!(window.CARAVAN_CONFIG || {}).vapidPublic) return "unconfigured";
+    if (Notification.permission === "denied") return "blocked";
+    if (Notification.permission === "granted" && LS.get("pushOn", false)) return "on";
+    return "off";
+  }
+  function urlB64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function enablePush() {
+    const cfg = window.CARAVAN_CONFIG || {};
+    if (!pushSupported() || !cfg.vapidPublic) return { ok: false, msg: "This browser can't do notifications." };
+    if (!isStandalone() && /iPad|iPhone|iPod/.test(navigator.userAgent))
+      return { ok: false, msg: "On iPhone, add SquadTrip to your home screen first, then turn alerts on from there." };
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return { ok: false, msg: "Notifications are blocked. Turn them on in your phone's settings for SquadTrip." };
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(cfg.vapidPublic) });
+      const j = sub.toJSON();
+      const ok = await Backend.savePushSub({
+        endpoint: sub.endpoint, trip: TRIP_CODE, voter: state.me || "",
+        p256dh: j.keys.p256dh, auth: j.keys.auth,
+      });
+      if (!ok) return { ok: false, msg: "Couldn't save your subscription. Is the push_subs table set up?" };
+      LS.set("pushOn", true);
+      return { ok: true, msg: "Alerts are on for this phone." };
+    } catch (e) {
+      console.warn(e);
+      return { ok: false, msg: "Couldn't turn on alerts on this device." };
+    }
+  }
+  async function disablePush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { await Backend.removePushSub(sub.endpoint); await sub.unsubscribe(); }
+    } catch (e) { console.warn(e); }
+    LS.set("pushOn", false);
+  }
+
+  function renderAnnounce() {
+    const s = $("#screen-announce");
+    const st = pushState();
+    const canPost = isHost();
+    const toggle = {
+      on: `<div class="r-sub" style="color:var(--matcha);font-weight:800">✓ Alerts are on for this phone</div>
+           <button class="btn ghost" id="pushOff" style="width:100%;margin-top:10px">Turn alerts off</button>`,
+      off: `<button class="btn primary" id="pushOn" style="width:100%">Turn on alerts</button>`,
+      blocked: `<div class="r-sub">Notifications are blocked for SquadTrip. Turn them back on in your phone's settings, then reopen this screen.</div>`,
+      unsupported: `<div class="r-sub">This browser doesn't support notifications. Try Safari on iPhone or Chrome on Android.</div>`,
+      unconfigured: `<div class="r-sub">Push isn't configured for this SquadTrip yet (missing VAPID key).</div>`,
+    }[st];
+    s.innerHTML = `
+      <div class="section-title">Updates</div>
+      <div class="section-sub">${canPost ? "Post an update and it lands on everyone's lock screen." : "Announcements from the " + (isWedding() ? "hosts" : "group") + "."}</div>
+
+      <div class="card">
+        <h3>🔔 Alerts on this phone</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Get a notification when plans change: times, locations, shuttles.
+          ${!isStandalone() && /iPad|iPhone|iPod/.test(navigator.userAgent) ? "<b>On iPhone you must add SquadTrip to your home screen first.</b>" : ""}</p>
+        ${toggle}
+        <div id="pushMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>
+
+      ${canPost ? `<div class="card">
+        <h3>📣 Post an update</h3>
+        <div class="expense-add">
+          <input id="annTitle" placeholder="Short headline (optional)" maxlength="80" />
+          <textarea id="annBody" rows="3" placeholder="What changed? e.g. Shuttle now leaves at 3:45 from the hotel lobby." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;font-family:inherit;background:#fffdfa;color:var(--ink)"></textarea>
+          <button class="btn primary" id="annSend">Send to everyone</button>
+        </div>
+        <div id="annMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>` : ""}
+
+      ${state.announcements.length ? state.announcements.map((a) => {
+        const who = byId(a.author);
+        return `<div class="card">
+          ${a.title ? `<h3 style="margin-bottom:4px">${esc(a.title)}</h3>` : ""}
+          <div style="font-size:14px;line-height:1.55;white-space:pre-wrap">${esc(a.body)}</div>
+          <div class="r-sub" style="margin-top:8px;font-size:11.5px">${who ? esc(who.name.split(" ")[0]) + " · " : ""}${fmtWhen(a.created_at)}${canPost ? ` · <span style="color:var(--vermilion);cursor:pointer" data-anndel="${a.id}">Remove</span>` : ""}</div>
+        </div>`;
+      }).join("") : `<div class="empty">No updates yet.</div>`}`;
+
+    const on = $("#pushOn"); if (on) on.addEventListener("click", async () => {
+      $("#pushMsg").textContent = "Asking your phone…";
+      const r = await enablePush();
+      $("#pushMsg").textContent = r.msg;
+      if (r.ok) renderAnnounce();
+    });
+    const off = $("#pushOff"); if (off) off.addEventListener("click", async () => { await disablePush(); renderAnnounce(); });
+    const send = $("#annSend"); if (send) send.addEventListener("click", sendAnnouncement);
+    s.querySelectorAll("[data-anndel]").forEach((b) => b.addEventListener("click", async () => {
+      state.announcements = state.announcements.filter((x) => x.id !== b.dataset.anndel); renderAnnounce();
+      await Backend.remove("announcements", b.dataset.anndel);
+    }));
+  }
+  function fmtWhen(ts) {
+    if (!ts) return "";
+    const d = new Date(ts), now = new Date();
+    const mins = Math.round((now - d) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.round(mins / 60) + "h ago";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  async function sendAnnouncement() {
+    if (!state.me) { openWho(); return; }
+    const title = $("#annTitle").value.trim(), body = $("#annBody").value.trim();
+    if (!body) { $("#annMsg").textContent = "Type the update first."; return; }
+    $("#annMsg").textContent = "Sending…";
+    try {
+      const cfg = window.CARAVAN_CONFIG;
+      const res = await fetch(`${cfg.url}/functions/v1/send-push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
+        body: JSON.stringify({ code: TRIP_CODE, title, body, author: state.me }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) { $("#annMsg").textContent = data.error || "Couldn't send. Is the send-push function deployed?"; return; }
+      $("#annTitle").value = ""; $("#annBody").value = "";
+      await hydrate("announcements");
+      renderAnnounce();
+      $("#annMsg").textContent = data.sent
+        ? `Posted, and buzzed ${data.sent} phone${data.sent === 1 ? "" : "s"}.`
+        : "Posted. Nobody has alerts turned on yet, so it shows in the app only.";
+    } catch (e) {
+      $("#annMsg").textContent = "Couldn't reach the push function. Check it's deployed.";
+    }
+  }
 
   /* ---- who am I ------------------------------------------------------------ */
   function renderWhoami() {
@@ -515,6 +668,7 @@
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
       </div>
 
+      ${latestAnnouncementCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
 
       <div class="countdown" id="countdown"></div>
@@ -619,6 +773,20 @@
       <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
         ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet. Be the first."}
       </p>`;
+  }
+  function latestAnnouncementCard() {
+    const a = state.announcements[0];
+    if (!a) return "";
+    const who = byId(a.author);
+    return `<div class="card" style="margin-top:14px;border-color:var(--amber)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="pill" style="background:var(--sakura);color:var(--vermilion-2)">📣 Latest update</span>
+        <span class="r-sub" style="font-size:11px">${fmtWhen(a.created_at)}</span>
+      </div>
+      ${a.title ? `<h3 style="margin:0 0 4px">${esc(a.title)}</h3>` : ""}
+      <div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap">${esc(a.body)}</div>
+      <div class="r-sub" style="margin-top:8px;font-size:11.5px">${who ? "from " + esc(who.name.split(" ")[0]) + " · " : ""}<span style="color:var(--ai-2);font-weight:800;cursor:pointer" data-go="announce">All updates ›</span></div>
+    </div>`;
   }
   function weddingCostCard() {
     const cost = (TRIP.links || {}).cost;
@@ -1879,7 +2047,7 @@
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
-    settings: renderSettings, assistant: renderAssistant,
+    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce,
   };
   function renderCurrent() {
     if (!TRIP) return;
