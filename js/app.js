@@ -129,8 +129,15 @@
       const keep = () => { wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim(); wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value; };
       $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; document.body.classList.remove("theme-wedding"); renderWizard(); });
       $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; document.body.classList.add("theme-wedding"); renderWizard(); });
+      const syncDestTz = () => {
+        const tz = tzForCity($("#wDest").value);
+        if (tz) { wiz.tz = tz; wiz.tzAuto = true; }
+      };
+      $("#wDest").addEventListener("change", syncDestTz);
+      $("#wDest").addEventListener("blur", syncDestTz);
       $("#wNext").addEventListener("click", () => {
         keep();
+        syncDestTz();
         if (!wiz.name) return alert("Give the trip a name.");
         if (!wiz.start || !wiz.end || wiz.end < wiz.start) return alert("Pick valid dates.");
         wiz.step = 1; renderWizard();
@@ -157,6 +164,8 @@
         readStops();
         wiz.stops = wiz.stops.map((s) => s.trim()).filter(Boolean);
         if (!wiz.stops.length) return alert("Add at least one stop.");
+        const stopTz = tzForCity(wiz.stops[0]);
+        if (stopTz && (wiz.tzAuto || !wiz.tz)) { wiz.tz = stopTz; wiz.tzAuto = true; }
         wiz.step = 2; renderWizard();
       });
     } else {
@@ -173,8 +182,9 @@
           <div style="flex:1"><label class="wiz-label">Your money</label>
             <input id="wHomeCur" placeholder="e.g. USD" maxlength="3" value="${esc(wiz.home_currency)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;text-transform:uppercase" /></div>
         </div>
-        <label class="wiz-label">Destination timezone</label>
+        <label class="wiz-label">Destination timezone ${wiz.tzAuto ? `<span style="color:var(--matcha)">detected from ${esc(wiz.destination || wiz.stops[0] || "your destination")}</span>` : ""}</label>
         <input id="wTz" list="tzlist" value="${esc(wiz.tz)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+        <div class="r-sub" id="wTzNow" style="margin-top:4px;font-size:11.5px">${wiz.tz ? `It's ${new Intl.DateTimeFormat("en-US", { timeZone: wiz.tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date())} there right now.` : ""}</div>
         <datalist id="tzlist">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <div style="display:flex;gap:10px">
           <div style="flex:2"><label class="wiz-label">Where's home?</label>
@@ -189,6 +199,17 @@
           <button class="btn primary" id="wCreate" style="flex:2">Create trip</button>
         </div>
         <div id="wErr" class="r-sub" style="color:var(--vermilion);margin-top:8px"></div>`;
+      const showTzNow = () => {
+        const el = $("#wTzNow"); if (!el) return;
+        const tz = $("#wTz").value.trim();
+        try { el.textContent = `It's ${new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date())} there right now.`; }
+        catch { el.textContent = "That timezone isn't recognized."; }
+      };
+      $("#wTz").addEventListener("change", () => { wiz.tzAuto = false; showTzNow(); });
+      $("#wHome").addEventListener("change", () => {
+        const t = tzForCity($("#wHome").value);
+        if (t) wiz.home_tz = t;
+      });
       const readTravs = () => { wiz.travelers = $$("#wizBody [data-trav]").map((i) => i.value); };
       $("#wAddTrav").addEventListener("click", () => { readTravs(); wiz.travelers.push(""); renderWizard(); });
       $$("#wizBody [data-rmtrav]").forEach((b) => b.addEventListener("click", () => { readTravs(); wiz.travelers.splice(+b.dataset.rmtrav, 1); renderWizard(); }));
@@ -214,7 +235,7 @@
       start_date: wiz.start, end_date: wiz.end, tz: wiz.tz,
       currency: wiz.currency, home_currency: wiz.home_currency,
       home_city: wiz.home_city, home_airport: wiz.home_airport,
-      home_tz: tzForCity(wiz.home_city) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      home_tz: tzForCity(wiz.home_city) || wiz.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       travelers, stops,
     };
     if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
@@ -254,14 +275,18 @@
       ${ctaLabel ? `<button class="btn ghost" data-go="${ctaGo}" style="width:100%">${ctaLabel}</button>` : ""}
     </div>`;
   }
-  const cityListHTML = () => `<datalist id="citylist">${(window.CITIES || []).map((c) => `<option value="${esc(c)}">`).join("")}</datalist>`;
-  const tzForCity = (city) => {
-    // Best effort: match a timezone whose city segment looks like the typed city.
-    const key = String(city || "").split(",")[0].trim().toLowerCase().replace(/\s+/g, "_");
-    if (!key) return "";
-    const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : [];
-    return zones.find((z) => z.split("/").pop().toLowerCase() === key)
-        || zones.find((z) => z.toLowerCase().includes(key)) || "";
+  const cityListHTML = () => `<datalist id="citylist">${(window.CITIES || []).map((x) => `<option value="${esc(x.c)}">`).join("")}</datalist>`;
+  const tzForCity = (city) => (window.tzForCity ? window.tzForCity(city) : "");
+  const nowIn = (tz) => {
+    try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()); }
+    catch { return "unknown"; }
+  };
+  const tzLabel = (tz) => {
+    if (!tz) return "";
+    try {
+      const p = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" }).formatToParts(new Date());
+      return (p.find((x) => x.type === "timeZoneName") || {}).value || tz;
+    } catch { return tz; }
   };
   const stopById = (id) => (TRIP.stops || []).find((s) => s.id === id) || { label: id };
   const stopPillClass = (id) => { const i = (TRIP.stops || []).findIndex((s) => s.id === id); return "pill " + (i >= 0 ? "s" + (i % 6) : "any"); };
@@ -700,6 +725,7 @@
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
       </div>
 
+      ${tzWarningCard()}
       ${latestAnnouncementCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
 
@@ -736,6 +762,12 @@
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
     s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
+    const tzf = $("#tzFixNow"); if (tzf) tzf.addEventListener("click", async () => {
+      const guess = tzForCity(TRIP.destination) || tzForCity((TRIP.stops || [])[0] && TRIP.stops[0].label);
+      $("#tzFixMsg").textContent = "Saving…";
+      const ok = await Backend.updateTrip(TRIP_CODE, { tz: guess });
+      if (ok) { TRIP.tz = guess; renderHome(); } else $("#tzFixMsg").textContent = "Couldn't save. Try again.";
+    });
     s.querySelectorAll("[data-wrsvp]").forEach((b) => b.addEventListener("click", () => setVote("wrsvp", "attend", b.dataset.wrsvp)));
     s.querySelectorAll("[data-wparty]").forEach((b) => b.addEventListener("click", () => {
       const cur = myVote("wrsvp", "attend");
@@ -805,6 +837,19 @@
       <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
         ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet. Be the first."}
       </p>`;
+  }
+  function tzWarningCard() {
+    const guess = tzForCity(TRIP.destination) || tzForCity((TRIP.stops || [])[0] && TRIP.stops[0].label);
+    if (!guess || !TRIP.tz || guess === TRIP.tz) return "";
+    // Only warn if the clocks actually differ right now.
+    if (nowIn(guess) === nowIn(TRIP.tz)) return "";
+    if (!isHost()) return "";
+    return `<div class="card" style="margin-top:14px;border-color:var(--vermilion)">
+      <h3>🕐 That clock looks off</h3>
+      <p class="section-sub" style="margin:6px 0 12px">The trip's timezone is set to <b>${esc(TRIP.tz)}</b>, but ${esc(TRIP.destination || "your destination")} is on <b>${esc(guess)}</b>, where it's <b>${esc(nowIn(guess))}</b> right now.</p>
+      <button class="btn primary" id="tzFixNow" style="width:100%">Fix it: use ${esc(guess)}</button>
+      <div id="tzFixMsg" class="r-sub" style="margin-top:6px"></div>
+    </div>`;
   }
   function latestAnnouncementCard() {
     const a = state.announcements[0];
@@ -1163,6 +1208,58 @@
      STAYS - submit up to 2 per stop, vote
      ====================================================================== */
   const MAX_STAY = 2;
+  /* A stop can be settled two ways: the group votes, or someone already
+     booked it. A booked place takes over the stop and skips the vote. */
+  function bookedCard(o, stopLabel) {
+    const who = byId(o.author);
+    return `<div class="card" style="border-color:var(--matcha);background:linear-gradient(180deg,#f4f9f4,#fffdf8)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="pill" style="background:#e2efe5;color:#3c6b4a">✓ Booked</span>
+        ${stopLabel ? `<span class="r-sub" style="font-size:11.5px">${esc(stopLabel)}</span>` : ""}
+      </div>
+      <h3 style="margin:0 0 4px">${esc(o.name)}</h3>
+      ${o.address ? `<div class="r-sub" style="margin-bottom:4px">${esc(o.address)}</div>` : ""}
+      ${o.note ? `<div style="font-size:13.5px;line-height:1.5;margin-top:6px">${esc(o.note)}</div>` : ""}
+      ${o.conf ? `<div class="r-sub" style="margin-top:8px">Confirmation <b>${esc(o.conf)}</b></div>` : ""}
+      <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap">
+        ${o.link ? `<a class="tl-map" href="${esc(o.link)}" target="_blank" rel="noopener">🔗 Booking</a>` : ""}
+        <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.name + " " + (o.address || stopLabel || ""))}" target="_blank" rel="noopener">📍 Map</a>
+        ${who ? `<span class="r-sub" style="font-size:11.5px">added by ${esc(who.name.split(" ")[0])}</span>` : ""}
+        ${(o.author === state.me || isHost()) ? `<span class="tl-map" style="color:var(--vermilion);cursor:pointer" data-unbook="${o.id}">Not booked after all</span>` : ""}
+      </div>
+    </div>`;
+  }
+  function openBookedForm(stopId, container) {
+    if (!state.me) { openWho(); return; }
+    const st = stopById(stopId);
+    $(container).innerHTML = `<div class="card" style="border-color:var(--matcha)">
+      <h3>✓ Add the booked place in ${esc(st.label)}</h3>
+      <p class="section-sub" style="margin:4px 0 10px">This settles the stop, so nobody has to submit or vote for it.</p>
+      <div class="expense-add">
+        <input id="bkName" placeholder="Hotel / house name" />
+        <input id="bkAddr" placeholder="Address or neighborhood (optional)" />
+        <input id="bkNote" placeholder="Anything the group should know (optional)" />
+        <input id="bkLink" placeholder="Booking link (optional)" />
+        <input id="bkConf" placeholder="Confirmation number (optional)" />
+        <div class="btn-row">
+          <button class="btn ghost" id="bkCancel" style="flex:1">Cancel</button>
+          <button class="btn primary" id="bkSave" style="flex:2">Save as booked</button>
+        </div>
+      </div>
+    </div>`;
+    $("#bkCancel").addEventListener("click", () => { $(container).innerHTML = ""; });
+    $("#bkSave").addEventListener("click", async () => {
+      const name = $("#bkName").value.trim();
+      if (!name) { alert("Add the name of the place."); return; }
+      const row = await Backend.insert("stay_options", {
+        trip: TRIP_CODE, stop: stopId, name, tag: "Booked",
+        address: $("#bkAddr").value.trim(), note: $("#bkNote").value.trim(),
+        link: $("#bkLink").value.trim(), conf: $("#bkConf").value.trim(),
+        booked: true, author: state.me,
+      });
+      if (row) { state.stayOptions.push(row); renderStays(); }
+    });
+  }
   function renderStays() {
     const s = $("#screen-stays");
     if (isWedding()) {
@@ -1170,6 +1267,14 @@
       s.innerHTML = `
         <div class="section-title">Where to stay</div>
         <div class="section-sub">The hosts' picks for where guests should base themselves.</div>
+        ${(() => {
+          const bookedAll = state.stayOptions.filter((o) => o.booked);
+          if (!bookedAll.length) return "";
+          return `<div class="check-cat" style="margin:4px 0 8px">Where the group is staying</div>` +
+            bookedAll.map((o) => bookedCard(o, stopById(o.stop).label)).join("");
+        })()}
+        ${isHost() ? `<div id="wedBookedForm"></div>
+          <button class="btn ghost" id="wedAddBooked" style="width:100%;margin-bottom:14px">✓ Add a place that's already booked</button>` : ""}
         ${L.roomblock ? `<div class="card ai-card">
           <h3>🏨 Room block</h3>
           <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` (<b>book by ${esc(L.deadline)}</b>)` : ""}.</p>
@@ -1187,6 +1292,13 @@
             </div>`).join("")}</div>
           </div>` : "";
         }).join("")}`;
+      const wab = $("#wedAddBooked");
+      if (wab) wab.addEventListener("click", () => openBookedForm((TRIP.stops || [{ id: "" }])[0].id, "#wedBookedForm"));
+      s.querySelectorAll("[data-unbook]").forEach((b) => b.addEventListener("click", async () => {
+        const id = b.dataset.unbook;
+        state.stayOptions = state.stayOptions.filter((x) => x.id !== id); renderStays();
+        await Backend.remove("stay_options", id);
+      }));
       return;
     }
     s.innerHTML = `
@@ -1196,7 +1308,12 @@
         const mine = myVote("stay", st.id);
         const counts = tally("stay", st.id);
         const options = state.stayOptions.filter((p) => p.stop === st.id);
-        const myCount = options.filter((o) => o.author === state.me).length;
+        const booked = options.find((o) => o.booked);
+        const myCount = options.filter((o) => o.author === state.me && !o.booked).length;
+        if (booked) return `<div style="margin-bottom:28px">
+          <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="${stopPillClass(st.id)}">${esc(st.label)}</span></div>
+          ${bookedCard(booked, "")}
+        </div>`;
         return `<div style="margin-bottom:28px">
           <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="${stopPillClass(st.id)}">${esc(st.label)}</span></div>
           ${(() => { const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id); return hoods.length ? `<div class="hood-scroll">${hoods.map((n) => `<div class="hood-card">
@@ -1237,9 +1354,12 @@
             </button>`;
           }).join("") : emptyState("🏨", `No submissions for ${esc(st.label)} yet`, "Everyone submits up to " + MAX_STAY + " places, then the group votes. Use the recommendations above as a starting point, or add your own find.")}
           ${!options.some((o) => o.author === "ai") && isHost() ? `<button class="btn ghost" id="staysAI" data-stopfor="${st.id}" style="width:100%;margin-bottom:10px">✨ Suggest places at every price point</button><div id="staysAIMsg" class="r-sub" style="margin-bottom:10px"></div>` : ""}
-          ${myCount < MAX_STAY
-            ? `<button class="btn ghost" data-proposestop="${st.id}" style="width:100%">+ Submit a place (${MAX_STAY - myCount} left)</button>`
-            : `<div class="r-sub" style="text-align:center;padding:8px">You've used your ${MAX_STAY} for ${esc(st.label)}.</div>`}
+          <div class="btn-row">
+            ${myCount < MAX_STAY
+              ? `<button class="btn ghost" data-proposestop="${st.id}" style="flex:2">+ Submit a place (${MAX_STAY - myCount} left)</button>`
+              : `<div class="r-sub" style="flex:2;text-align:center;padding:8px">You've used your ${MAX_STAY} for ${esc(st.label)}.</div>`}
+            <button class="btn ghost" data-bookedstop="${st.id}" style="flex:1">✓ Already booked</button>
+          </div>
         </div>`;
       }).join("")}
       <div id="proposeForm"></div>`;
@@ -1250,6 +1370,12 @@
       await Backend.remove("stay_options", b.dataset.staydel);
     }));
     s.querySelectorAll("[data-proposestop]").forEach((b) => b.addEventListener("click", () => openProposeStay(b.dataset.proposestop)));
+    s.querySelectorAll("[data-bookedstop]").forEach((b) => b.addEventListener("click", () => openBookedForm(b.dataset.bookedstop, "#proposeForm")));
+    s.querySelectorAll("[data-unbook]").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.unbook;
+      state.stayOptions = state.stayOptions.filter((x) => x.id !== id); renderStays();
+      await Backend.remove("stay_options", id);
+    }));
     const sai = $("#staysAI"); if (sai) sai.addEventListener("click", async () => {
       sai.disabled = true; sai.style.opacity = .6;
       $("#staysAIMsg").textContent = "✨ Finding places at each price point… (~20s)";
@@ -1936,8 +2062,10 @@
         </div>
         <label class="wiz-label">Home timezone</label>
         <input id="stHomeTz" list="tzlist2" value="${esc(TRIP.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
+        <div class="r-sub" style="margin-top:4px;font-size:11.5px">Clock at home reads <b>${esc(nowIn(TRIP.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone))}</b>.</div>
         <label class="wiz-label">Destination timezone</label>
         <input id="stTz" list="tzlist2" value="${esc(TRIP.tz)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
+        <div class="r-sub" style="margin-top:4px;font-size:11.5px">Clock there reads <b>${esc(nowIn(TRIP.tz))}</b>. ${tzForCity(TRIP.destination) && tzForCity(TRIP.destination) !== TRIP.tz ? `<span style="color:var(--vermilion)">That looks wrong for ${esc(TRIP.destination)}.</span> <span id="stTzFix" style="color:var(--ai-2);font-weight:800;cursor:pointer">Use ${esc(tzForCity(TRIP.destination))}</span>` : ""}</div>
         <datalist id="tzlist2">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <button class="btn primary" id="stSaveBasics" style="width:100%;margin-top:14px">Save basics</button>
         <div id="stBasicsMsg" class="r-sub" style="margin-top:6px"></div>
@@ -1999,6 +2127,16 @@
       </div>`;
 
     const sti = $("#stInstall"); if (sti) sti.addEventListener("click", () => maybeOfferInstall(true));
+    const stDest = $("#stDest"); if (stDest) stDest.addEventListener("change", () => {
+      const tz = tzForCity(stDest.value); if (tz) $("#stTz").value = tz;
+    });
+    const stHome = $("#stHome"); if (stHome) stHome.addEventListener("change", () => {
+      const tz = tzForCity(stHome.value); if (tz) $("#stHomeTz").value = tz;
+    });
+    const stFix = $("#stTzFix"); if (stFix) stFix.addEventListener("click", () => {
+      $("#stTz").value = tzForCity(TRIP.destination);
+      $("#stBasicsMsg").textContent = "Set. Tap Save basics to apply it for everyone.";
+    });
     const wls = $("#wlSave"); if (wls) wls.addEventListener("click", async () => {
       const links = {
         roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(),

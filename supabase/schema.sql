@@ -235,3 +235,8 @@ alter publication supabase_realtime add table public.announcements;
 alter table public.trips add column if not exists home_city    text default '';
 alter table public.trips add column if not exists home_airport text default '';
 alter table public.trips add column if not exists home_tz      text default '';
+
+-- Stays that are already booked (skip the voting round). Safe to re-run.
+alter table public.stay_options add column if not exists booked  boolean default false;
+alter table public.stay_options add column if not exists address text default '';
+alter table public.stay_options add column if not exists conf    text default '';
