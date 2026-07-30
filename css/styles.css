@@ -86,7 +86,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   box-shadow: 0 8px 24px -16px rgba(36,27,69,.55);
 }
 .topbar .brand { display: flex; align-items: center; gap: 11px; }
-.topbar .brand .mark { font-size: 22px; line-height: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
+.topbar .brand .mark { display: grid; place-items: center; line-height: 1; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
 .topbar .brand .name { font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: .3px; }
 .topbar .brand .sub { font-size: 10.5px; color: var(--gold-soft); font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; margin-top: 1px; }
 .topbar .spacer { flex: 1; }

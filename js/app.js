@@ -64,7 +64,7 @@
     if (mine.length) {
       $("#myTrips").innerHTML = `<div class="section-title" style="font-size:17px;margin-top:6px">Your trips on this phone</div>` +
         mine.map((t) => `<button class="trip-chip" data-open="${esc(t.code)}">
-          <span style="font-size:22px">🧭</span>
+          <span aria-hidden="true"><svg viewBox="0 0 76 108" width="17" height="24"><path d="M0 42 C0 12 20 0 38 0 C56 0 76 12 76 42 C76 72 38 108 38 108 C38 108 0 72 0 42 Z" fill="#f09c4a"/><circle cx="38" cy="42" r="16" fill="#241b45"/></svg></span>
           <span style="flex:1"><span class="tc-name">${esc(t.name)}</span><br><span class="tc-sub">${esc(t.dates || "")} · code ${esc(t.code)}</span></span>
           <span style="color:var(--ink-3)">›</span>
         </button>`).join("");
@@ -168,7 +168,7 @@
         <datalist id="tzlist">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wBack" style="flex:1">← Back</button>
-          <button class="btn primary" id="wCreate" style="flex:2">Create trip 🧭</button>
+          <button class="btn primary" id="wCreate" style="flex:2">Create trip</button>
         </div>
         <div id="wErr" class="r-sub" style="color:var(--vermilion);margin-top:8px"></div>`;
       const readTravs = () => { wiz.travelers = $$("#wizBody [data-trav]").map((i) => i.value); };
@@ -419,7 +419,7 @@
       </div>
 
       <div class="card" style="margin-top:16px">
-        <h3>🧭 Trip code</h3>
+        <h3>📍 Trip code</h3>
         <p class="section-sub" style="margin:4px 0 0">Friends join with this code (or the link below).</p>
         <div class="code-big">${esc(TRIP.code)}</div>
         <button class="btn ghost" id="copyLink" style="width:100%">Copy invite link</button>
@@ -456,7 +456,7 @@
     const mn = Math.floor(diff / 60000); diff -= mn * 60000;
     const sc = Math.floor(diff / 1000);
     box.innerHTML = (now >= target)
-      ? `<div class="count-box" style="grid-column:1/-1"><div class="num">🧭 It's trip time!</div></div>`
+      ? `<div class="count-box" style="grid-column:1/-1"><div class="num">🎉 It's trip time!</div></div>`
       : [[day, "Days"], [hr, "Hours"], [mn, "Min"], [sc, "Sec"]].map(([n, l]) => `<div class="count-box"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join("");
   }
   setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active")) tickCountdown(); }, 1000);
@@ -630,7 +630,7 @@
       <input id="crewPhoto" type="file" accept="image/*" style="display:none" />
       <div id="crewPhotoStatus" class="r-sub" style="margin:0 4px 12px"></div>
       <div class="card">
-        <h3>🧭 Invite someone</h3>
+        <h3>📍 Invite someone</h3>
         <p class="section-sub" style="margin:4px 0 0">Share the code <b>${esc(TRIP.code)}</b> or copy the link from Home. New joiners pick their name from this list.</p>
       </div>`;
     const cp = $("#crewPhoto");

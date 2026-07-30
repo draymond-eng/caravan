@@ -5,20 +5,27 @@
       <stop offset="0.55" stop-color="#372a63"/>
       <stop offset="1" stop-color="#241b45"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.82" cy="0.12" r="0.6">
-      <stop offset="0" stop-color="#f09c4a" stop-opacity="0.55"/>
+    <radialGradient id="glow" cx="0.82" cy="0.12" r="0.62">
+      <stop offset="0" stop-color="#f09c4a" stop-opacity="0.5"/>
       <stop offset="1" stop-color="#f09c4a" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="512" height="512" rx="116" fill="url(#bg)"/>
   <rect width="512" height="512" rx="116" fill="url(#glow)"/>
-  <!-- compass ring -->
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#e3c07e" stroke-opacity="0.55" stroke-width="10"/>
-  <!-- compass needle -->
-  <g>
-    <path d="M256 116 L296 256 L256 396 L216 256 Z" fill="#f7f0e4"/>
-    <path d="M256 116 L296 256 L256 256 Z" fill="#e2593a"/>
-    <path d="M256 116 L216 256 L256 256 Z" fill="#f09c4a"/>
-    <circle cx="256" cy="256" r="26" fill="#e3c07e" stroke="#241b45" stroke-width="8"/>
+  <!-- dotted route the crew travels together -->
+  <path d="M78 400 C170 330 320 350 434 200" fill="none" stroke="#e3c07e" stroke-width="9"
+        stroke-linecap="round" stroke-dasharray="1 30" stroke-opacity="0.9"/>
+  <!-- three pins, a little caravan climbing the route -->
+  <g transform="translate(96,258) scale(1.32)">
+    <path d="M0 42 C0 12 20 0 38 0 C56 0 76 12 76 42 C76 72 38 108 38 108 C38 108 0 72 0 42 Z" fill="#f3d3c4"/>
+    <circle cx="38" cy="42" r="16" fill="#241b45"/>
+  </g>
+  <g transform="translate(200,196) scale(1.58)">
+    <path d="M0 42 C0 12 20 0 38 0 C56 0 76 12 76 42 C76 72 38 108 38 108 C38 108 0 72 0 42 Z" fill="#f09c4a"/>
+    <circle cx="38" cy="42" r="16" fill="#241b45"/>
+  </g>
+  <g transform="translate(318,120) scale(1.32)">
+    <path d="M0 42 C0 12 20 0 38 0 C56 0 76 12 76 42 C76 72 38 108 38 108 C38 108 0 72 0 42 Z" fill="#e2593a"/>
+    <circle cx="38" cy="42" r="16" fill="#241b45"/>
   </g>
 </svg>
