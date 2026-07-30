@@ -592,3 +592,17 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   background: #f2f7f3; border: 1px solid #dceadf; }
 .pair-row { font-size: 12.5px; line-height: 1.7; color: var(--ink-2); }
 .pair-row b { color: var(--ink); margin-right: 6px; }
+
+/* ---- Typeahead suggestions ------------------------------------------------ */
+.suggest {
+  position: fixed; z-index: 90; display: none;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg); max-height: 220px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.suggest > div {
+  padding: 11px 13px; font-size: 14px; color: var(--ink); cursor: pointer;
+  border-top: 1px solid var(--line-2);
+}
+.suggest > div:first-child { border-top: none; }
+.suggest > div:active { background: var(--paper-2); }

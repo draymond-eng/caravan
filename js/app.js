@@ -117,7 +117,7 @@
         <label class="wiz-label">${w ? "Wedding name" : "Trip name"}</label>
         <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan in Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <label class="wiz-label">Destination</label>
-        <input id="wDest" list="citylist" autocomplete="off" placeholder="${w ? "Start typing, e.g. Tulum" : "Start typing, e.g. Tokyo"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        <input id="wDest" data-suggest="city" autocomplete="off" placeholder="${w ? "Start typing, e.g. Tulum" : "Start typing, e.g. Tokyo"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         ${cityListHTML()}
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="wiz-label">First day</label>
@@ -152,7 +152,7 @@
       B.innerHTML = `${dots}
         <label class="wiz-label">${wiz.mode === "wedding" ? "Where is it happening? (venue town; add more stops if events span places)" : "Stops / bases (in order): where you'll sleep"}</label>
         ${wiz.stops.map((s, i) => `<div class="trav-row">
-          <input data-stop="${i}" list="citylist" autocomplete="off" placeholder="Start typing a city" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+          <input data-stop="${i}" data-suggest="city" autocomplete="off" placeholder="Start typing a city" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.stops.length > 1 ? `<button class="rm" data-rmstop="${i}">✕</button>` : ""}
         </div>`).join("")}
         ${cityListHTML()}
@@ -193,7 +193,7 @@
         <datalist id="tzlist">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <div style="display:flex;gap:10px">
           <div style="flex:2"><label class="wiz-label">Where's home?</label>
-            <input id="wHome" list="citylist" autocomplete="off" placeholder="e.g. Chicago, USA" value="${esc(wiz.home_city)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
+            <input id="wHome" data-suggest="city" autocomplete="off" placeholder="e.g. Chicago, USA" value="${esc(wiz.home_city)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
           <div style="flex:1"><label class="wiz-label">Home airport</label>
             <input id="wHomeAir" maxlength="3" autocomplete="off" placeholder="ORD" value="${esc(wiz.home_airport)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;text-transform:uppercase" /></div>
         </div>
@@ -289,6 +289,85 @@
       ${ctaLabel ? `<button class="btn ghost" data-go="${ctaGo}" style="width:100%">${ctaLabel}</button>` : ""}
     </div>`;
   }
+  /* Suggestions that work everywhere. Safari, especially an installed
+     home-screen app, does not reliably show native datalist options, so we
+     draw our own list and position it under the field. */
+  let suggestBox = null, suggestFor = null;
+  function suggestSource(kind) {
+    if (kind === "place") return knownPlaces();
+    return (window.CITIES || []).map((x) => x.c);
+  }
+  function hideSuggest() {
+    if (suggestBox) suggestBox.style.display = "none";
+    suggestFor = null;
+  }
+  function showSuggest(input) {
+    const kind = input.dataset.suggest;
+    const q = input.value.trim().toLowerCase();
+    const pool = suggestSource(kind);
+    let list;
+    if (!q) {
+      list = pool.slice(0, 8);
+    } else {
+      const starts = [], has = [];
+      for (const item of pool) {
+        const low = item.toLowerCase();
+        if (low.startsWith(q)) starts.push(item);
+        else if (low.includes(q)) has.push(item);
+      }
+      // shortest name first, so a query matching two cities favours the closer one
+      starts.sort((a, b) => a.length - b.length);
+      has.sort((a, b) => a.length - b.length);
+      list = starts.concat(has).slice(0, 8);
+    }
+    if (!list.length) { hideSuggest(); return; }
+    if (!suggestBox) {
+      suggestBox = document.createElement("div");
+      suggestBox.className = "suggest";
+      document.body.appendChild(suggestBox);
+      suggestBox.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus
+      suggestBox.addEventListener("click", (e) => {
+        const row = e.target.closest("[data-sv]");
+        if (!row || !suggestFor) return;
+        suggestFor.value = row.dataset.sv;
+        suggestFor.dispatchEvent(new Event("input", { bubbles: true }));
+        suggestFor.dispatchEvent(new Event("change", { bubbles: true }));
+        hideSuggest();
+      });
+    }
+    suggestFor = input;
+    suggestBox.innerHTML = list.map((x) => `<div data-sv="${esc(x)}">${esc(x)}</div>`).join("");
+    const r = input.getBoundingClientRect();
+    suggestBox.style.display = "block";
+    suggestBox.style.left = Math.round(r.left) + "px";
+    suggestBox.style.width = Math.round(r.width) + "px";
+    const below = window.innerHeight - r.bottom;
+    if (below < 180 && r.top > 200) {
+      suggestBox.style.top = "auto";
+      suggestBox.style.bottom = Math.round(window.innerHeight - r.top + 4) + "px";
+    } else {
+      suggestBox.style.bottom = "auto";
+      suggestBox.style.top = Math.round(r.bottom + 4) + "px";
+    }
+  }
+  document.addEventListener("input", (e) => {
+    if (e.target.dataset && e.target.dataset.suggest) showSuggest(e.target);
+  });
+  document.addEventListener("focusin", (e) => {
+    if (e.target.dataset && e.target.dataset.suggest) showSuggest(e.target);
+    else hideSuggest();
+  });
+  document.addEventListener("focusout", (e) => {
+    if (e.target.dataset && e.target.dataset.suggest) setTimeout(hideSuggest, 150);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (suggestBox && suggestBox.contains(e.target)) return; // picking one
+    if (e.target === suggestFor) return;                     // back in the field
+    hideSuggest();
+  }, true);
+  window.addEventListener("scroll", hideSuggest, true);
+  window.addEventListener("resize", hideSuggest);
+
   function knownPlaces() {
     const L = TRIP.links || {};
     const set = new Set();
@@ -297,8 +376,8 @@
     state.days.forEach((d) => (d.items || []).forEach((i) => { if (i.where) set.add(i.where); }));
     return [...set];
   }
-  const placeListHTML = () => `<datalist id="placelist">${knownPlaces().map((p) => `<option value="${esc(p)}">`).join("")}</datalist>`;
-  const cityListHTML = () => `<datalist id="citylist">${(window.CITIES || []).map((x) => `<option value="${esc(x.c)}">`).join("")}</datalist>`;
+  const placeListHTML = () => "";
+  const cityListHTML = () => ""; // suggestions are drawn by the typeahead now
   const tzForCity = (city) => (window.tzForCity ? window.tzForCity(city) : "");
   const nowIn = (tz) => {
     try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()); }
@@ -1340,7 +1419,7 @@
               <select data-itype="${d.id}" style="flex:1.2">${typeOrder().map((k) => `<option value="${k}">${TYPE[k].emoji} ${TYPE[k].label}</option>`).join("")}</select>
             </div>
             <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : "Add an activity…"}" />
-            <input data-iwhere="${d.id}" list="placelist" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : (tripType() === "golf" ? "Course, e.g. Grayhawk (Raptor)" : "Where? (optional)")}" />
+            <input data-iwhere="${d.id}" data-suggest="place" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : (tripType() === "golf" ? "Course, e.g. Grayhawk (Raptor)" : "Where? (optional)")}" />
             ${setsOf().length ? `<select data-igroup="${d.id}">
               <option value="">${tripType() === "golf" ? "Pairings (optional)" : "Groups (optional)"}</option>
               ${setsOf().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
@@ -3012,7 +3091,7 @@
           ${TRIP_TYPES.map((t) => `<button class="chip ${tripType() === t.id ? "active" : ""}" data-sttype="${t.id}">${t.emoji} ${t.label}</button>`).join("")}
         </div>`}
         <label class="wiz-label">Destination</label>
-        <input id="stDest" list="citylist" autocomplete="off" value="${esc(TRIP.destination || "")}" placeholder="Start typing a city" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
+        <input id="stDest" data-suggest="city" autocomplete="off" value="${esc(TRIP.destination || "")}" placeholder="Start typing a city" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
         ${cityListHTML()}
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="wiz-label">First day</label>${inp("stStart", TRIP.start_date, "", "date")}</div>
@@ -3024,7 +3103,7 @@
         </div>
         <div style="display:flex;gap:10px">
           <div style="flex:2"><label class="wiz-label">Where's home?</label>
-            <input id="stHome" list="citylist" autocomplete="off" value="${esc(TRIP.home_city || "")}" placeholder="e.g. Chicago, USA" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" /></div>
+            <input id="stHome" data-suggest="city" autocomplete="off" value="${esc(TRIP.home_city || "")}" placeholder="e.g. Chicago, USA" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" /></div>
           <div style="flex:1"><label class="wiz-label">Home airport</label>
             <input id="stHomeAir" maxlength="3" autocomplete="off" value="${esc(TRIP.home_airport || "")}" placeholder="ORD" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;text-transform:uppercase;background:#fffdfa;color:var(--ink)" /></div>
         </div>
@@ -3076,7 +3155,7 @@
         <p class="section-sub" style="margin:2px 0 10px">The bases you'll sleep in, in order. Removing a stop hides its stay submissions.</p>
         <div id="stStops">
           ${(TRIP.stops || []).map((st, i) => `<div class="trav-row">
-            <input data-ststop="${i}" list="citylist" autocomplete="off" value="${esc(st.label)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+            <input data-ststop="${i}" data-suggest="city" autocomplete="off" value="${esc(st.label)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
             <button class="rm" data-strmstop="${i}" title="Remove">✕</button>
           </div>`).join("")}
         </div>
