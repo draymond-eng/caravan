@@ -478,6 +478,58 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .trip-chip .tc-sub { font-size: 12px; color: var(--ink-2); }
 
 
+/* ---- Landing collage: polaroid fan of trip types --------------------------- */
+.collage { display: flex; justify-content: center; align-items: flex-start; margin: 22px -6px 2px; }
+.polaroid { flex: 0 0 auto; width: 74px; margin: 0 -11px; position: relative; z-index: 1;
+  background: #fffdf8; border-radius: 6px; padding: 5px 5px 19px;
+  box-shadow: 0 12px 26px -10px rgba(10,6,25,.65);
+  transform: rotate(var(--r, 0deg)) translateY(var(--y, 0));
+}
+.polaroid:hover { z-index: 2; }
+.polaroid .ph { width: 100%; aspect-ratio: 1; border-radius: 3px; display: grid; place-items: center; font-size: 27px; }
+.polaroid .cap { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center;
+  font-family: var(--serif); font-style: italic; font-size: 8.5px; color: #55585f; }
+.ph.golf  { background: linear-gradient(160deg, #bfe3f2 0%, #bfe3f2 45%, #5f9e56 46%, #3f7a44 100%); }
+.ph.beach { background: linear-gradient(180deg, #ffd9a0 0%, #f2a45c 45%, #4fa3b8 46%, #2f7d95 78%, #e8d8ae 79%, #ddc48e 100%); }
+.ph.wed   { background: radial-gradient(80% 60% at 50% 30%, #f7dfe4, #eab8c4 70%, #d98ba0 100%); }
+.ph.ski   { background: linear-gradient(165deg, #cfe6f5 0%, #9fc4e0 40%, #f2f6fa 41%, #d8e6f0 100%); }
+.ph.city  { background: linear-gradient(180deg, #241b45 0%, #4a3a78 60%, #b0526b 100%); }
+@media (min-width: 480px) { .polaroid { width: 92px; margin: 0 -9px; } .polaroid .ph { font-size: 34px; } .polaroid .cap { font-size: 10px; } }
+
+/* ---- Wedding theme: champagne & blush over deep plum ----------------------- */
+/* Applied to <body> the moment a wedding is opened (or picked in the wizard). */
+.theme-wedding {
+  --ai: #5a2743; --ai-2: #8a4a68; --ai-ink: #33142a;
+  --vermilion: #c05c74; --vermilion-2: #a4435c; --amber: #d9a75c;
+  --gold: #a8863a; --gold-soft: #e6c98a;
+  --sakura: #f3d3dd; --sakura-deep: #d898ab;
+  --g-dusk: linear-gradient(150deg, #6b2f4e 0%, #4a1e38 45%, #33142a 100%);
+  --g-sunset: linear-gradient(135deg, #d9a75c 0%, #c05c74 60%, #a4435c 100%);
+  --g-accent: linear-gradient(90deg, #c05c74, #d9a75c, #e6c98a);
+}
+.theme-wedding .topbar {
+  background:
+    radial-gradient(120% 160% at 92% -40%, rgba(192,92,116,.6), rgba(192,92,116,0) 55%),
+    var(--g-dusk);
+  background-color: var(--ai-ink);
+}
+.theme-wedding .hero {
+  background:
+    radial-gradient(90% 70% at 82% 88%, rgba(217,167,92,.4), rgba(217,167,92,0) 60%),
+    radial-gradient(120% 90% at 85% -25%, rgba(192,92,116,.55), rgba(192,92,116,0) 52%),
+    linear-gradient(168deg, #33142a 0%, #4a1e38 46%, #7a3352 78%, #b0526b 100%);
+}
+.theme-wedding .hero .sun {
+  background: radial-gradient(circle at 42% 38%, #ffe9c4, #e6c98a 58%, #d9a75c);
+  box-shadow: 0 0 44px 16px rgba(230,201,138,.45), 0 0 90px 40px rgba(192,92,116,.3);
+}
+.theme-wedding .ai-card {
+  background:
+    radial-gradient(110% 120% at 90% -20%, rgba(192,92,116,.45), rgba(192,92,116,0) 55%),
+    var(--g-dusk);
+  border-color: rgba(230,201,138,.5);
+}
+
 /* ---- AI setup card (dusk showcase) ---------------------------------------- */
 .ai-card { position: relative; overflow: hidden; border: 1px solid rgba(227,192,126,.45);
   background:

@@ -97,7 +97,7 @@
     $("#wizModal").classList.add("open");
     renderWizard();
   }
-  function closeWizard() { $("#wizModal").classList.remove("open"); }
+  function closeWizard() { $("#wizModal").classList.remove("open"); document.body.classList.remove("theme-wedding"); }
 
   function renderWizard() {
     const B = $("#wizBody");
@@ -126,8 +126,8 @@
         </div>`;
       $("#wCancel").addEventListener("click", closeWizard);
       const keep = () => { wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim(); wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value; };
-      $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; renderWizard(); });
-      $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; renderWizard(); });
+      $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; document.body.classList.remove("theme-wedding"); renderWizard(); });
+      $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; document.body.classList.add("theme-wedding"); renderWizard(); });
       $("#wNext").addEventListener("click", () => {
         keep();
         if (!wiz.name) return alert("Give the trip a name.");
@@ -258,6 +258,7 @@
       return;
     }
     SYNC.on = true;
+    document.body.classList.toggle("theme-wedding", isWedding());
     state.me = LS.get("me", null);
     state.packing = LS.get("packing", {});
     $("#brandName").textContent = TRIP.name;
@@ -478,7 +479,7 @@
         <button class="btn ghost" id="copyLink" style="width:100%">Copy invite link</button>
       </div>
 
-      <div class="foot-note">squadtrip · everything syncs live for the whole group</div>`;
+      <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
     s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
     s.querySelectorAll("[data-wrsvp]").forEach((b) => b.addEventListener("click", () => setVote("wrsvp", "attend", b.dataset.wrsvp)));
     s.querySelectorAll("[data-wparty]").forEach((b) => b.addEventListener("click", () => {
