@@ -81,8 +81,9 @@
   async function joinTrip() {
     const code = $("#joinCode").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (code.length < 4) { $("#joinErr").textContent = "That code looks too short."; return; }
-    if (!HAS_BACKEND || !Backend.isReady()) { $("#joinErr").textContent = "Backend isn't configured yet."; return; }
+    if (!HAS_BACKEND) { $("#joinErr").textContent = "Backend isn't configured yet."; return; }
     $("#joinErr").textContent = "Checking…";
+    Backend.init(code); // scope this lookup to the code they typed
     const trip = await Backend.getTrip(code);
     if (!trip) { $("#joinErr").textContent = "No trip found with that code. Double-check it."; return; }
     location.search = "?t=" + code;
@@ -312,7 +313,7 @@
 
   async function bootTrip() {
     $("#tripApp").style.display = "block";
-    if (!HAS_BACKEND || !Backend.init()) {
+    if (!HAS_BACKEND || !Backend.init(TRIP_CODE)) {
       $("#screen-home").innerHTML = `<div class="card" style="margin-top:20px"><h3>⚙️ Backend not configured</h3>
         <p class="r-sub">Caravan needs its Supabase config filled in before trips can load. See the README.</p></div>`;
       return;
@@ -337,7 +338,7 @@
     LSG.set("mytrips", mine.slice(0, 8));
 
     await hydrate("all");
-    Backend.subscribe(TRIP_CODE, async (table) => { await hydrate(table); renderCurrent(); });
+    Backend.watch(async () => { await hydrate("all"); renderCurrent(); });
 
     bindShell();
     renderAll();

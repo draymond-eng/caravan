@@ -8,11 +8,21 @@
   let ready = false;
   const BUCKET = "caravan-files";
 
-  function init() {
+  /* Every request carries the trip code in a header. The database policies
+     only return rows whose trip matches it, so knowing the code is what
+     grants access - there is no way to list or read other people's trips. */
+  let currentCode = "";
+  function init(code) {
     try {
       const cfg = window.CARAVAN_CONFIG || {};
       if (!cfg.url || !cfg.anonKey || !window.supabase || !window.supabase.createClient) return false;
-      client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: false } });
+      const wanted = (code || "").toUpperCase();
+      if (client && ready && wanted === currentCode) return true;
+      currentCode = wanted;
+      client = window.supabase.createClient(cfg.url, cfg.anonKey, {
+        auth: { persistSession: false },
+        global: { headers: wanted ? { "x-trip-code": wanted } : {} },
+      });
       ready = true;
       return true;
     } catch (e) { console.warn("Backend init failed:", e); return false; }
@@ -106,17 +116,18 @@
     catch (e) { console.warn("removePushSub", e); return false; }
   }
 
-  /* ---- Realtime: subscribe to this trip's rows on all tables ---------------- */
-  function subscribe(trip, onChange) {
-    try {
-      const tables = ["trips", "days", "votes", "expenses", "decisions", "stay_options", "ideas", "flights", "notes", "confirmations", "photos", "announcements"];
-      let ch = client.channel("caravan-" + trip);
-      tables.forEach((t) => {
-        const col = t === "trips" ? "code" : "trip";
-        ch = ch.on("postgres_changes", { event: "*", schema: "public", table: t, filter: `${col}=eq.${trip}` }, () => onChange(t));
-      });
-      return ch.subscribe();
-    } catch (e) { console.warn("subscribe", e); return null; }
+  /* ---- Keeping in sync ------------------------------------------------------
+     Postgres realtime can't see the trip-code header, so instead of streaming
+     we refresh on a timer, whenever the app comes back to the foreground, and
+     right after the device makes its own change. Feels live, stays private. */
+  function watch(onTick, seconds = 15) {
+    let timer = null, stopped = false;
+    const tick = () => { if (!stopped && document.visibilityState === "visible") onTick(); };
+    const onVis = () => { if (document.visibilityState === "visible") onTick(); };
+    timer = setInterval(tick, seconds * 1000);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("online", onTick);
+    return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("online", onTick); };
   }
 
   window.Backend = {
@@ -125,6 +136,6 @@
     list, insert, update, remove, clearTable,
     castVote, upsertFlight, savePushSub, removePushSub,
     uploadFile, removeFile,
-    subscribe,
+    watch,
   };
 })();
