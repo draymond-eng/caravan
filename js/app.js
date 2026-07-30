@@ -1442,7 +1442,14 @@
       h.parentElement.classList.toggle("open");
     }));
     list.querySelectorAll("[data-rsvp]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setVote("rsvp", b.dataset.rsvp, "in"); }));
-    list.querySelectorAll("[data-iadd]").forEach((b) => b.addEventListener("click", () => addItem(b.dataset.iadd)));
+    list.querySelectorAll("[data-iadd]").forEach((b) => b.addEventListener("click", async () => {
+      try { await addItem(b.dataset.iadd); }
+      catch (err) {
+        console.error("addItem", err);
+        const el = $(`[data-imsg="${b.dataset.iadd}"]`);
+        if (el) el.textContent = "Error: " + (err && err.message ? err.message : String(err));
+      }
+    }));
     list.querySelectorAll("[data-rmitem]").forEach((b) => b.addEventListener("click", () => removeItem(b.dataset.rmitem)));
     list.querySelectorAll("[data-rmday]").forEach((b) => b.addEventListener("click", async () => {
       if (!confirm("Delete this whole day?")) return;
@@ -1479,6 +1486,19 @@
     say("");
     renderDayList();
     const ok = await Backend.update("days", dayId, { items: d.items });
+    if (ok) {
+      // A write that silently affects no rows looks identical to success,
+      // so read the day back and make sure the event is really there.
+      const fresh = await Backend.list("days", TRIP_CODE, "date");
+      const saved = (fresh || []).find((x) => x.id === dayId);
+      if (saved && (saved.items || []).length < d.items.length) {
+        d.items = prev; renderDayList();
+        const el = $(`[data-imsg="${dayId}"]`);
+        if (el) el.textContent = "The server did not save that. Reload the app and try once more.";
+        return;
+      }
+      if (saved) { d.items = saved.items || d.items; }
+    }
     if (!ok) {
       d.items = prev;
       renderDayList();
