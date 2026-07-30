@@ -758,6 +758,7 @@
       </div>
 
       ${tzWarningCard()}
+      ${bookNowCard()}
       ${latestAnnouncementCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
 
@@ -1180,6 +1181,104 @@
       img.onerror = reject;
       img.src = URL.createObjectURL(file);
     });
+  }
+
+  /* =========================================================================
+     BOOKING TIMELINE - what to lock in, and when, built from this trip's dates
+     ====================================================================== */
+  function daysUntilTrip() {
+    const start = new Date(TRIP.start_date + "T00:00:00");
+    return Math.ceil((start - new Date()) / 86400000);
+  }
+  function dateMinusDays(days) {
+    const d = new Date(TRIP.start_date + "T00:00:00");
+    d.setDate(d.getDate() - days);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  function bookingItems() {
+    const L = TRIP.links || {};
+    const wed = isWedding();
+    const dest = TRIP.destination || "the destination";
+    const list = wed ? [
+      { id: "rsvp",     by: 90, label: "RSVP", note: `Tell the hosts if you're coming and how many are in your party.${L.rsvp_deadline ? ` They asked for answers by ${L.rsvp_deadline}.` : ""}`, hard: L.rsvp_deadline },
+      { id: "rooms",    by: 75, label: "Book your room", note: `Group rates are held for a limited time, then the block releases.${L.deadline ? ` Book by ${L.deadline}.` : ""}`, hard: L.deadline },
+      { id: "flights",  by: 90, label: "Book flights", note: `Fares to ${dest} climb as the date gets close, and everyone booking at once makes it worse.` },
+      { id: "outfits",  by: 30, label: "Sort out what you're wearing", note: "Check the dress code on each event in the Plan tab. Alterations take a couple of weeks." },
+      { id: "gift",     by: 21, label: "Gift or registry", note: "Easier now than in the airport. Shipping to the couple beats carrying it." },
+      { id: "docs",     by: 30, label: "Passport and any visa", note: "Passports should be valid six months past your return date." },
+      { id: "transfer", by: 10, label: "Airport transfer", note: "Check the Flights tab for the shuttle windows, or arrange a ride." },
+      { id: "checkin",  by: 1,  label: "Check in for your flight", note: "24 hours before. Grab a seat while there are still good ones." },
+    ] : [
+      { id: "flights",  by: 120, label: "Book flights", note: `Fares to ${dest} are usually best two to four months out, and a group booking together needs the seats.` },
+      { id: "lodging",  by: 110, label: "Lock in where you sleep", note: "The good places for a group go first. Settle the vote in Stays, then book." },
+      { id: "bigticket",by: 75,  label: "Anything that sells out", note: "Headline tours, tickets and tastings. If it has a queue at home, it has one there." },
+      { id: "transport",by: 60,  label: "Trains, rail passes or a car", note: "Cheaper in advance almost everywhere, and it settles how you move between stops." },
+      { id: "docs",     by: 60,  label: "Passports and visas", note: "Passports should be valid six months past your return date. Check if anyone needs a visa." },
+      { id: "food",     by: 30,  label: "The restaurants worth planning", note: "Anywhere notable takes bookings about a month out. Pick two or three, not every night." },
+      { id: "transfer", by: 14,  label: "Airport transfers", note: "Sort out how you get from the airport with bags, especially if you land late." },
+      { id: "money",    by: 7,   label: "Money and data", note: `Tell your bank you're travelling, and sort an eSIM if ${dest} needs one.` },
+      { id: "checkin",  by: 1,   label: "Check in and pack", note: "Check in 24 hours ahead. The Packing tab has the list." },
+    ];
+    const out = daysUntilTrip();
+    return list.map((i) => ({
+      ...i,
+      due: i.hard || `by ${dateMinusDays(i.by)}`,
+      bucket: out <= i.by ? "now" : (out <= i.by + 45 ? "soon" : "later"),
+    }));
+  }
+  function renderBooking() {
+    const s = $("#screen-booking");
+    const items = bookingItems();
+    const doneOf = (id) => tally("booking", id).done || [];
+    const done = items.filter((i) => doneOf(i.id).length).length;
+    const out = daysUntilTrip();
+    const buckets = [
+      { key: "now",   title: "Do this now", sub: "Due, or close enough that waiting costs money." },
+      { key: "soon",  title: "Coming up",   sub: "Get it on the radar. Not urgent yet." },
+      { key: "later", title: "Later",       sub: "Too early to bother. It will move up on its own." },
+    ];
+    s.innerHTML = `
+      <div class="section-title">Booking timeline</div>
+      <div class="section-sub">${out > 0 ? `${out} day${out === 1 ? "" : "s"} out.` : "Trip time."} Things move up the list as the date gets closer. Tap ✓ when one is handled and the whole group sees it. ${done}/${items.length} done.</div>
+      <div class="progress"><i style="width:${Math.round((done / items.length) * 100)}%"></i></div>
+      ${buckets.map((bk) => {
+        const rows = items.filter((i) => i.bucket === bk.key);
+        if (!rows.length) return "";
+        return `<div style="margin-bottom:22px">
+          <div class="check-cat" style="margin:18px 2px 2px">${bk.title}</div>
+          <div class="section-sub" style="margin:4px 2px 12px">${bk.sub}</div>
+          ${rows.map((i) => {
+            const who = doneOf(i.id);
+            const isDone = who.length > 0;
+            return `<div class="card" style="${isDone ? "opacity:.7" : ""}">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <button class="book-check ${isDone ? "on" : ""}" data-book="${i.id}" aria-label="Mark done">${isDone ? "✓" : ""}</button>
+                <div style="flex:1;min-width:0">
+                  <div class="r-title" style="font-size:15px;${isDone ? "text-decoration:line-through" : ""}">${esc(i.label)}</div>
+                  <div class="r-sub" style="margin-top:3px">${esc(i.note)}</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+                    <span class="when-chip">${esc(i.due)}</span>
+                    ${who.length ? `<span class="tally" style="margin:0">${voterChips(who)}<span class="tally-n">handled</span></span>` : ""}
+                  </div>
+                </div>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>`;
+      }).join("")}`;
+    s.querySelectorAll("[data-book]").forEach((b) => b.addEventListener("click", () => setVote("booking", b.dataset.book, "done")));
+  }
+  function bookNowCard() {
+    if (!TRIP.start_date) return "";
+    const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
+    if (!due.length) return "";
+    return `<div class="card" style="margin-top:14px;border-color:var(--amber)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="pill" style="background:var(--sakura);color:var(--vermilion-2)">⏳ Worth doing now</span>
+      </div>
+      <div style="font-size:13.5px;line-height:1.6">${due.slice(0, 3).map((i) => `<b>${esc(i.label)}</b> <span class="r-sub">${esc(i.due)}</span>`).join("<br>")}</div>
+      <div class="r-sub" style="margin-top:8px;font-size:11.5px"><span style="color:var(--ai-2);font-weight:800;cursor:pointer" data-go="booking">See the timeline ›</span></div>
+    </div>`;
   }
 
   /* =========================================================================
@@ -2382,7 +2481,7 @@
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
-    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce,
+    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking,
   };
   function renderCurrent() {
     if (!TRIP) return;
