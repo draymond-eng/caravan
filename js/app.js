@@ -573,7 +573,21 @@
     });
   }
 
+  /* Any button anywhere can carry data-go="<screen>" and it just works. One
+     listener on the app, so a screen can never forget to wire its own. */
+  function bindGoDelegate() {
+    const app = $("#tripApp");
+    if (!app || app.dataset.goDelegated) return;
+    app.dataset.goDelegated = "1";
+    app.addEventListener("click", (e) => {
+      const go = e.target.closest("[data-go]");
+      if (!go || !app.contains(go)) return;
+      e.stopPropagation();
+      show(go.dataset.go);
+    });
+  }
   function bindShell() {
+    bindGoDelegate();
     $$(".tab[data-screen]").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $$(".sheet-item").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $("#moreTab").addEventListener("click", () => { $("#moreSheet").classList.add("open"); $("#sheetBackdrop").classList.add("open"); });
@@ -1095,7 +1109,6 @@
       </div>
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
-    s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
     const hc = $("#hostCopy"); if (hc) hc.addEventListener("click", () => {
       navigator.clipboard?.writeText(cateringList())
         .then(() => { $("#hostMsg2").textContent = "Copied. Paste it straight into an email."; })
@@ -1416,7 +1429,6 @@
         </div>
       </div>` : ""}`;
     renderDayList();
-    s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
     const da = $("#dAdd"); if (da) da.addEventListener("click", addDay);
     const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
   }
@@ -1523,7 +1535,6 @@
       </div>`;
     }).join("");
     bindComments(list);
-    list.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); show(b.dataset.go); }));
     list.querySelectorAll(".day-head").forEach((h) => h.addEventListener("click", () => {
       const id = h.parentElement.dataset.date;
       if (openDays.has(id)) openDays.delete(id); else openDays.add(id);
