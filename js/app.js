@@ -1488,7 +1488,9 @@
     const da = $("#dAdd"); if (da) da.addEventListener("click", addDay);
     const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
     // Photo lives with the assistant, so hop there and open the picker straight away.
-    const pp = $("#planPhoto"); if (pp) pp.addEventListener("click", () => { show("assistant"); setTimeout(pickChatPhoto, 150); });
+    // The picker has to open inside this tap, so it goes first and the screen
+    // change follows. A timer here loses the gesture and iOS ignores the click.
+    const pp = $("#planPhoto"); if (pp) pp.addEventListener("click", () => { pickChatPhoto(true); show("assistant"); });
   }
   async function callAI(mode) {
     const cfg = window.CARAVAN_CONFIG;
@@ -2986,7 +2988,14 @@
       <div class="section-title">Vault</div>
       <div class="section-sub">Every confirmation in one shared place. No inbox digging at the airport.</div>
       <div class="card">
+        <h3>📷 Just add a photo</h3>
+        <p class="section-sub" style="margin:4px 0 10px">A screenshot of a confirmation, a boarding pass, a receipt. It saves straight away and names itself.</p>
+        <button class="btn primary" id="vaultShot" style="width:100%">Add a photo</button>
+        <div id="vaultShotMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
         <h3>Add a confirmation</h3>
+        <p class="section-sub" style="margin:4px 0 10px">When you want the number and a label alongside it.</p>
         <div class="expense-add">
           <select id="confCat">
             <option>Flight</option><option>Hotel</option><option>Train</option>
@@ -3013,6 +3022,19 @@
       </div>`).join("") : emptyState("🔐", "The vault is empty", "Stash confirmation numbers, booking PDFs, and reservation links here so nobody is digging through email at the airport.")}`;
     const fi = $("#confFile"), fl = $("#confFileLabel");
     fi.addEventListener("change", () => { fl.textContent = fi.files[0] ? "📎 " + fi.files[0].name : "📎 Attach file (optional)"; });
+    // One tap, no form. The filename or today's date is a good enough label.
+    $("#vaultShot").addEventListener("click", () => openPicker("image/*", async (f) => {
+      const msg = $("#vaultShotMsg"); if (msg) msg.textContent = "Uploading…";
+      const up = await Backend.uploadFile(TRIP_CODE, f);
+      if (!up) { if (msg) msg.textContent = "Upload failed. Try again."; return; }
+      const stem = String(f.name || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+      const label = stem && !/^(img|image|photo|screenshot|pxl|dsc)[\s\d]*$/i.test(stem)
+        ? stem.slice(0, 80)
+        : "Photo, " + new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      const row = await Backend.insert("confirmations", { trip: TRIP_CODE, category: "Other", label, confirmation_no: "", ...up, author: state.me || "" });
+      if (row) { state.confirmations.unshift(row); renderVault(); }
+      else if (msg) msg.textContent = "Couldn't save it. Try again.";
+    }));
     $("#confAdd").addEventListener("click", async () => {
       const label = $("#confLabel").value.trim(); if (!label) { alert("Add a label."); return; }
       $("#confStatus").textContent = "Saving…";
@@ -3308,25 +3330,41 @@
       fr.readAsDataURL(file);
     });
   }
-  function pickChatPhoto() {
+  /* Safari only opens a file picker from inside a real tap, and only for an
+     input that is actually in the document. Call this straight from the click
+     handler: any timer in between loses the gesture and iOS ignores it. */
+  function openPicker(accept, onFile) {
     const inp = document.createElement("input");
     inp.type = "file";
-    inp.accept = "image/*";
+    inp.accept = accept;
+    inp.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px";
+    document.body.appendChild(inp);
+    const done = () => { if (inp.parentNode) inp.parentNode.removeChild(inp); };
     inp.addEventListener("change", async () => {
       const f = inp.files && inp.files[0];
-      if (!f) return;
-      const st = $("#chatStatus"); if (st) st.textContent = "Reading the photo…";
+      if (f) { try { await onFile(f); } catch (e) { console.warn("picker", e); } }
+      done();
+    });
+    inp.addEventListener("cancel", done);
+    inp.click();
+  }
+  function pickChatPhoto(autoSend) {
+    const say = (msg) => { const st = $("#chatStatus"); if (st) st.textContent = msg; };
+    openPicker("image/*", async (f) => {
+      say("Reading the photo…");
       try {
         pendingImage = await shrinkForAI(f);
         renderAssistant();
-        $("#chatStatus").textContent = "Photo attached. Add a note if you want, then hit Send.";
+        // A screenshot of a tee sheet is already the whole request. Read it now
+        // rather than making them hit Send to say what they clearly meant.
+        if (autoSend) sendChat();
+        else say("Photo attached. Add a note if you want, then hit Send.");
       } catch (e) {
         pendingImage = null;
         renderAssistant();
-        $("#chatStatus").textContent = (e && e.message ? e.message : "Couldn't read that image") + ". A screenshot usually works.";
+        say((e && e.message ? e.message : "Couldn't read that image") + ". A screenshot usually works.");
       }
     });
-    inp.click();
   }
 
   function renderAssistant() {
@@ -3377,8 +3415,8 @@
       </div>`;
     const send = () => sendChat();
     $("#chatSend").addEventListener("click", send);
-    $("#chatCam").addEventListener("click", pickChatPhoto);
-    const cph = $("#chatPhoto"); if (cph) cph.addEventListener("click", pickChatPhoto);
+    $("#chatCam").addEventListener("click", () => pickChatPhoto(false));
+    const cph = $("#chatPhoto"); if (cph) cph.addEventListener("click", () => pickChatPhoto(true));
     const cd = $("#chatDrop"); if (cd) cd.addEventListener("click", () => { pendingImage = null; renderAssistant(); });
     const cp = $("#chatPaste"); if (cp) cp.addEventListener("click", () => {
       const inp = $("#chatInput");
