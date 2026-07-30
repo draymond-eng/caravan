@@ -91,8 +91,8 @@ Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVE
 Roughly ${travelers}+ guests expected. Location(s): ${stopsTxt}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"dress code / key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence for guests"}]}]}
-Rules: never use an em dash ("\u2014") in any text; 2-4 items/day; put dress codes in the meetup field (e.g. "Dress code: beach formal"); use the given stop ids, not labels; leave exact venues generic (e.g. "Ceremony - venue TBA") since the hosts will fill them in.`
+{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"the kind of place this happens, e.g. Beach club, Ceremony venue, Hotel terrace","dress":"dress code for this event, e.g. Beach formal","note":"one practical sentence for guests"}]}]}
+Rules: never use an em dash ("\u2014") in any text; 2-4 items/day; give EVERY event a where and a dress, since wedding events move between places; use the given stop ids, not labels; keep exact venue names generic (e.g. "Ceremony venue, TBA") since the hosts will fill them in.`
 : `You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on - favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
 
 Trip: "${trip.name}" to ${trip.destination || "?"}
