@@ -281,3 +281,6 @@ do $$ begin
   create policy "trip scoped" on public.groups for all
     using (trip = public.req_trip()) with check (trip = public.req_trip());
 exception when duplicate_object then null; end $$;
+
+-- Cached map coordinates per place name. Safe to re-run.
+alter table public.trips add column if not exists geo jsonb not null default '{}';

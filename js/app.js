@@ -1337,6 +1337,107 @@
   }
 
   /* =========================================================================
+     MAP - everything on the trip that has a location, in one picture.
+     Places are geocoded once through OpenStreetMap and cached on the trip,
+     so the lookup does not repeat for anyone else.
+     ====================================================================== */
+  let mapObj = null, mapLayer = null;
+  function mapPlaces() {
+    const out = [];
+    const push = (name, label, kind) => {
+      if (!name) return;
+      const key = name.trim();
+      if (!key || out.some((p) => p.name.toLowerCase() === key.toLowerCase())) return;
+      out.push({ name: key, label, kind });
+    };
+    const L = TRIP.links || {};
+    if (L.venue_name) push(L.venue_name, "The venue", "venue");
+    state.stayOptions.forEach((o) => { if (o.booked || o.kind === "block") push(o.name, o.kind === "block" ? "Room block" : "Where we sleep", "stay"); });
+    state.days.forEach((d) => (d.items || []).forEach((i) => {
+      if (i.where) push(i.where, `${fmtDate(d.date).mon} ${fmtDate(d.date).day} · ${i.title}`, "event");
+    }));
+    return out;
+  }
+  const geoCache = () => (TRIP.geo && typeof TRIP.geo === "object") ? TRIP.geo : {};
+  function renderMap() {
+    const s = $("#screen-map");
+    const places = mapPlaces();
+    const cache = geoCache();
+    const missing = places.filter((p) => !cache[p.name.toLowerCase()]);
+    s.innerHTML = `
+      <div class="section-title">Map</div>
+      <div class="section-sub">${places.length
+        ? "Everywhere this trip touches. Add a location to an event and it lands here."
+        : "Nothing has a location yet."}</div>
+      ${places.length ? `<div id="map"></div>
+        <div class="map-legend">
+          <span><i class="dot" style="background:var(--vermilion)"></i> Events</span>
+          <span><i class="dot" style="background:var(--matcha)"></i> Where we sleep</span>
+          ${isWedding() ? `<span><i class="dot" style="background:var(--gold)"></i> Venue</span>` : ""}
+        </div>
+        ${missing.length ? `<div class="card" style="margin-top:14px">
+          <h3>📍 ${missing.length} place${missing.length === 1 ? "" : "s"} to look up</h3>
+          <p class="section-sub" style="margin:4px 0 12px">Find them on the map once and everyone gets the pins.</p>
+          <button class="btn primary" id="geoRun" style="width:100%">Find them</button>
+          <div id="geoMsg" class="r-sub" style="margin-top:8px"></div>
+        </div>` : ""}
+        <div class="card">
+          <h3>Places</h3>
+          ${places.map((p) => `<div class="row">
+            <div class="r-main"><div class="r-title">${esc(p.name)}</div><div class="r-sub">${esc(p.label)}</div></div>
+            <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + " " + (TRIP.destination || ""))}" target="_blank" rel="noopener">Open</a>
+          </div>`).join("")}
+        </div>`
+        : emptyState("🗺️", "Nothing to map yet", "Give an event a location in the Plan tab, or mark where you are staying, and it will show up here.")}`;
+    if (places.length) { setTimeout(drawMap, 60); }
+    const gr = $("#geoRun"); if (gr) gr.addEventListener("click", () => geocodeMissing(missing));
+  }
+  function drawMap() {
+    if (!window.L || !$("#map")) return;
+    const cache = geoCache();
+    const pts = mapPlaces().map((p) => ({ ...p, ll: cache[p.name.toLowerCase()] })).filter((p) => p.ll);
+    if (!mapObj) {
+      mapObj = L.map("map", { scrollWheelZoom: false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap", maxZoom: 18,
+      }).addTo(mapObj);
+    }
+    if (mapLayer) mapLayer.remove();
+    mapLayer = L.layerGroup().addTo(mapObj);
+    if (!pts.length) { mapObj.setView([20, 0], 2); return; }
+    const colors = { event: "#e2593a", stay: "#4e7d5b", venue: "#b28a34" };
+    pts.forEach((p) => {
+      L.circleMarker([p.ll.lat, p.ll.lng], {
+        radius: 9, color: "#fff", weight: 2, fillColor: colors[p.kind] || "#e2593a", fillOpacity: 1,
+      }).addTo(mapLayer).bindPopup(`<div class="pin-pop"><b>${esc(p.name)}</b><div class="pp-note">${esc(p.label)}</div></div>`);
+    });
+    mapObj.fitBounds(pts.map((p) => [p.ll.lat, p.ll.lng]), { padding: [40, 40], maxZoom: 14 });
+  }
+  async function geocodeMissing(missing) {
+    const btn = $("#geoRun"), msg = $("#geoMsg");
+    if (btn) { btn.disabled = true; btn.style.opacity = .6; }
+    const cache = { ...geoCache() };
+    let found = 0;
+    for (let i = 0; i < missing.length; i++) {
+      const p = missing[i];
+      if (msg) msg.textContent = `Looking up ${i + 1} of ${missing.length}…`;
+      try {
+        const q = encodeURIComponent(p.name + ", " + (TRIP.destination || ""));
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
+        const data = await res.json();
+        if (data && data[0]) { cache[p.name.toLowerCase()] = { lat: +data[0].lat, lng: +data[0].lon }; found++; }
+      } catch (e) { console.warn("geocode", e); }
+      await new Promise((r) => setTimeout(r, 1100)); // be polite to a free service
+    }
+    if (found) {
+      TRIP.geo = cache;
+      await Backend.updateTrip(TRIP_CODE, { geo: cache });
+    }
+    if (msg) msg.textContent = found ? `Found ${found}. Pins are shared with the group.` : "Couldn't find those. Try a more specific name, like adding the city.";
+    renderMap();
+  }
+
+  /* =========================================================================
      GROUPS - split the crew into foursomes, cars, bedrooms, shuttle runs.
      One idea that covers golf pairings, ski ability groups, wedding
      shuttles and who sleeps in which room of the house.
@@ -1547,6 +1648,23 @@
     if (row) { state.comments.push(row); renderCurrent(); }
   }
 
+  /* The one or two things each kind of trip has to lock in early. */
+  const BOOKING_BY_TYPE = {
+    golf:     [{ id: "tee", by: 90, label: "Lock in tee times", note: "Prime weekend slots at good courses go months out, and a group of eight or more needs consecutive times." },
+               { id: "clubs", by: 21, label: "Clubs: shipping or rentals", note: "Shipping takes about a week each way. Rentals should be reserved, not assumed." }],
+    ski:      [{ id: "lift", by: 75, label: "Lift tickets and passes", note: "Window prices are the worst prices. Multi-day tickets bought ahead save real money." },
+               { id: "rentals", by: 30, label: "Ski or board rentals", note: "Reserve sizes ahead, especially over a holiday week, and ask about slopeside pickup." },
+               { id: "lessons", by: 30, label: "Lessons, if anyone needs them", note: "Instructors book out first on weekends." }],
+    beach:    [{ id: "bigticket", by: 60, label: "Boat day or excursions", note: "Charters and catamarans for a group book up, especially anything at sunset." }],
+    city:     [{ id: "bigticket", by: 75, label: "Tickets for the big things", note: "Headline museums, shows and observation decks. If it has a queue at home, it has one there." }],
+    bachelor: [{ id: "tables", by: 45, label: "Tables, clubs and the big night", note: "Venues want a deposit and a headcount, and good nights go fast." },
+               { id: "activity", by: 45, label: "The daytime activity", note: "Whatever the group thing is, it needs a booking and a headcount." }],
+    reunion:  [{ id: "bigticket", by: 60, label: "Anything the whole family does together", note: "Large tables and group activities need notice. Ask about kid and senior pricing." }],
+    outdoors: [{ id: "permits", by: 120, label: "Permits and campsites", note: "Popular trails and sites release on a schedule and sell out in minutes. Find the release date now." },
+               { id: "gear", by: 30, label: "Gear checks and rentals", note: "Confirm who owns what before anyone buys a second tent." }],
+    general:  [{ id: "bigticket", by: 75, label: "Anything that sells out", note: "Headline tours, tickets and tastings. If it has a queue at home, it has one there." }],
+  };
+
   /* =========================================================================
      BOOKING TIMELINE - what to lock in, and when, built from this trip's dates
      ====================================================================== */
@@ -1575,7 +1693,7 @@
     ] : [
       { id: "flights",  by: 120, label: "Book flights", note: `Fares to ${dest} are usually best two to four months out, and a group booking together needs the seats.` },
       { id: "lodging",  by: 110, label: "Lock in where you sleep", note: "The good places for a group go first. Settle the vote in Stays, then book." },
-      { id: "bigticket",by: 75,  label: "Anything that sells out", note: "Headline tours, tickets and tastings. If it has a queue at home, it has one there." },
+      ...(BOOKING_BY_TYPE[tripType()] || BOOKING_BY_TYPE.general),
       { id: "transport",by: 60,  label: "Trains, rail passes or a car", note: "Cheaper in advance almost everywhere, and it settles how you move between stops." },
       { id: "docs",     by: 60,  label: "Passports and visas", note: "Passports should be valid six months past your return date. Check if anyone needs a visa." },
       { id: "food",     by: 30,  label: "The restaurants worth planning", note: "Anywhere notable takes bookings about a month out. Pick two or three, not every night." },
@@ -2152,12 +2270,23 @@
       </div>
 
       <div class="section-title" style="font-size:16px">Log</div>
-      <div>${state.expenses.length ? state.expenses.slice().reverse().map((e) => `<div class="row">
+      <div>${state.expenses.filter((x) => x.label !== SETTLE_TAG).length ? state.expenses.filter((x) => x.label !== SETTLE_TAG).slice().reverse().map((e) => `<div class="row">
         <div class="r-main"><div class="r-title">${esc(e.label)}</div>
           <div class="r-sub">${esc(e.currency)} ${Number(e.amount).toLocaleString()} · paid by ${esc((byId(e.paid_by) || { name: "?" }).name.split(" ")[0])} · split ${(e.split_among || []).length}</div></div>
         <button class="btn danger" data-del="${e.id}">Delete</button>
       </div>`).join("") : emptyState("💰", "No expenses yet", "Add the first one above. Anything anyone covers goes in here, and SquadTrip works out who owes who at the end so nobody has to do the math.")}</div>`;
     $("#exAdd").addEventListener("click", addExpense);
+    const plan = settlePlan(nets);
+    s.querySelectorAll("[data-settle]").forEach((b) => b.addEventListener("click", async () => {
+      const p = plan[+b.dataset.settle]; if (!p) return;
+      b.disabled = true; b.textContent = "Saving…";
+      await recordSettlement(p);
+    }));
+    s.querySelectorAll("[data-unsettle]").forEach((b) => b.addEventListener("click", async () => {
+      state.expenses = state.expenses.filter((e) => e.id !== b.dataset.unsettle);
+      renderBudget();
+      await Backend.remove("expenses", b.dataset.unsettle);
+    }));
     s.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
       state.expenses = state.expenses.filter((e) => String(e.id) !== String(b.dataset.del));
       renderBudget();
@@ -2169,19 +2298,60 @@
       ch.addEventListener("input", () => { const v = parseFloat(ch.value); ct.value = isFinite(v) && state.liveRate ? Math.round(v * state.liveRate) : ""; });
     }
   }
-  function settleText(nets, S) {
+  function settlePlan(nets) {
     const cred = Object.entries(nets).filter(([, v]) => v > 0.5).map(([id, v]) => ({ id, v }));
     const debt = Object.entries(nets).filter(([, v]) => v < -0.5).map(([id, v]) => ({ id, v: -v }));
-    if (!cred.length || !debt.length) return "";
+    if (!cred.length || !debt.length) return [];
     cred.sort((a, b) => b.v - a.v); debt.sort((a, b) => b.v - a.v);
-    const lines = []; let i = 0, j = 0;
+    const out = []; let i = 0, j = 0;
     while (i < debt.length && j < cred.length) {
       const pay = Math.min(debt[i].v, cred[j].v);
-      lines.push(`${esc((byId(debt[i].id) || { name: "?" }).name.split(" ")[0])} → ${esc((byId(cred[j].id) || { name: "?" }).name.split(" ")[0])}: <b>${S}${pay.toFixed(0)}</b>`);
+      out.push({ from: debt[i].id, to: cred[j].id, amount: pay });
       debt[i].v -= pay; cred[j].v -= pay;
       if (debt[i].v < 0.5) i++; if (cred[j].v < 0.5) j++;
     }
-    return `<div class="card"><h3>Suggested settle-up</h3>${lines.map((l) => `<div class="r-sub" style="font-size:13.5px;padding:3px 0">${l}</div>`).join("")}</div>`;
+    return out;
+  }
+  function settleText(nets, S) {
+    const plan = settlePlan(nets);
+    const paid = state.expenses.filter((e) => e.label === SETTLE_TAG);
+    if (!plan.length) {
+      return paid.length
+        ? `<div class="card" style="border-color:var(--matcha)"><h3>✓ All square</h3>
+            <p class="section-sub" style="margin:6px 0 0">Everyone is paid up. ${paid.length} payment${paid.length === 1 ? "" : "s"} recorded.</p></div>`
+        : "";
+    }
+    const first = (id) => esc((byId(id) || { name: "?" }).name.split(" ")[0]);
+    return `<div class="card">
+      <h3>Suggested settle-up</h3>
+      <p class="section-sub" style="margin:4px 0 10px">The fewest payments that square everyone up. Tap one once the money has actually moved.</p>
+      ${plan.map((p, i) => `<div class="row" style="align-items:center">
+        <div class="r-main">
+          <div class="r-title">${first(p.from)} → ${first(p.to)}</div>
+          <div class="r-sub">${S}${p.amount.toFixed(2)}</div>
+        </div>
+        <button class="btn ghost" data-settle="${i}" style="padding:8px 12px;font-size:12.5px">Mark paid</button>
+      </div>`).join("")}
+      <div id="settleMsg" class="r-sub" style="margin-top:8px"></div>
+    </div>
+    ${paid.length ? `<div class="card">
+      <h3>Payments made</h3>
+      ${paid.slice().reverse().map((e) => `<div class="row">
+        <div class="r-main"><div class="r-title">${first(e.paid_by)} paid ${first((e.split_among || [])[0])}</div>
+          <div class="r-sub">${S}${toHome(Number(e.amount), e.currency).toFixed(2)}${e.paid_by === state.me || (e.split_among || [])[0] === state.me ? "" : ""}</div></div>
+        <span class="tl-map" style="color:var(--vermilion);cursor:pointer" data-unsettle="${e.id}">Undo</span>
+      </div>`).join("")}
+    </div>` : ""}`;
+  }
+  const SETTLE_TAG = "· settle up ·";
+  async function recordSettlement(p) {
+    // A payment is an expense the payer covers and the receiver alone "owes",
+    // which cancels the debt without touching any real expense.
+    const row = await Backend.insert("expenses", {
+      trip: TRIP_CODE, label: SETTLE_TAG, amount: Number(p.amount.toFixed(2)),
+      currency: TRIP.home_currency || TRIP.currency, paid_by: p.from, split_among: [p.to],
+    });
+    if (row) { state.expenses.push(row); renderBudget(); }
   }
   async function addExpense() {
     const label = $("#exLabel").value.trim(), amount = parseFloat($("#exAmount").value);
@@ -2928,7 +3098,7 @@
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
-    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups,
+    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups, map: renderMap,
   };
   function renderCurrent() {
     if (!TRIP) return;

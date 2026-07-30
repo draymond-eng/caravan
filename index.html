@@ -12,6 +12,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SquadTrip" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -159,6 +161,7 @@
         <section class="screen" id="screen-announce"></section>
         <section class="screen" id="screen-booking"></section>
         <section class="screen" id="screen-groups"></section>
+        <section class="screen" id="screen-map"></section>
       </main>
 
       <nav class="tabbar" id="tabbar">
@@ -178,6 +181,7 @@
           <button class="sheet-item" data-screen="announce"><span class="si">📣</span> Updates</button>
           <button class="sheet-item" data-screen="booking"><span class="si">📋</span> Booking</button>
           <button class="sheet-item" data-screen="groups"><span class="si">👥</span> Groups</button>
+          <button class="sheet-item" data-screen="map"><span class="si">🗺️</span> Map</button>
           <button class="sheet-item" data-screen="stays"><span class="si">🏨</span> Stays</button>
           <button class="sheet-item" data-screen="flights"><span class="si">✈️</span> Flights</button>
           <button class="sheet-item" data-screen="budget"><span class="si">💰</span> Budget</button>
@@ -215,6 +219,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="js/cities.js"></script>
   <script src="js/config.js"></script>
   <script src="js/backend.js"></script>
