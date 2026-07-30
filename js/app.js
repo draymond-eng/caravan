@@ -258,7 +258,8 @@
     bindShell();
     renderAll();
     renderWhoami();
-    if (!state.me) setTimeout(openWho, 700);
+    if (!LSG.get("onboarded", false)) setTimeout(openWelcome, 500);
+    else if (!state.me) setTimeout(openWho, 700);
     loadRate();
     registerSW();
   }
@@ -313,13 +314,52 @@
   }
   const closeSheet = () => { $("#moreSheet").classList.remove("open"); $("#sheetBackdrop").classList.remove("open"); };
   function show(screen) {
-    $$(".screen").forEach((s) => s.classList.remove("active"));
+    $$("#tripApp .screen").forEach((s) => s.classList.remove("active"));
     const el = $("#screen-" + screen); if (el) el.classList.add("active");
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.screen === screen));
     if (!["home", "itinerary", "decisions", "crew"].includes(screen)) $("#moreTab").classList.add("active");
     window.scrollTo(0, 0);
     closeSheet();
     renderCurrent();
+  }
+
+  /* ---- welcome walkthrough (first open on this device) ---------------------- */
+  const WELCOME_STEPS = [
+    { emoji: "\u{1F9ED}", title: "Welcome to Caravan", body: () => `This is <b>${esc(TRIP.name)}</b> \u2014 your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
+    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `You'll pick your name from the crew list in a second. Your votes, RSVPs, and expenses get tagged to you \u2014 that's the whole login.` },
+    { emoji: "\u{1F5D3}\uFE0F", title: "Plan it together", body: () => `The <b>Plan</b> tab is the shared itinerary \u2014 anyone can add days and activities, and you tap <b>\uFF0B I'm in</b> on the ones you'd join. Empty plan? The <b>\u2728 AI setup</b> drafts the whole trip \u2014 itinerary, destination guide, neighborhoods \u2014 for the group to reshape.` },
+    { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b> \u2014 everyone taps their pick and the tallies settle it.` },
+    { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, and ask the <b>\u2728 Assistant</b> anything about your trip. Have a great one.` },
+  ];
+  let welcomeStep = 0;
+  function openWelcome() {
+    welcomeStep = 0;
+    renderWelcome();
+    $("#welcomeModal").classList.add("open");
+  }
+  function renderWelcome() {
+    const s = WELCOME_STEPS[welcomeStep];
+    const last = welcomeStep === WELCOME_STEPS.length - 1;
+    $("#welcomeBody").innerHTML = `
+      <div class="wiz-step-dots">${WELCOME_STEPS.map((_, i) => `<i class="${i <= welcomeStep ? "on" : ""}"></i>`).join("")}</div>
+      <div style="text-align:center;font-size:52px;margin:6px 0 10px">${s.emoji}</div>
+      <h3 style="text-align:center;margin:0 0 10px">${s.title}</h3>
+      <p class="section-sub" style="text-align:center;margin:0 0 18px;font-size:14px;line-height:1.6">${s.body()}</p>
+      <div class="btn-row">
+        ${welcomeStep > 0 ? `<button class="btn ghost" id="wlBack" style="flex:1">\u2190</button>` : `<button class="btn ghost" id="wlSkip" style="flex:1">Skip</button>`}
+        <button class="btn primary" id="wlNext" style="flex:3">${last ? "Pick my name \u2192" : "Next"}</button>
+      </div>`;
+    const back = $("#wlBack"); if (back) back.addEventListener("click", () => { welcomeStep--; renderWelcome(); });
+    const skip = $("#wlSkip"); if (skip) skip.addEventListener("click", finishWelcome);
+    $("#wlNext").addEventListener("click", () => {
+      if (welcomeStep < WELCOME_STEPS.length - 1) { welcomeStep++; renderWelcome(); }
+      else finishWelcome();
+    });
+  }
+  function finishWelcome() {
+    LSG.set("onboarded", true);
+    $("#welcomeModal").classList.remove("open");
+    if (!state.me) openWho();
   }
 
   /* ---- who am I ------------------------------------------------------------ */
@@ -1461,7 +1501,7 @@
   };
   function renderCurrent() {
     if (!TRIP) return;
-    const active = $(".screen.active");
+    const active = $("#tripApp .screen.active");
     const id = active ? active.id.replace("screen-", "") : "home";
     if (RENDERERS[id]) RENDERERS[id]();
   }
