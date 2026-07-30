@@ -478,23 +478,12 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .trip-chip .tc-sub { font-size: 12px; color: var(--ink-2); }
 
 
-/* ---- Landing collage: polaroid fan of trip types --------------------------- */
-.collage { display: flex; justify-content: center; align-items: flex-start; margin: 22px -6px 2px; }
-.polaroid { flex: 0 0 auto; width: 74px; margin: 0 -11px; position: relative; z-index: 1;
-  background: #fffdf8; border-radius: 6px; padding: 5px 5px 19px;
-  box-shadow: 0 12px 26px -10px rgba(10,6,25,.65);
-  transform: rotate(var(--r, 0deg)) translateY(var(--y, 0));
-}
-.polaroid:hover { z-index: 2; }
-.polaroid .ph { width: 100%; aspect-ratio: 1; border-radius: 3px; display: grid; place-items: center; font-size: 27px; }
-.polaroid .cap { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center;
-  font-family: var(--serif); font-style: italic; font-size: 8.5px; color: #55585f; }
-.ph.golf  { background: linear-gradient(160deg, #bfe3f2 0%, #bfe3f2 45%, #5f9e56 46%, #3f7a44 100%); }
-.ph.beach { background: linear-gradient(180deg, #ffd9a0 0%, #f2a45c 45%, #4fa3b8 46%, #2f7d95 78%, #e8d8ae 79%, #ddc48e 100%); }
-.ph.wed   { background: radial-gradient(80% 60% at 50% 30%, #f7dfe4, #eab8c4 70%, #d98ba0 100%); }
-.ph.ski   { background: linear-gradient(165deg, #cfe6f5 0%, #9fc4e0 40%, #f2f6fa 41%, #d8e6f0 100%); }
-.ph.city  { background: linear-gradient(180deg, #241b45 0%, #4a3a78 60%, #b0526b 100%); }
-@media (min-width: 480px) { .polaroid { width: 92px; margin: 0 -9px; } .polaroid .ph { font-size: 34px; } .polaroid .cap { font-size: 10px; } }
+/* ---- Landing mural: one continuous skyline of trip types ------------------- */
+/* city → sailboat → beach → wedding arch → golf green → ski peaks             */
+.hero-mural { padding-bottom: 112px; }
+@media (min-width: 560px) { .hero-mural { padding-bottom: 178px; } }
+.hero-mural::after { display: none; } /* mural replaces the dunes */
+.hero-mural .mural { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: auto; display: block; pointer-events: none; }
 
 /* ---- Wedding theme: champagne & blush over deep plum ----------------------- */
 /* Applied to <body> the moment a wedding is opened (or picked in the wizard). */
