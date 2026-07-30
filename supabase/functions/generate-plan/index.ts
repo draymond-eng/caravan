@@ -56,7 +56,8 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: trip } = await supabase.from("trips").select("*").eq("code", code.toUpperCase()).maybeSingle();
     if (!trip) return json({ error: "Trip not found" }, 404);
-    if ((trip.gen_count ?? 0) >= 6) return json({ error: "This trip has used all its AI generations." }, 429);
+    if ((mode === "plan" || mode === "intel") && (trip.gen_count ?? 0) >= 6)
+      return json({ error: "This trip has used all its AI generations." }, 429);
 
     const stopsTxt = (trip.stops || []).map((s: { id: string; label: string }) => `${s.label} (id: ${s.id})`).join(", ") || trip.destination || "the destination";
     const travelers = (trip.travelers || []).length || 2;
