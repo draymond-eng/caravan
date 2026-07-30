@@ -19,6 +19,7 @@ create table if not exists public.trips (
   travelers     jsonb not null default '[]',  -- [{id,name,color}]
   stops         jsonb not null default '[]',  -- [{id,label,nights}]
   gen_count     int default 0,                -- AI generations used
+  chat_count    int default 0,                -- AI assistant messages used
   created_at    timestamptz default now()
 );
 

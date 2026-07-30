@@ -436,3 +436,10 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px; width: 100%; text-align: left; }
 .trip-chip .tc-name { font-family: var(--serif); font-weight: 600; font-size: 16px; }
 .trip-chip .tc-sub { font-size: 12px; color: var(--ink-2); }
+
+
+/* ---- Assistant chat ------------------------------------------------------- */
+.chat-msg { max-width: 88%; padding: 11px 14px; border-radius: 16px; margin-bottom: 10px;
+  font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; box-shadow: var(--shadow); }
+.chat-msg.user { margin-left: auto; background: var(--ai); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.assistant { margin-right: auto; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 5px; }

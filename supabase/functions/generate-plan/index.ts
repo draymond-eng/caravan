@@ -22,7 +22,7 @@ const CORS = {
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-async function askClaude(prompt: string): Promise<Record<string, unknown> | null> {
+async function callAnthropic(body: Record<string, unknown>): Promise<string | null> {
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -30,11 +30,15 @@ async function askClaude(prompt: string): Promise<Record<string, unknown> | null
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 8000, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model: "claude-sonnet-5", ...body }),
   });
   if (!resp.ok) { console.error("Anthropic", resp.status, await resp.text()); return null; }
   const ai = await resp.json();
-  let text: string = ai?.content?.[0]?.text ?? "";
+  return ai?.content?.[0]?.text ?? "";
+}
+async function askClaude(prompt: string): Promise<Record<string, unknown> | null> {
+  let text = await callAnthropic({ max_tokens: 8000, messages: [{ role: "user", content: prompt }] });
+  if (text == null) return null;
   text = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const a = text.indexOf("{"), b = text.lastIndexOf("}");
   if (a === -1 || b === -1) return null;
@@ -46,7 +50,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   try {
-    const { code, mode = "plan" } = await req.json();
+    const { code, mode = "plan", messages = [] } = await req.json();
     if (!code || typeof code !== "string") return json({ error: "Missing trip code" }, 400);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -138,6 +142,69 @@ Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisi
 
       await bump();
       return json({ ok: true, guides: gRows.length, decisions: dRows.length, ideas: iRows.length });
+    }
+
+    /* ---------------- mode: chat — the trip assistant ----------------------- */
+    if (mode === "chat") {
+      if ((trip.chat_count ?? 0) >= 150) return json({ error: "This trip has used all its assistant messages." }, 429);
+      const history = (Array.isArray(messages) ? messages : [])
+        .filter((m: Record<string, unknown>) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content)
+        .slice(-12)
+        .map((m: Record<string, unknown>) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
+      if (!history.length || history[history.length - 1].role !== "user") return json({ error: "No message to answer." }, 400);
+
+      // Compact trip context for grounding
+      const [{ data: days }, { data: decisions }, { data: stayOpts }, { data: ideas }] = await Promise.all([
+        supabase.from("days").select("date,stop,title,summary,items").eq("trip", trip.code).order("date"),
+        supabase.from("decisions").select("title,options,status").eq("trip", trip.code),
+        supabase.from("stay_options").select("stop,name,tag").eq("trip", trip.code),
+        supabase.from("ideas").select("title,tag").eq("trip", trip.code),
+      ]);
+      const ctx = {
+        trip: { name: trip.name, destination: trip.destination, dates: `${trip.start_date} to ${trip.end_date}`, travelers, stops: trip.stops, currency: trip.currency, home_currency: trip.home_currency },
+        itinerary: (days || []).map((d: Record<string, unknown>) => ({ date: d.date, stop: d.stop, title: d.title, summary: d.summary, items: (d.items as Array<Record<string, unknown>> || []).map((i) => `${i.time || ""} ${i.title}`.trim()) })),
+        open_votes: (decisions || []).map((d: Record<string, unknown>) => d.title),
+        stay_submissions: stayOpts || [],
+        ideas: (ideas || []).map((i: Record<string, unknown>) => i.title),
+      };
+
+      const system = `You are Caravan's trip assistant — a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers.
+
+If — and ONLY if — the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
+<<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one sentence"}]}]}<<<END>>>
+Each day in the block fully REPLACES that date. Never include the block for questions, advice, or suggestions the user hasn't asked you to apply.
+
+TRIP CONTEXT:
+${JSON.stringify(ctx)}`;
+
+      const text = await callAnthropic({ max_tokens: 3000, system, messages: history });
+      if (text == null) return json({ error: "Assistant call failed — check the ANTHROPIC_API_KEY secret." }, 502);
+
+      // Split out a DAYS block if present
+      let reply = text, daysBlock = null;
+      const m = text.match(/<<<DAYS>>>([\s\S]*?)<<<END>>>/);
+      if (m) {
+        reply = text.replace(m[0], "").trim();
+        try {
+          const parsed = JSON.parse(m[1].trim());
+          if (Array.isArray(parsed.days) && parsed.days.length) {
+            daysBlock = parsed.days.slice(0, 20).map((d: Record<string, unknown>) => ({
+              date: String(d.date ?? ""), stop: typeof d.stop === "string" ? d.stop : "",
+              title: String(d.title ?? "").slice(0, 120),
+              summary: String(d.summary ?? "").slice(0, 300),
+              meetup: String(d.meetup ?? "").slice(0, 200),
+              items: Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>).slice(0, 6).map((it) => ({
+                time: String(it.time ?? "").slice(0, 5),
+                type: ["travel", "sight", "food", "activity", "rest", "meet"].includes(String(it.type)) ? String(it.type) : "activity",
+                title: String(it.title ?? "").slice(0, 140),
+                note: String(it.note ?? "").slice(0, 300),
+              })) : [],
+            })).filter((d: Record<string, unknown>) => /^\d{4}-\d{2}-\d{2}$/.test(String(d.date)));
+          }
+        } catch { /* ignore malformed block */ }
+      }
+      await supabase.from("trips").update({ chat_count: (trip.chat_count ?? 0) + 1 }).eq("code", trip.code);
+      return json({ ok: true, reply, days: daysBlock });
     }
 
     return json({ error: "Unknown mode" }, 400);

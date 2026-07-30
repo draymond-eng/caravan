@@ -1198,6 +1198,94 @@
   }
 
   /* =========================================================================
+     ASSISTANT — trip-aware AI chat with apply-able itinerary edits
+     ====================================================================== */
+  let chatLog = null;      // [{role, content}]
+  let pendingDays = null;  // days block awaiting Apply
+  function renderAssistant() {
+    const s = $("#screen-assistant");
+    if (chatLog == null) chatLog = LS.get("chat", []);
+    s.innerHTML = `
+      <div class="section-title">Assistant</div>
+      <div class="section-sub">Knows this trip — the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
+      <div id="chatFeed">
+        ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join("")
+          : `<div class="card"><h3>✨ Try asking…</h3><div class="r-sub" style="line-height:2">
+              “What's our most packed day, and how would you lighten it?”<br>
+              “Add a rainy-day backup to the plan for ${esc(fmtDate(TRIP.start_date).mon)} ${fmtDate(TRIP.start_date).day + 2}”<br>
+              “Where should we eat near our first stop the night we land?”<br>
+              “Rework day 3 to be more chill”</div></div>`}
+      </div>
+      ${pendingDays ? `<div class="card" style="border-color:var(--matcha)">
+        <h3>🪄 Proposed itinerary change</h3>
+        <div class="r-sub" style="margin:6px 0 10px">${pendingDays.map((d) => `<b>${esc(d.date)}</b> — ${esc(d.title)}`).join("<br>")}</div>
+        <div class="btn-row">
+          <button class="btn primary" id="chatApply" style="flex:2">Apply to the plan</button>
+          <button class="btn ghost" id="chatDismiss" style="flex:1">Dismiss</button>
+        </div>
+      </div>` : ""}
+      <div class="card" style="position:sticky;bottom:calc(var(--nav-h) + 10px)">
+        <div style="display:flex;gap:8px">
+          <input id="chatInput" placeholder="Ask about the trip…" style="flex:1;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink)" />
+          <button class="btn primary" id="chatSend">Send</button>
+        </div>
+        <div id="chatStatus" class="r-sub" style="margin-top:6px"></div>
+      </div>`;
+    const send = () => sendChat();
+    $("#chatSend").addEventListener("click", send);
+    $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    const ap = $("#chatApply"); if (ap) ap.addEventListener("click", applyChatDays);
+    const dm = $("#chatDismiss"); if (dm) dm.addEventListener("click", () => { pendingDays = null; renderAssistant(); });
+    const feed = $("#chatFeed"); if (feed && chatLog.length) window.scrollTo(0, document.body.scrollHeight);
+  }
+  async function sendChat() {
+    const inp = $("#chatInput"), st = $("#chatStatus");
+    const text = inp.value.trim(); if (!text) return;
+    chatLog.push({ role: "user", content: text });
+    LS.set("chat", chatLog.slice(-30));
+    inp.value = "";
+    renderAssistant();
+    $("#chatStatus").textContent = "✨ Thinking…";
+    try {
+      const cfg = window.CARAVAN_CONFIG;
+      const res = await fetch(`${cfg.url}/functions/v1/generate-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
+        body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: chatLog.slice(-12) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) { chatLog.push({ role: "assistant", content: "⚠️ " + (data.error || "Something went wrong — try again.") }); }
+      else {
+        chatLog.push({ role: "assistant", content: data.reply || "…" });
+        pendingDays = Array.isArray(data.days) && data.days.length ? data.days : null;
+      }
+      LS.set("chat", chatLog.slice(-30));
+      renderAssistant();
+    } catch (e) {
+      chatLog.push({ role: "assistant", content: "⚠️ Couldn't reach the assistant — check the edge function." });
+      renderAssistant();
+    }
+  }
+  async function applyChatDays() {
+    const st = $("#chatStatus");
+    const days = pendingDays; pendingDays = null;
+    renderAssistant();
+    for (const d of days) {
+      const existing = state.days.find((x) => x.date === d.date);
+      if (existing) {
+        Object.assign(existing, { stop: d.stop, title: d.title, summary: d.summary, meetup: d.meetup, items: d.items });
+        await Backend.update("days", existing.id, { stop: d.stop, title: d.title, summary: d.summary, meetup: d.meetup, items: d.items });
+      } else {
+        const row = await Backend.insert("days", { trip: TRIP_CODE, date: d.date, stop: d.stop, title: d.title, summary: d.summary, meetup: d.meetup, items: d.items });
+        if (row) { state.days.push(row); state.days.sort((a, b) => a.date.localeCompare(b.date)); }
+      }
+    }
+    chatLog.push({ role: "assistant", content: `✓ Applied — ${days.length} day${days.length === 1 ? "" : "s"} updated in the plan.` });
+    LS.set("chat", chatLog.slice(-30));
+    renderAssistant();
+  }
+
+  /* =========================================================================
      SETTINGS — edit the trip after creation
      ====================================================================== */
   function renderSettings() {
@@ -1369,7 +1457,7 @@
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
-    settings: renderSettings,
+    settings: renderSettings, assistant: renderAssistant,
   };
   function renderCurrent() {
     if (!TRIP) return;
