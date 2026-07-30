@@ -181,6 +181,13 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   display: inline-flex; align-items: center; gap: 9px; }
 /* (no decorative leading rule: it read as an em dash) */
 .hero .cities-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+/* Trip Home runs a shorter hero so the first thing asking for you sits on screen. */
+.hero.compact { padding: 22px 20px 42px; margin-bottom: 14px; }
+.hero.compact::after { height: 34px; }
+.hero.compact .sun { top: 14px; right: 18px; width: 46px; height: 46px; }
+.hero.compact h1 { margin: 8px 0 6px; }
+.hero.compact .cities-row { margin-top: 13px; }
+.hero.compact .city-chip { padding: 6px 12px; font-size: 12px; }
 .hero .city-chip { background: rgba(255,255,255,.09); border: 1px solid rgba(246,241,232,.20);
   border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; letter-spacing: .2px; }
 
@@ -606,3 +613,21 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 }
 .suggest > div:first-child { border-top: none; }
 .suggest > div:active { background: var(--paper-2); }
+
+/* ---- Action cards: one thing to do, stated plainly ------------------------ */
+.act { border-radius: var(--r-lg); padding: 18px; margin-bottom: 14px; border: 1px solid; }
+.act .act-pill { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 1.1px;
+  text-transform: uppercase; padding: 4px 10px; border-radius: 999px; }
+.act h3 { font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 11px 0 0; letter-spacing: .2px; }
+.act p { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); margin: 6px 0 15px; }
+.act .act-btn { width: 100%; background: var(--ai); color: #fff; font-size: 14.5px; padding: 15px;
+  box-shadow: 0 8px 18px -10px rgba(36,27,69,.6); }
+.act.rose  { background: linear-gradient(180deg,#fdf4f6,#fffdf8); border-color: #f0d3da; }
+.act.rose  .act-pill { background: #f7dde3; color: #a83a5e; }
+.act.amber { background: linear-gradient(180deg,#fdf7ec,#fffdf8); border-color: #ecdcb8; }
+.act.amber .act-pill { background: #f6e6c4; color: #8a6a1a; }
+.act.green { background: linear-gradient(180deg,#f3f9f4,#fffdf8); border-color: #d5e7da; }
+.act.green .act-pill { background: #dcebe0; color: #3c6b4a; }
+.act.calm  { background: linear-gradient(180deg,#f6f4fb,#fffdf8); border-color: #ded9ec; }
+.act.calm  .act-pill { background: #e4dff2; color: #524183; }
+.act.calm  .act-btn { background: transparent; color: var(--ai); border: 1px solid #ded9ec; box-shadow: none; }

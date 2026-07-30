@@ -994,27 +994,79 @@
   /* =========================================================================
      HOME
      ====================================================================== */
+  /* The things asking for you, stated plainly, one action each. */
+  function actCard(tone, label, title, body, cta, go) {
+    return `<div class="act ${tone}">
+      <span class="act-pill">${label}</span>
+      <h3>${title}</h3>
+      <p>${body}</p>
+      <button class="btn act-btn" data-go="${go}">${cta}</button>
+    </div>`;
+  }
+  function needsYou() {
+    const cards = [];
+    // votes you have not weighed in on
+    const open = state.decisions.filter((d) => d.status !== "decided");
+    const mine = open.filter((d) => !myVote("decision", d.id));
+    if (mine.length) {
+      cards.push(actCard("rose", "Open decisions", `${mine.length} ${mine.length === 1 ? "question needs" : "questions need"} your vote`,
+        mine.slice(0, 3).map((d) => esc(d.title)).join(" · ") + (mine.length > 3 ? " and more" : ""),
+        "🗳️ Cast your votes", "decisions"));
+    }
+    // things due on the booking timeline
+    if (TRIP.start_date) {
+      const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
+      if (due.length) {
+        cards.push(actCard("amber", "Worth doing now", `${due.length} thing${due.length === 1 ? "" : "s"} to book`,
+          due.slice(0, 4).map((i) => esc(i.label)).join(" · "),
+          "📋 Open the booking timeline", "booking"));
+      }
+    }
+    // stops still waiting on a decision about where to sleep
+    if (!isWedding()) {
+      const unsettled = (TRIP.stops || []).filter((st) => {
+        const opts = state.stayOptions.filter((o) => o.stop === st.id && o.kind !== "block");
+        return opts.length && !opts.some((o) => o.booked) && !myVote("stay", st.id);
+      });
+      if (unsettled.length) {
+        cards.push(actCard("green", "Where we sleep", `Pick your favorite in ${unsettled.map((x) => esc(x.label)).join(" and ")}`,
+          "Places are in. The group is waiting on votes before anyone books.",
+          "🏨 Go to Stays", "stays"));
+      }
+    }
+    // nothing outstanding is worth saying out loud too
+    if (!cards.length) {
+      return `<div class="act calm">
+        <span class="act-pill">All caught up</span>
+        <h3>Nothing needs you right now</h3>
+        <p>Every vote is in and nothing is due. Have a look around, or add something for the group.</p>
+        <button class="btn act-btn" data-go="assistant">✨ Ask the assistant</button>
+      </div>`;
+    }
+    return cards.join("");
+  }
+
   function renderHome() {
     const s = $("#screen-home");
     const openCount = state.decisions.filter((d) => d.status !== "decided").length;
     s.innerHTML = `
-      <div class="hero">
+      <div class="hero compact">
         <div class="sun"></div>
         <div class="kicker">${isWedding() ? "💍 You're invited · " + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
-        <h1 style="font-size:34px">${esc(TRIP.name)}</h1>
+        <h1 style="font-size:32px">${esc(TRIP.name)}</h1>
         <div class="dates">${fmtRange(TRIP.start_date, TRIP.end_date)} · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights</div>
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
       </div>
 
       ${tzWarningCard()}
-      ${bookNowCard()}
-      ${latestAnnouncementCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
+      ${todayCard()}
+      ${latestAnnouncementCard()}
+      ${needsYou()}
 
       <div class="countdown" id="countdown"></div>
       <div class="clocks" id="clocks"></div>
 
-      ${todayCard()}
       ${isWedding() ? weddingLinksCard() : ""}
 
       <div class="section-title" style="margin-top:20px">${isWedding() ? "Who's coming" : "The crew"}</div>
@@ -2071,18 +2123,6 @@
         </div>`;
       }).join("")}`;
     s.querySelectorAll("[data-book]").forEach((b) => b.addEventListener("click", () => setVote("booking", b.dataset.book, "done")));
-  }
-  function bookNowCard() {
-    if (!TRIP.start_date) return "";
-    const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
-    if (!due.length) return "";
-    return `<div class="card" style="margin-top:14px;border-color:var(--amber)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span class="pill" style="background:var(--sakura);color:var(--vermilion-2)">⏳ Worth doing now</span>
-      </div>
-      <div style="font-size:13.5px;line-height:1.6">${due.slice(0, 3).map((i) => `<b>${esc(i.label)}</b> <span class="r-sub">${esc(i.due)}</span>`).join("<br>")}</div>
-      <div class="r-sub" style="margin-top:8px;font-size:11.5px"><span style="color:var(--ai-2);font-weight:800;cursor:pointer" data-go="booking">See the timeline ›</span></div>
-    </div>`;
   }
 
   /* =========================================================================
