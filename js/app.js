@@ -275,6 +275,15 @@
       ${ctaLabel ? `<button class="btn ghost" data-go="${ctaGo}" style="width:100%">${ctaLabel}</button>` : ""}
     </div>`;
   }
+  function knownPlaces() {
+    const L = TRIP.links || {};
+    const set = new Set();
+    if (L.venue_name) set.add(L.venue_name);
+    state.stayOptions.forEach((o) => { if (o.name) set.add(o.name); });
+    state.days.forEach((d) => (d.items || []).forEach((i) => { if (i.where) set.add(i.where); }));
+    return [...set];
+  }
+  const placeListHTML = () => `<datalist id="placelist">${knownPlaces().map((p) => `<option value="${esc(p)}">`).join("")}</datalist>`;
   const cityListHTML = () => `<datalist id="citylist">${(window.CITIES || []).map((x) => `<option value="${esc(x.c)}">`).join("")}</datalist>`;
   const tzForCity = (city) => (window.tzForCity ? window.tzForCity(city) : "");
   const nowIn = (tz) => {
@@ -956,6 +965,7 @@
         <button class="btn primary" id="aiBuild" style="width:100%">✨ Set it up</button>
         <div id="aiStatus" class="r-sub" style="margin-top:8px"></div>
       </div>` : ""}
+      ${placeListHTML()}
       <div id="dayList"></div>
       ${isHost() ? `<div class="card">
         <h3>＋ Add a day</h3>
@@ -1016,11 +1026,13 @@
         return `<div class="tl-item ${it.type || "activity"}">
           ${it.time ? `<div class="tl-time">${esc(it.time)}</div>` : ""}
           <div class="tl-title"><span class="type-emoji">${tm.emoji}</span>${esc(it.title)}</div>
+          ${it.where ? `<div class="tl-where">📍 ${esc(it.where)}</div>` : ""}
+          ${it.dress ? `<div class="tl-dress">👔 ${esc(it.dress)}</div>` : ""}
           ${it.note ? `<div class="tl-note">${esc(it.note)}</div>` : ""}
           <div class="rsvp">
             <button class="rsvp-btn ${meIn ? "on" : ""}" data-rsvp="${iid}">${meIn ? "✓ You're in" : "＋ I'm in"}</button>
             ${going.length ? `<span class="tally" style="margin:0">${voterChips(going)}</span>` : ""}
-            <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.title + " " + (TRIP.destination || ""))}" target="_blank" rel="noopener">📍</a>
+            <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((it.where || it.title) + " " + (TRIP.destination || ""))}" target="_blank" rel="noopener">📍 Map</a>
             ${isHost() ? `<span class="tl-map" style="color:var(--vermilion)" data-rmitem="${d.id}#${ii}">✕</span>` : ""}
           </div>
         </div>`;
@@ -1041,6 +1053,8 @@
               <select data-itype="${d.id}" style="flex:1.2">${Object.entries(TYPE).map(([k, v]) => `<option value="${k}">${v.emoji} ${v.label}</option>`).join("")}</select>
             </div>
             <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : "Add an activity…"}" />
+            <input data-iwhere="${d.id}" list="placelist" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : "Where? (optional)"}" />
+            ${isWedding() ? `<input data-idress="${d.id}" placeholder="Dress code for this event (optional)" />` : ""}
             <div class="btn-row">
               <button class="btn primary" data-iadd="${d.id}" style="flex:2">＋ Add</button>
               <button class="btn danger" data-rmday="${d.id}" style="flex:1">Delete day</button>
@@ -1073,7 +1087,12 @@
   async function addItem(dayId) {
     const d = state.days.find((x) => x.id === dayId); if (!d) return;
     const title = $(`[data-ititle="${dayId}"]`).value.trim(); if (!title) return;
-    const item = { time: $(`[data-itime="${dayId}"]`).value, type: $(`[data-itype="${dayId}"]`).value, title, note: "" };
+    const whereEl = $(`[data-iwhere="${dayId}"]`), dressEl = $(`[data-idress="${dayId}"]`);
+    const item = {
+      time: $(`[data-itime="${dayId}"]`).value, type: $(`[data-itype="${dayId}"]`).value, title, note: "",
+      where: whereEl ? whereEl.value.trim() : "",
+      dress: dressEl ? dressEl.value.trim() : "",
+    };
     d.items = [...(d.items || []), item];
     renderDayList();
     await Backend.update("days", dayId, { items: d.items });

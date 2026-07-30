@@ -101,7 +101,7 @@ Group: ${travelers} travelers
 Stops in order (allocate dates sensibly; travel between stops on changeover days): ${stopsTxt}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence (booking tips, timing tricks)"}]}]}
+{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"neighborhood or landmark, if useful","note":"one practical sentence (booking tips, timing tricks)"}]}]}
 Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.`);
       if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan - try again." }, 502);
 
@@ -117,6 +117,8 @@ Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + dep
             time: String(it.time ?? "").slice(0, 5),
             type: ["travel", "sight", "food", "activity", "rest", "meet"].includes(String(it.type)) ? String(it.type) : "activity",
             title: String(it.title ?? "").slice(0, 140),
+            where: String(it.where ?? "").slice(0, 120),
+            dress: String(it.dress ?? "").slice(0, 80),
             note: String(it.note ?? "").slice(0, 300),
           })) : [],
         }));
@@ -222,7 +224,7 @@ Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of e
       ]);
       const ctx = {
         trip: { name: trip.name, destination: trip.destination, dates: `${trip.start_date} to ${trip.end_date}`, travelers, stops: trip.stops, currency: trip.currency, home_currency: trip.home_currency, mode: trip.mode || "trip", wedding_info: trip.mode === "wedding" ? (trip.links || {}) : undefined },
-        itinerary: (days || []).map((d: Record<string, unknown>) => ({ date: d.date, stop: d.stop, title: d.title, summary: d.summary, items: (d.items as Array<Record<string, unknown>> || []).map((i) => `${i.time || ""} ${i.title}`.trim()) })),
+        itinerary: (days || []).map((d: Record<string, unknown>) => ({ date: d.date, stop: d.stop, title: d.title, summary: d.summary, items: (d.items as Array<Record<string, unknown>> || []).map((i) => `${i.time || ""} ${i.title}${i.where ? " @ " + i.where : ""}${i.dress ? " (" + i.dress + ")" : ""}`.trim()) })),
         open_votes: (decisions || []).map((d: Record<string, unknown>) => d.title),
         stay_submissions: stayOpts || [],
         ideas: (ideas || []).map((i: Record<string, unknown>) => i.title),
@@ -231,7 +233,7 @@ Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of e
       const system = `You are SquadTrip's trip assistant - a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers. Never use an em dash ("\u2014"); use commas or periods instead.
 
 If - and ONLY if - the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
-<<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one sentence"}]}]}<<<END>>>
+<<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"location or empty","dress":"dress code or empty","note":"one sentence"}]}]}<<<END>>>
 Each day in the block fully REPLACES that date. Never include the block for questions, advice, or suggestions the user hasn't asked you to apply.
 
 TRIP CONTEXT:
@@ -257,6 +259,8 @@ ${JSON.stringify(ctx)}`;
                 time: String(it.time ?? "").slice(0, 5),
                 type: ["travel", "sight", "food", "activity", "rest", "meet"].includes(String(it.type)) ? String(it.type) : "activity",
                 title: String(it.title ?? "").slice(0, 140),
+                where: String(it.where ?? "").slice(0, 120),
+                dress: String(it.dress ?? "").slice(0, 80),
                 note: String(it.note ?? "").slice(0, 300),
               })) : [],
             })).filter((d: Record<string, unknown>) => /^\d{4}-\d{2}-\d{2}$/.test(String(d.date)));
