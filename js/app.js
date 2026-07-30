@@ -931,6 +931,22 @@
     { id: "outdoors",  emoji: "🏔️", label: "Outdoors" },
   ];
   const tripType = () => (TRIP && TRIP.trip_type) || "general";
+  /* The banner paints a scene that matches the trip. Trip type decides it when
+     it can, otherwise the destination gives it away. Falls back to the dunes. */
+  const SCENE_WORDS = [
+    [/\b(ski|snow|alps|alpine|aspen|vail|whistler|zermatt|chamonix|tahoe|banff|niseko|jackson hole|telluride|st moritz)\b/i, "ski"],
+    [/\b(beach|island|isla|keys|coast|cabo|tulum|maui|hawaii|bahamas|caribbean|cancun|maldives|phuket|bali|aruba|jamaica|turks|riviera|amalfi|algarve|ibiza|mykonos|santorini|barbados|st lucia|punta cana)\b/i, "beach"],
+    [/\b(golf|links|pebble beach|streamsong|bandon|pinehurst|kiawah|sawgrass|scottsdale)\b/i, "golf"],
+    [/\b(mountain|mountains|hike|hiking|trail|canyon|national park|forest|yosemite|zion|glacier|patagonia|dolomites|rockies|yellowstone|moab|torres)\b/i, "outdoors"],
+    [/\b(tokyo|kyoto|osaka|new york|nyc|manhattan|london|paris|chicago|hong kong|singapore|dubai|seoul|berlin|madrid|rome|lisbon|porto|barcelona|amsterdam|toronto|sydney|shanghai|bangkok|istanbul|vienna|prague|copenhagen)\b/i, "city"],
+  ];
+  function heroScene() {
+    const t = tripType();
+    if (["golf", "ski", "beach", "city", "outdoors"].includes(t)) return t;
+    const hay = `${(TRIP && TRIP.destination) || ""} ${(TRIP && TRIP.name) || ""} ${((TRIP && TRIP.stops) || []).map((s) => s.label).join(" ")}`;
+    for (const [re, s] of SCENE_WORDS) if (re.test(hay)) return s;
+    return "desert";
+  }
   const typeMeta = (id) => TRIP_TYPES.find((t) => t.id === (id || tripType())) || TRIP_TYPES[0];
   /* Sensible groupings per kind of trip. Every trip can make its own too. */
   const GROUP_PRESETS = {
@@ -1065,7 +1081,7 @@
     const s = $("#screen-home");
     const openCount = state.decisions.filter((d) => d.status !== "decided").length;
     s.innerHTML = `
-      <div class="hero compact">
+      <div class="hero compact" data-scene="${heroScene()}">
         <div class="sun"></div>
         <div class="kicker">${isWedding() ? "💍 You're invited · " + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
         <h1 style="font-size:32px">${esc(TRIP.name)}</h1>
