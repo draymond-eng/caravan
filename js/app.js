@@ -278,6 +278,7 @@
     renderWhoami();
     if (!LSG.get("onboarded", false)) setTimeout(openWelcome, 500);
     else if (!state.me) setTimeout(openWho, 700);
+    else setTimeout(maybeOfferInstall, 1200); // already tagged: nudge once, then snooze
     loadRate();
     registerSW();
   }
@@ -387,7 +388,71 @@
     LSG.set("onboarded", true);
     $("#welcomeModal").classList.remove("open");
     if (!state.me) openWho();
+    else maybeOfferInstall();
   }
+
+  /* ---- Add to home screen --------------------------------------------------
+     SquadTrip is a real app once it's on the home screen: full screen, offline,
+     its own icon, and (crucially) able to receive push alerts on iOS. We ask
+     right after someone says who they are, then back off for a week if dismissed.
+     -------------------------------------------------------------------------- */
+  let deferredInstall = null;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; });
+  const isStandalone = () =>
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  function maybeOfferInstall(force) {
+    if (!TRIP) return;
+    if (!force) {
+      if (isStandalone()) return;                       // already installed
+      if (!state.me) return;                            // wait until they're tagged
+      const snooze = LSG.get("installSnooze", 0);
+      if (snooze && Date.now() < snooze) return;        // dismissed recently
+      if (LSG.get("installDone", false)) return;
+    }
+    if (isStandalone()) {
+      $("#installBody").innerHTML = `
+        <div style="text-align:center;font-size:46px;margin:4px 0 8px">✅</div>
+        <h3 style="text-align:center;margin:0 0 8px">You're all set</h3>
+        <p class="section-sub" style="text-align:center;margin:0 0 16px">SquadTrip is installed on this phone. Trip updates land here.</p>
+        <button class="btn primary" id="instClose" style="width:100%">Nice</button>`;
+      $("#installModal").classList.add("open");
+      $("#instClose").addEventListener("click", closeInstall);
+      return;
+    }
+    const ua = navigator.userAgent;
+    const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const steps = iOS
+      ? `<div class="inst-step"><span class="n">1</span><div>Tap the <b>Share</b> button <span class="inst-icon">􀈂</span> at the bottom of Safari</div></div>
+         <div class="inst-step"><span class="n">2</span><div>Scroll down and tap <b>Add to Home Screen</b></div></div>
+         <div class="inst-step"><span class="n">3</span><div>Tap <b>Add</b>. Done, it's on your phone</div></div>`
+      : deferredInstall
+        ? `<div class="inst-step"><span class="n">1</span><div>Tap <b>Install</b> below and confirm</div></div>
+           <div class="inst-step"><span class="n">2</span><div>SquadTrip lands on your home screen like any app</div></div>`
+        : `<div class="inst-step"><span class="n">1</span><div>Open your browser menu <b>⋮</b></div></div>
+           <div class="inst-step"><span class="n">2</span><div>Tap <b>Install app</b> or <b>Add to Home screen</b></div></div>`;
+    $("#installBody").innerHTML = `
+      <div style="text-align:center;margin:2px 0 10px"><svg viewBox="0 0 100 74" width="64" height="47" aria-hidden="true"><g fill="#f3d3c4"><path d="M8 32 C8 20 16 15 23 15 C30 15 38 20 38 32 C38 44 23 60 23 60 C23 60 8 44 8 32 Z"/></g><circle cx="23" cy="31" r="6" fill="#241b45"/><g fill="#f09c4a"><path d="M34 22 C34 8 44 2 52 2 C60 2 70 8 70 22 C70 36 52 55 52 55 C52 55 34 36 34 22 Z"/></g><circle cx="52" cy="21" r="7" fill="#241b45"/><g fill="#e2593a"><path d="M66 32 C66 20 74 15 81 15 C88 15 96 20 96 32 C96 44 81 60 81 60 C81 60 66 44 66 32 Z"/></g><circle cx="81" cy="31" r="6" fill="#241b45"/></svg></div>
+      <h3 style="text-align:center;margin:0 0 6px">Put ${esc(TRIP.name)} on your home screen</h3>
+      <p class="section-sub" style="text-align:center;margin:0 0 16px;font-size:13.5px">One tap to open, works without signal, and you'll get alerts when plans change.</p>
+      <div class="inst-steps">${steps}</div>
+      <div class="btn-row" style="margin-top:18px">
+        <button class="btn ghost" id="instLater" style="flex:1">Later</button>
+        ${deferredInstall ? `<button class="btn primary" id="instGo" style="flex:2">Install</button>`
+                          : `<button class="btn primary" id="instGot" style="flex:2">Got it</button>`}
+      </div>`;
+    $("#installModal").classList.add("open");
+    $("#instLater").addEventListener("click", () => { LSG.set("installSnooze", Date.now() + 7 * 864e5); closeInstall(); });
+    const got = $("#instGot"); if (got) got.addEventListener("click", () => { LSG.set("installSnooze", Date.now() + 2 * 864e5); closeInstall(); });
+    const go = $("#instGo"); if (go) go.addEventListener("click", async () => {
+      if (!deferredInstall) return closeInstall();
+      deferredInstall.prompt();
+      const res = await deferredInstall.userChoice.catch(() => ({}));
+      if (res && res.outcome === "accepted") LSG.set("installDone", true);
+      deferredInstall = null;
+      closeInstall();
+    });
+  }
+  function closeInstall() { $("#installModal").classList.remove("open"); }
 
   /* ---- who am I ------------------------------------------------------------ */
   function renderWhoami() {
@@ -400,9 +465,11 @@
       ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
       + (isWedding() ? `<div class="who-opt" id="whoAddMe" style="justify-content:center;font-weight:800;color:var(--ai-2)">＋ I'm not on the list. Add me</div>` : "");
     $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
+      const first = !state.me;
       state.me = o.dataset.me; LS.set("me", state.me); renderWhoami();
       $$("#whoOptions .who-opt").forEach((x) => x.classList.toggle("sel", x === o));
       renderCurrent();
+      if (first) setTimeout(() => { $("#whoModal").classList.remove("open"); maybeOfferInstall(); }, 450);
     }));
     const am = $("#whoAddMe"); if (am) am.addEventListener("click", () => {
       $("#whoOptions").innerHTML = `
@@ -425,7 +492,9 @@
         if (!ok) { $("#whoNewMsg").textContent = "Couldn't save. Try again."; return; }
         TRIP.travelers = next;
         state.me = me.id; LS.set("me", state.me);
-        renderWhoami(); renderCurrent(); openWho();
+        renderWhoami(); renderCurrent();
+        $("#whoModal").classList.remove("open");
+        setTimeout(maybeOfferInstall, 450);
       });
     });
     $("#whoModal").classList.add("open");
@@ -1580,8 +1649,14 @@
     if (!isHost()) {
       s.innerHTML = `
         <div class="section-title">Settings</div>
+        <div class="card">
+          <h3>📱 App on your phone</h3>
+          <p class="section-sub" style="margin:2px 0 10px">Put this wedding on your home screen: opens in one tap, works without signal, and gets alerts when plans change.</p>
+          <button class="btn ghost" id="stInstall" style="width:100%">Show me how</button>
+        </div>
         <div class="card"><h3>💍 Hosts only</h3>
         <p class="section-sub" style="margin:4px 0 0">Only the hosts can change this wedding's setup. If you should be a host, ask them to add you in Settings → Hosts.</p></div>`;
+      $("#stInstall").addEventListener("click", () => maybeOfferInstall(true));
       return;
     }
     s.innerHTML = `
@@ -1675,12 +1750,19 @@
         <div id="stAiMsg" class="r-sub" style="margin-top:6px"></div>
       </div>
 
+      <div class="card">
+        <h3>📱 App on your phone</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Put SquadTrip on your home screen: opens in one tap, works without signal, and gets alerts when plans change.</p>
+        <button class="btn ghost" id="stInstall" style="width:100%">Show me how</button>
+      </div>
+
       <div class="card" style="border-color:var(--sakura-deep)">
         <h3 style="color:var(--vermilion)">Danger zone</h3>
         <p class="section-sub" style="margin:2px 0 10px">Deletes the trip and everything in it, for everyone. No undo.</p>
         <button class="btn danger" id="stDelete" style="width:100%;padding:12px">Delete this trip forever</button>
       </div>`;
 
+    const sti = $("#stInstall"); if (sti) sti.addEventListener("click", () => maybeOfferInstall(true));
     const wls = $("#wlSave"); if (wls) wls.addEventListener("click", async () => {
       const links = {
         roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(),

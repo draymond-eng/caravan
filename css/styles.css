@@ -519,6 +519,14 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   border-color: rgba(230,201,138,.5);
 }
 
+/* ---- Add-to-home-screen prompt -------------------------------------------- */
+.inst-steps { display: grid; gap: 10px; }
+.inst-step { display: flex; align-items: flex-start; gap: 11px; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r); padding: 12px 13px; font-size: 13.5px; line-height: 1.45; }
+.inst-step .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--g-sunset);
+  color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; margin-top: 1px; }
+.inst-icon { display: inline-block; color: var(--ai-2); font-weight: 700; }
+
 /* ---- AI setup card (dusk showcase) ---------------------------------------- */
 .ai-card { position: relative; overflow: hidden; border: 1px solid rgba(227,192,126,.45);
   background:
