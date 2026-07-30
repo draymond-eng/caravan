@@ -1332,6 +1332,11 @@
       <div class="section-sub">${isWedding()
         ? (isHost() ? "The event schedule your guests see. Add days and events; guests tap <b>＋ I'm in</b> to RSVP to each one." : "The schedule of events. Tap <b>＋ I'm in</b> on anything you'll join so the hosts can plan headcounts.")
         : "Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join."}</div>
+      ${state.days.length < 2 && isHost() ? `<div class="card">
+        <h3>📋 Already have a schedule?</h3>
+        <p class="section-sub" style="margin:4px 0 12px">Paste it to the assistant however you have it, tee times, a text from the group, notes from an email, and it turns it into days here.</p>
+        <button class="btn ghost" data-go="assistant" style="width:100%">Paste a schedule</button>
+      </div>` : ""}
       ${state.days.length < 2 && isHost() ? `<div class="card ai-card">
         <h3>✨ Set up my ${isWedding() ? "wedding weekend" : "trip"} with AI</h3>
         <p class="section-sub" style="margin:4px 0 12px">Claude drafts the works for ${esc(TRIP.destination || "your destination")}: a full day-by-day ${isWedding() ? "schedule" : "itinerary"}, destination guide, neighborhood breakdowns${isWedding() ? "" : " for picking where to stay"}, and starter ${isWedding() ? "ideas" : "votes & ideas"} for the group. Everything stays editable.</p>
@@ -1351,6 +1356,7 @@
         </div>
       </div>` : ""}`;
     renderDayList();
+    s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
     const da = $("#dAdd"); if (da) da.addEventListener("click", addDay);
     const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
   }
@@ -2981,15 +2987,25 @@
       <div class="section-sub">Knows this trip: the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
       <div id="chatFeed">
         ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join("")
-          : `<div class="card"><h3>✨ Ask me anything about this trip</h3><p class="section-sub" style="margin:4px 0 10px">I know your dates, stops, itinerary, votes, and who's coming. Try one of these:</p><div class="r-sub" style="line-height:2">
+          : `<div class="card ai-card">
+              <h3>📋 Paste your schedule and I'll build it</h3>
+              <p class="section-sub" style="margin:4px 0 10px">Drop it in however you have it: a text from the group, a list of tee times, notes from an email. I'll turn it into days on the Plan tab for you to approve.</p>
+              <button class="btn primary" id="chatPaste" style="width:100%">Paste a schedule</button>
+            </div>
+            <div class="card"><h3>✨ Or just ask</h3><p class="section-sub" style="margin:4px 0 10px">I know your dates, stops, itinerary, votes and who's coming.</p><div class="r-sub" style="line-height:2">
               “What's our most packed day, and how would you lighten it?”<br>
-              “Add a rainy-day backup to the plan for ${esc(fmtDate(TRIP.start_date).mon)} ${fmtDate(TRIP.start_date).day + 2}”<br>
               “Where should we eat near our first stop the night we land?”<br>
-              “Rework day 3 to be more chill”</div></div>`}
+              “Rework day 3 to be more chill”<br>
+              “Move the Saturday tee time an hour earlier”</div></div>`}
       </div>
       ${pendingDays ? `<div class="card" style="border-color:var(--matcha)">
         <h3>🪄 Proposed itinerary change</h3>
-        <div class="r-sub" style="margin:6px 0 10px">${pendingDays.map((d) => `<b>${esc(d.date)}</b> · ${esc(d.title)}`).join("<br>")}</div>
+        <div class="r-sub" style="margin:6px 0 10px;line-height:1.7">${pendingDays.map((d) => {
+          const f = fmtDate(d.date);
+          const bits = (d.items || []).map((i) => `${i.time ? i.time + " " : ""}${esc(i.title)}${i.where ? " @ " + esc(i.where) : ""}`);
+          return `<b>${f.wd} ${f.mon} ${f.day}</b> · ${esc(d.title)}${bits.length ? `<br><span style="opacity:.8">${bits.join("<br>")}</span>` : ""}`;
+        }).join("<br><br>")}</div>
+        <p class="section-sub" style="margin:0 0 10px;font-size:11.5px">Applying replaces those dates in the plan. Everything else stays put.</p>
         <div class="btn-row">
           <button class="btn primary" id="chatApply" style="flex:2">Apply to the plan</button>
           <button class="btn ghost" id="chatDismiss" style="flex:1">Dismiss</button>
@@ -2997,14 +3013,22 @@
       </div>` : ""}
       <div class="card" style="position:sticky;bottom:calc(var(--nav-h) + 10px)">
         <div style="display:flex;gap:8px">
-          <input id="chatInput" placeholder="Ask about the trip…" style="flex:1;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink)" />
+          <textarea id="chatInput" rows="1" placeholder="Ask, or paste a schedule…" style="flex:1;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:none;max-height:40vh"></textarea>
           <button class="btn primary" id="chatSend">Send</button>
         </div>
         <div id="chatStatus" class="r-sub" style="margin-top:6px"></div>
       </div>`;
     const send = () => sendChat();
     $("#chatSend").addEventListener("click", send);
-    $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    const cp = $("#chatPaste"); if (cp) cp.addEventListener("click", () => {
+      const inp = $("#chatInput");
+      inp.value = "Here is our schedule, please add it to the plan:\n\n";
+      inp.focus();
+      try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) { /* noop */ }
+    });
+    const ci = $("#chatInput");
+    ci.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.metaKey) { e.preventDefault(); send(); } });
+    ci.addEventListener("input", () => { ci.style.height = "auto"; ci.style.height = Math.min(ci.scrollHeight, window.innerHeight * 0.4) + "px"; });
     const ap = $("#chatApply"); if (ap) ap.addEventListener("click", applyChatDays);
     const dm = $("#chatDismiss"); if (dm) dm.addEventListener("click", () => { pendingDays = null; renderAssistant(); });
     const feed = $("#chatFeed"); if (feed && chatLog.length) window.scrollTo(0, document.body.scrollHeight);
