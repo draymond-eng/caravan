@@ -30,13 +30,25 @@
   const configured = () => { const c = window.CARAVAN_CONFIG || {}; return !!(c.url && c.anonKey); };
 
   /* ---- Trips ---------------------------------------------------------------- */
+  let lastError = "";
+  const errText = (e) => String((e && (e.message || e.error_description || e.hint)) || e || "").slice(0, 200);
   async function createTrip(row) {
-    try { const { data, error } = await client.from("trips").insert(row).select().single(); if (error) throw error; return data; }
-    catch (e) { console.warn("createTrip", e); return null; }
+    lastError = "";
+    try {
+      const { data, error } = await client.from("trips").insert(row).select().maybeSingle();
+      if (error) throw error;
+      if (data) return data;
+      // Insert succeeded but the row could not be read back. Fetch it directly.
+      const again = await getTrip(row.code);
+      if (again) return again;
+      lastError = "created but could not be read back";
+      return null;
+    } catch (e) { console.warn("createTrip", e); lastError = errText(e); return null; }
   }
   async function getTrip(code) {
+    lastError = "";
     try { const { data, error } = await client.from("trips").select("*").eq("code", code).maybeSingle(); if (error) throw error; return data; }
-    catch (e) { console.warn("getTrip", e); return null; }
+    catch (e) { console.warn("getTrip", e); lastError = errText(e); return null; }
   }
   async function updateTrip(code, patch) {
     try { await client.from("trips").update(patch).eq("code", code); return true; }
@@ -131,7 +143,7 @@
   }
 
   window.Backend = {
-    init, isReady: () => ready, configured,
+    init, isReady: () => ready, configured, lastError: () => lastError,
     createTrip, getTrip, updateTrip, deleteTrip,
     list, insert, update, remove, clearTable,
     castVote, upsertFlight, savePushSub, removePushSub,

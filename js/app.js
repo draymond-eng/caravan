@@ -239,10 +239,19 @@
       travelers, stops,
     };
     if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
+    // Present the new code before inserting: the row is read back immediately,
+    // and the policies only return a trip whose code the request carries.
+    try { Backend.init(row.code); } catch (e) { console.warn("init", e); }
     const created = await Backend.createTrip(row);
-    if (!created) { $("#wErr").textContent = wiz.mode === "wedding"
-      ? "Couldn't create it. Wedding mode needs the latest database migration (see README) run in Supabase."
-      : "Couldn't create the trip. Check the backend setup and try again."; return; }
+    if (!created) {
+      const why = (Backend.lastError && Backend.lastError()) || "";
+      $("#wErr").textContent = why
+        ? `Couldn't create the trip: ${why}`
+        : (wiz.mode === "wedding"
+            ? "Couldn't create it. Wedding mode needs the latest database migration run in Supabase."
+            : "Couldn't create the trip. Check the backend setup and try again.");
+      return;
+    }
     const mine = LSG.get("mytrips", []);
     mine.unshift({ code: created.code, name: created.name, dates: fmtRange(created.start_date, created.end_date) });
     LSG.set("mytrips", mine.slice(0, 8));
