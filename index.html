@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-  <title>SquadTrip · plan trips together</title>
-  <meta name="description" content="SquadTrip: plan group trips together. Shared itinerary, decisions and voting, stays, budget splitting, photos, and more. No accounts, just a link." />
+  <title>SquadTrip · destination weddings, handled</title>
+  <meta name="description" content="SquadTrip: the app for destination weddings. RSVPs, room blocks, the weekend schedule, dress codes, shuttles and guest questions, all in one link. No accounts, no downloads. Works for group trips too." />
   <meta name="theme-color" content="#241b45" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icon-512.png" />
@@ -86,16 +86,29 @@
             <path d="M0 170 L0 156 Q200 140 420 156 T780 150 L780 170 Z" fill="#1a1333" opacity="0.92"/>
           </svg>
           <div aria-hidden="true" style="margin-bottom:6px"><svg viewBox="0 0 100 74" width="58" height="43"><path d="M78 60 C60 30 92 22 98 4" fill="none" stroke="#e3c07e" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 10" opacity=".8"/><g fill="#f3d3c4"><path d="M8 32 C8 20 16 15 23 15 C30 15 38 20 38 32 C38 44 23 60 23 60 C23 60 8 44 8 32 Z"/></g><circle cx="23" cy="31" r="6" fill="#241b45"/><g fill="#f09c4a"><path d="M34 22 C34 8 44 2 52 2 C60 2 70 8 70 22 C70 36 52 55 52 55 C52 55 34 36 34 22 Z"/></g><circle cx="52" cy="21" r="7" fill="#241b45"/><g fill="#e2593a"><path d="M66 32 C66 20 74 15 81 15 C88 15 96 20 96 32 C96 44 81 60 81 60 C81 60 66 44 66 32 Z"/></g><circle cx="81" cy="31" r="6" fill="#241b45"/></svg></div>
-          <div class="kicker">Plan trips together</div>
+          <div class="kicker">Destination weddings, handled</div>
           <h1>SquadTrip</h1>
-          <div class="dates">Shared itinerary · group votes · split costs · one link, no accounts</div>
+          <div class="dates">RSVPs · room blocks · the weekend schedule · one link, no accounts</div>
         </div>
 
         <div id="landingSetup"></div>
 
+        <div class="card" id="pitchCard">
+          <h3>Everything your guests keep asking</h3>
+          <div class="pitch">
+            <div><span>💌</span><div><b>RSVPs that close</b><br>Party size, meals, dietary notes, and a list of who has not answered.</div></div>
+            <div><span>🏨</span><div><b>Room blocks</b><br>Every hotel you have held rooms at, with rates and book-by dates.</div></div>
+            <div><span>🗓️</span><div><b>The whole weekend</b><br>Every event with its own location and dress code, so nobody has to ask.</div></div>
+            <div><span>✈️</span><div><b>Arrivals and shuttles</b><br>Guest flights group themselves into windows you can plan rides around.</div></div>
+            <div><span>📣</span><div><b>Day-of updates</b><br>Post a change and it reaches every guest, not just the ones in the group chat.</div></div>
+            <div><span>✨</span><div><b>An assistant that knows your wedding</b><br>Guests ask it anything and stop asking you.</div></div>
+          </div>
+          <p class="section-sub" style="margin:14px 0 0;font-size:12px">Planning a golf weekend, ski trip or family reunion instead? Same app, pick your flavor when you create it.</p>
+        </div>
+
         <div class="card">
-          <h3>Join a trip</h3>
-          <p class="section-sub" style="margin:4px 0 12px">Got a code from your group? Punch it in.</p>
+          <h3>Got a code?</h3>
+          <p class="section-sub" style="margin:4px 0 12px">If you were invited, punch in the code from your invitation.</p>
           <div style="display:flex;gap:8px">
             <input id="joinCode" placeholder="e.g. X7KQ2P" maxlength="8" autocapitalize="characters"
                    style="flex:1;padding:13px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:17px;letter-spacing:3px;font-weight:700;text-transform:uppercase;background:#fffdfa;color:var(--ink)" />
@@ -105,14 +118,14 @@
         </div>
 
         <div class="card" id="createCard">
-          <h3>Start a new trip</h3>
-          <p class="section-sub" style="margin:4px 0 12px">Group trip or 💍 destination wedding. Name it, add your people, get a code to share. ~2 minutes.</p>
-          <button class="btn primary" id="createBtn" style="width:100%">＋ Create a trip</button>
+          <h3>Set yours up</h3>
+          <p class="section-sub" style="margin:4px 0 12px">💍 A destination wedding, or any group trip. Name it, add your people, share the code. About two minutes.</p>
+          <button class="btn primary" id="createBtn" style="width:100%">＋ Start planning</button>
         </div>
 
         <div id="myTrips"></div>
 
-        <div class="foot-note">SquadTrip · your group's trip, in everyone's pocket</div>
+        <div class="foot-note">SquadTrip · the whole weekend, in everyone's pocket</div>
       </div>
 
       <!-- Create-trip wizard (modal) -->

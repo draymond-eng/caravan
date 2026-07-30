@@ -571,3 +571,15 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .cmt-add input { flex: 1; padding: 10px 12px; border: 1px solid var(--line);
   border-radius: var(--r-sm); font-size: 13.5px; background: #fffdfa; color: var(--ink); font-family: inherit; }
 .cmt-add .btn { padding: 10px 14px; font-size: 13px; }
+
+/* ---- Landing pitch list --------------------------------------------------- */
+.pitch { display: grid; gap: 12px; margin-top: 10px; }
+.pitch > div { display: flex; gap: 11px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.pitch > div > span { font-size: 19px; line-height: 1.2; flex: none; }
+.pitch b { color: var(--ink); font-size: 13.5px; }
+@media (min-width: 560px) { .pitch { grid-template-columns: 1fr 1fr; gap: 14px 18px; } }
+
+/* RSVP: one row per seat in the party */
+.seat { display: grid; gap: 6px; padding: 8px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.10); border: 1px solid rgba(246,241,232,.18); margin-bottom: 8px; }
+.seat input, .seat select { background: rgba(255,255,255,.94) !important; }

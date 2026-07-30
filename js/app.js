@@ -107,8 +107,8 @@
       B.innerHTML = `${dots}
         <label class="wiz-label">What are we planning?</label>
         <div style="display:flex;gap:8px;margin-bottom:4px">
+          <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Wedding</button>
           <button class="who-opt ${!w ? "sel" : ""}" id="wModeTrip" style="flex:1;justify-content:center;margin:0">🌍 Group trip</button>
-          <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Destination wedding</button>
         </div>
         ${w ? "" : `<label class="wiz-label">What kind of trip?</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
@@ -890,6 +890,21 @@
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
     s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
+    const hc = $("#hostCopy"); if (hc) hc.addEventListener("click", () => {
+      navigator.clipboard?.writeText(cateringList())
+        .then(() => { $("#hostMsg2").textContent = "Copied. Paste it straight into an email."; })
+        .catch(() => { $("#hostMsg2").textContent = "Couldn't copy on this device."; });
+    });
+    const hn = $("#hostNudge"); if (hn) hn.addEventListener("click", () => {
+      const t = tally("wrsvp", "attend");
+      const responded = new Set(Object.values(t).flat());
+      const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id));
+      const L = TRIP.links || {};
+      const msg = `Quick nudge about ${TRIP.name}: we still need your RSVP${L.rsvp_deadline ? ` by ${L.rsvp_deadline}` : ""}. It takes a minute here: ${location.origin + location.pathname}?t=${TRIP.code}`;
+      navigator.clipboard?.writeText(`${waiting.map((w) => w.name).join(", ")}\n\n${msg}`)
+        .then(() => { $("#hostMsg2").textContent = `Copied a nudge for ${waiting.length}. Paste it into your group chat or an email.`; })
+        .catch(() => { $("#hostMsg2").textContent = "Couldn't copy on this device."; });
+    });
     const tzf = $("#tzFixNow"); if (tzf) tzf.addEventListener("click", async () => {
       const guess = tzForCity(TRIP.destination) || tzForCity((TRIP.stops || [])[0] && TRIP.stops[0].label);
       $("#tzFixMsg").textContent = "Saving…";
@@ -903,7 +918,12 @@
     }));
     const wds = $("#wrDetSave"); if (wds) wds.addEventListener("click", async () => {
       if (!state.me) { openWho(); return; }
-      const choice = JSON.stringify({ names: $("#wrNames").value.trim(), dietary: $("#wrDiet").value.trim() });
+      const party = $$("[data-seatname]").map((el, i) => ({
+        name: el.value.trim(),
+        meal: ($(`[data-seatmeal="${i}"]`) || {}).value || "",
+        diet: ($(`[data-seatdiet="${i}"]`) || {}).value.trim() || "",
+      })).filter((x) => x.name || x.meal || x.diet);
+      const choice = JSON.stringify({ party });
       state.allVotes = state.allVotes.filter((v) => !(v.kind === "wrsvp" && v.topic === "details" && v.voter === state.me));
       state.allVotes.push({ kind: "wrsvp", topic: "details", choice, voter: state.me });
       const ok = await Backend.castVote(TRIP_CODE, "wrsvp", "details", choice, state.me);
@@ -916,6 +936,36 @@
     tickCountdown(); renderClocks();
   }
   /* ---- Wedding mode: RSVP, links, attendance ------------------------------ */
+  /* How many seats a guest's invitation covers, and what is on the menu.
+     Both live on data we already store, so no migration is needed. */
+  const mealOptions = () => ((TRIP.links || {}).meals || []).filter(Boolean);
+  const defaultAllowance = () => Number((TRIP.links || {}).allowance ?? 2);
+  const allowanceFor = (id) => {
+    const t = byId(id);
+    const v = t && t.allow != null ? Number(t.allow) : defaultAllowance();
+    return Math.max(1, Math.min(8, v || 1));
+  };
+  function myParty() {
+    // [{name, meal, diet}] with graceful fallback to the older shape
+    const raw = myRsvpDetails();
+    if (Array.isArray(raw.party)) return raw.party;
+    if (raw.names || raw.dietary) {
+      return String(raw.names || "").split(/,|\n/).map((n) => n.trim()).filter(Boolean)
+        .map((n, i) => ({ name: n, meal: "", diet: i === 0 ? (raw.dietary || "") : "" }));
+    }
+    return [];
+  }
+  function partyOf(voterId) {
+    const rec = state.allVotes.find((v) => v.kind === "wrsvp" && v.topic === "details" && v.voter === voterId);
+    if (!rec) return [];
+    try {
+      const d = JSON.parse(rec.choice || "{}");
+      if (Array.isArray(d.party)) return d.party;
+      if (d.names) return String(d.names).split(/,|\n/).map((n) => n.trim()).filter(Boolean).map((n, i) => ({ name: n, meal: "", diet: i === 0 ? (d.dietary || "") : "" }));
+    } catch { /* ignore */ }
+    return [];
+  }
+
   function myRsvpDetails() {
     try { return JSON.parse(myVote("wrsvp", "details") || "{}") || {}; } catch { return {}; }
   }
@@ -933,16 +983,32 @@
         <button class="btn ${accepted ? "primary" : "ghost"}" data-wrsvp="yes:${party}" style="flex:1;${accepted ? "" : ghost}">Joyfully accept</button>
         <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-wrsvp="no" style="flex:1;${mine === "no" ? "" : ghost}">Can't make it</button>
       </div>
-      ${accepted ? `<div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
-        <span style="font-size:13px;font-weight:700">In my party:</span>
-        ${[1, 2, 3, 4, 5].map((n) => `<button class="rsvp-btn ${party === n ? "on" : ""}" data-wparty="${n}" style="${party === n ? "" : ghost}">${n}</button>`).join("")}
-      </div>
-      <div class="expense-add" style="margin-top:12px">
-        <input id="wrNames" placeholder="Names in your party (incl. you)" value="${esc(det.names || "")}" style="background:rgba(255,255,255,.94)" />
-        <input id="wrDiet" placeholder="Meals / dietary notes (allergies, vegetarian…)" value="${esc(det.dietary || "")}" style="background:rgba(255,255,255,.94)" />
-        <button class="btn ghost" id="wrDetSave" style="${ghost}">Save details</button>
-      </div>
-      <div id="wrDetMsg" class="r-sub" style="margin-top:4px"></div>` : ""}
+      ${accepted ? (() => {
+        const cap = allowanceFor(state.me);
+        const meals = mealOptions();
+        const seats = myParty();
+        return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700">In my party:</span>
+          ${Array.from({ length: cap }, (_, i) => i + 1).map((n) => `<button class="rsvp-btn ${party === n ? "on" : ""}" data-wparty="${n}" style="${party === n ? "" : ghost}">${n}</button>`).join("")}
+        </div>
+        <div class="r-sub" style="margin-top:6px;font-size:11.5px;color:rgba(246,241,232,.8)">
+          ${cap === 1 ? "Your invitation is for one." : `Your invitation covers up to ${cap}.`}</div>
+        <div class="expense-add" style="margin-top:12px">
+          ${Array.from({ length: party }, (_, i) => {
+            const seat = seats[i] || {};
+            return `<div class="seat">
+              <input data-seatname="${i}" placeholder="${i === 0 ? "Your name" : "Guest " + (i + 1) + " name"}" value="${esc(seat.name || (i === 0 && byId(state.me) ? byId(state.me).name : ""))}" />
+              ${meals.length ? `<select data-seatmeal="${i}">
+                <option value="">Meal…</option>
+                ${meals.map((m) => `<option value="${esc(m)}" ${seat.meal === m ? "selected" : ""}>${esc(m)}</option>`).join("")}
+              </select>` : ""}
+              <input data-seatdiet="${i}" placeholder="Allergies or dietary notes (optional)" value="${esc(seat.diet || "")}" />
+            </div>`;
+          }).join("")}
+          <button class="btn ghost" id="wrDetSave" style="${ghost}">Save details</button>
+        </div>
+        <div id="wrDetMsg" class="r-sub" style="margin-top:4px"></div>`;
+      })() : ""}
     </div>`;
   }
   function weddingLinksCard() {
@@ -1017,23 +1083,60 @@
     const t = tally("wrsvp", "attend");
     const responded = new Set(Object.values(t).flat());
     const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id));
+    const declined = (t["no"] || []).length;
     const yes = [];
     Object.entries(t).forEach(([choice, voters]) => {
       if (choice.startsWith("yes")) voters.forEach((v) => yes.push({ id: v, n: parseInt(choice.split(":")[1], 10) || 1 }));
     });
-    const detailRows = yes.map(({ id, n }) => {
-      const tr = byId(id); if (!tr) return "";
-      let det = {}; try { det = JSON.parse((state.allVotes.find((v) => v.kind === "wrsvp" && v.topic === "details" && v.voter === id) || {}).choice || "{}") || {}; } catch { /* noop */ }
-      return `<div class="row">${avatarHTML(tr, 34, 11)}
-        <div class="r-main"><div class="r-title">${esc(tr.name)} · party of ${n}</div>
-          <div class="r-sub">${esc(det.names || "")}${det.names && det.dietary ? " · " : ""}${det.dietary ? "🍽 " + esc(det.dietary) : ""}${!det.names && !det.dietary ? "No details yet" : ""}</div></div>
-      </div>`;
-    }).join("");
+    const heads = yes.reduce((a, y) => a + y.n, 0);
+    const meals = {}, diets = [];
+    let named = 0;
+    yes.forEach(({ id }) => partyOf(id).forEach((seat) => {
+      if (seat.name) named++;
+      if (seat.meal) meals[seat.meal] = (meals[seat.meal] || 0) + 1;
+      if (seat.diet) diets.push(`${seat.name || "Guest"}: ${seat.diet}`);
+    }));
+    const stat = (n, label) => `<div class="count-box"><div class="num">${n}</div><div class="lbl">${label}</div></div>`;
     return `<div class="card" style="border-color:var(--gold-soft)">
       <h3>📋 Host view</h3>
-      ${waiting.length ? `<p class="section-sub" style="margin:6px 0 8px"><b>Waiting on ${waiting.length}:</b> ${waiting.map((w) => esc(w.name.split(" ")[0])).join(", ")}</p>` : `<p class="section-sub" style="margin:6px 0 8px">Everyone on the list has answered ✓</p>`}
-      ${detailRows ? `<div class="check-cat" style="margin:10px 0 2px">Accepted parties</div>${detailRows}` : ""}
+      <div class="countdown" style="margin:10px 0 6px">
+        ${stat(heads, "Attending")}${stat(declined, "Can't come")}${stat(waiting.length, "No reply")}${stat(yes.length, "Parties")}
+      </div>
+      ${waiting.length ? `<p class="section-sub" style="margin:8px 0 0"><b>Waiting on:</b> ${waiting.slice(0, 12).map((w) => esc(w.name.split(" ")[0])).join(", ")}${waiting.length > 12 ? ` and ${waiting.length - 12} more` : ""}</p>` : `<p class="section-sub" style="margin:8px 0 0">Everyone on the list has answered ✓</p>`}
+      ${Object.keys(meals).length ? `<div class="check-cat" style="margin:16px 0 6px">Meal counts</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${Object.entries(meals).map(([m, n]) => `<span class="when-chip">${esc(m)}: <b>${n}</b></span>`).join("")}
+          ${named < heads ? `<span class="when-chip" style="color:var(--vermilion);border-color:var(--sakura-deep)">${heads - named} not chosen</span>` : ""}
+        </div>` : ""}
+      ${diets.length ? `<div class="check-cat" style="margin:16px 0 6px">Dietary notes</div>
+        ${diets.map((d) => `<div class="r-sub" style="padding:2px 0">${esc(d)}</div>`).join("")}` : ""}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn ghost" id="hostCopy" style="flex:1">Copy list for the caterer</button>
+        ${waiting.length ? `<button class="btn ghost" id="hostNudge" style="flex:1">Nudge the ${waiting.length} missing</button>` : ""}
+      </div>
+      <div id="hostMsg2" class="r-sub" style="margin-top:8px"></div>
     </div>`;
+  }
+  function cateringList() {
+    const t = tally("wrsvp", "attend");
+    const lines = [`${TRIP.name} - guest list`, ""];
+    Object.entries(t).forEach(([choice, voters]) => {
+      if (!choice.startsWith("yes")) return;
+      voters.forEach((v) => {
+        const who = byId(v);
+        const seats = partyOf(v);
+        const n = parseInt(choice.split(":")[1], 10) || 1;
+        lines.push(`${who ? who.name : "Guest"} (party of ${n})`);
+        if (seats.length) seats.forEach((sx) => lines.push(`   - ${sx.name || "unnamed"}${sx.meal ? " | " + sx.meal : ""}${sx.diet ? " | " + sx.diet : ""}`));
+        else lines.push("   - details not filled in");
+      });
+    });
+    const no = (t["no"] || []).map((v) => (byId(v) || {}).name).filter(Boolean);
+    if (no.length) { lines.push("", "Not attending:", ...no.map((n) => "   " + n)); }
+    const responded = new Set(Object.values(t).flat());
+    const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id)).map((tr) => tr.name);
+    if (waiting.length) { lines.push("", "No reply yet:", ...waiting.map((n) => "   " + n)); }
+    return lines.join("\n");
   }
   function todayCard() {
     const now = new Date();
@@ -1292,6 +1395,10 @@
           ${avatarHTML(t, 52, 17)}
           <div class="p-info"><div class="p-name">${esc(t.name)}${state.me === t.id ? '<span class="badge-you">YOU</span>' : ""}${wed && (TRIP.hosts || []).includes(t.id) ? ' <span class="pill any">Host</span>' : ""}</div>
             ${wed && rsvpFor(t.id) ? `<div class="p-sub">${esc(rsvpFor(t.id))}</div>` : ""}
+            ${wed && isHost() ? `<div class="p-sub" style="margin-top:4px">Invitation covers
+              <select data-allow="${t.id}" style="padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px">
+                ${[1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${allowanceFor(t.id) === n ? "selected" : ""}>${n}</option>`).join("")}
+              </select></div>` : ""}
             ${state.me === t.id ? `<div class="p-sub"><label class="tl-map" for="crewPhoto" style="cursor:pointer">📷 ${t.photo ? "Change photo" : "Add your photo"}</label></div>` : ""}</div>
         </div>`).join("")}
       </div>
@@ -1300,6 +1407,12 @@
         <h3>📍 Invite someone</h3>
         <p class="section-sub" style="margin:4px 0 0">Share the code <b>${esc(TRIP.code)}</b> or copy the link from Home.${wed ? " Guests just type their name when they open it." : " New joiners pick their name from this list."}</p>
       </div>`;
+    s.querySelectorAll("[data-allow]").forEach((sel) => sel.addEventListener("change", async () => {
+      const t = (TRIP.travelers || []).find((x) => x.id === sel.dataset.allow);
+      if (!t) return;
+      t.allow = parseInt(sel.value, 10) || 2;
+      await Backend.updateTrip(TRIP_CODE, { travelers: TRIP.travelers });
+    }));
     bindCrewPhoto();
   }
   function bindCrewPhoto() {
@@ -2803,6 +2916,12 @@
         <label class="wiz-label">Registry link</label>${inp("wlReg", (TRIP.links || {}).registry, "https://…")}
         <label class="wiz-label">Wedding website</label>${inp("wlSite", (TRIP.links || {}).site, "https://…")}
         <label class="wiz-label">RSVP deadline (shown on the RSVP card)</label>${inp("wlRsvpBy", (TRIP.links || {}).rsvp_deadline, "e.g. March 1")}
+        <label class="wiz-label">Meal choices, comma separated (leave blank for none)</label>${inp("wlMeals", ((TRIP.links || {}).meals || []).join(", "), "Beef, Fish, Vegetarian")}
+        <label class="wiz-label">Default seats per invitation</label>
+        <select id="wlAllow" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)">
+          ${[1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${defaultAllowance() === n ? "selected" : ""}>${n} ${n === 1 ? "seat (no plus ones)" : "seats"}</option>`).join("")}
+        </select>
+        <div class="r-sub" style="margin:4px 2px 0;font-size:11.5px">Guests cannot RSVP for more than this. Override it per guest on the Crew tab.</div>
         <label class="wiz-label">What it roughly costs guests (shown on Home)</label>${inp("wlCost", (TRIP.links || {}).cost, "e.g. Flights ~$450 · rooms $180/night · plan on ~$1,200")}
         <label class="wiz-label">FAQ: one per line, format Question? = Answer</label>
         <textarea id="wlFaq" rows="5" placeholder="Are kids welcome? = We love your kids, but this one's adults-only.&#10;Is there a shuttle? = Yes, from the room-block hotel, times posted here." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;font-family:inherit;background:#fffdfa;color:var(--ink)">${esc(((TRIP.links || {}).faq || []).map((f) => `${f.q} = ${f.a}`).join("\n"))}</textarea>
@@ -2983,7 +3102,10 @@
         rsvp_deadline: $("#wlRsvpBy").value.trim(), cost: $("#wlCost").value.trim(),
         venue_name: $("#wlVenue").value.trim(), venue_address: $("#wlVenueAddr").value.trim(),
         venue_link: $("#wlVenueLink").value.trim(),
+        allowance: parseInt($("#wlAllow").value, 10) || 2,
       };
+      const mealsRaw = $("#wlMeals").value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 6);
+      if (mealsRaw.length) links.meals = mealsRaw;
       Object.keys(links).forEach((k) => { if (!links[k]) delete links[k]; });
       const faq = $("#wlFaq").value.split("\n").map((l) => {
         const i = l.indexOf("=");
