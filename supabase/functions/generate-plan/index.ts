@@ -187,7 +187,7 @@ This trip is a DESTINATION WEDDING: write guide cards for guests (getting there,
         supabase.from("ideas").select("title,tag").eq("trip", trip.code),
       ]);
       const ctx = {
-        trip: { name: trip.name, destination: trip.destination, dates: `${trip.start_date} to ${trip.end_date}`, travelers, stops: trip.stops, currency: trip.currency, home_currency: trip.home_currency },
+        trip: { name: trip.name, destination: trip.destination, dates: `${trip.start_date} to ${trip.end_date}`, travelers, stops: trip.stops, currency: trip.currency, home_currency: trip.home_currency, mode: trip.mode || "trip", wedding_info: trip.mode === "wedding" ? (trip.links || {}) : undefined },
         itinerary: (days || []).map((d: Record<string, unknown>) => ({ date: d.date, stop: d.stop, title: d.title, summary: d.summary, items: (d.items as Array<Record<string, unknown>> || []).map((i) => `${i.time || ""} ${i.title}`.trim()) })),
         open_votes: (decisions || []).map((d: Record<string, unknown>) => d.title),
         stay_submissions: stayOpts || [],

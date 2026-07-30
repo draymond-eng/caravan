@@ -459,6 +459,7 @@
         <div class="crew-strip">${(TRIP.travelers || []).map((t) => `<span class="avatar stack" style="background:${t.color}" title="${esc(t.name)}">${initials(t.name)}</span>`).join("")}</div>
         <p style="margin:12px 0 0;font-size:13px;color:var(--ink-2)">${(TRIP.travelers || []).length} travelers${openCount ? ` · <b>${openCount} open vote${openCount === 1 ? "" : "s"}</b>` : ""}</p>`}
       </div>
+      ${isWedding() ? weddingHostPanelHTML() + weddingCostCard() + weddingFaqCard() : ""}
 
       <div class="section-title">At a glance</div>
       <div class="quick-grid">
@@ -484,6 +485,14 @@
       const cur = myVote("wrsvp", "attend");
       if (cur !== "yes:" + b.dataset.wparty) setVote("wrsvp", "attend", "yes:" + b.dataset.wparty);
     }));
+    const wds = $("#wrDetSave"); if (wds) wds.addEventListener("click", async () => {
+      if (!state.me) { openWho(); return; }
+      const choice = JSON.stringify({ names: $("#wrNames").value.trim(), dietary: $("#wrDiet").value.trim() });
+      state.allVotes = state.allVotes.filter((v) => !(v.kind === "wrsvp" && v.topic === "details" && v.voter === state.me));
+      state.allVotes.push({ kind: "wrsvp", topic: "details", choice, voter: state.me });
+      const ok = await Backend.castVote(TRIP_CODE, "wrsvp", "details", choice, state.me);
+      $("#wrDetMsg").textContent = ok ? "Saved ✓ — the hosts can see this" : "Couldn't save — try again.";
+    });
     $("#copyLink").addEventListener("click", () => {
       const url = location.origin + location.pathname + "?t=" + TRIP.code;
       navigator.clipboard?.writeText(url).then(() => { $("#copyLink").textContent = "Copied ✓"; setTimeout(() => $("#copyLink").textContent = "Copy invite link", 1500); }).catch(() => {});
@@ -491,21 +500,33 @@
     tickCountdown(); renderClocks();
   }
   /* ---- Wedding mode: RSVP, links, attendance ------------------------------ */
+  function myRsvpDetails() {
+    try { return JSON.parse(myVote("wrsvp", "details") || "{}") || {}; } catch { return {}; }
+  }
   function weddingRsvpCard() {
     const mine = myVote("wrsvp", "attend");
     const accepted = typeof mine === "string" && mine.startsWith("yes");
     const party = accepted ? (parseInt(mine.split(":")[1], 10) || 1) : 1;
+    const deadline = (TRIP.links || {}).rsvp_deadline;
+    const det = myRsvpDetails();
+    const ghost = "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)";
     return `<div class="card ai-card" style="margin-top:14px">
       <h3>💌 Will you be there?</h3>
-      <p class="section-sub" style="margin:4px 0 12px">RSVP so the hosts can plan headcounts. You can change it any time.</p>
+      <p class="section-sub" style="margin:4px 0 12px">${deadline ? `Please RSVP by <b>${esc(deadline)}</b> — the hosts need headcounts.` : "RSVP so the hosts can plan headcounts."} You can change it any time.</p>
       <div class="btn-row">
-        <button class="btn ${accepted ? "primary" : "ghost"}" data-wrsvp="yes:${party}" style="flex:1;${accepted ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">Joyfully accept</button>
-        <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-wrsvp="no" style="flex:1;${mine === "no" ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">Can't make it</button>
+        <button class="btn ${accepted ? "primary" : "ghost"}" data-wrsvp="yes:${party}" style="flex:1;${accepted ? "" : ghost}">Joyfully accept</button>
+        <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-wrsvp="no" style="flex:1;${mine === "no" ? "" : ghost}">Can't make it</button>
       </div>
       ${accepted ? `<div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
         <span style="font-size:13px;font-weight:700">In my party:</span>
-        ${[1, 2, 3, 4, 5].map((n) => `<button class="rsvp-btn ${party === n ? "on" : ""}" data-wparty="${n}" style="${party === n ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">${n}</button>`).join("")}
-      </div>` : ""}
+        ${[1, 2, 3, 4, 5].map((n) => `<button class="rsvp-btn ${party === n ? "on" : ""}" data-wparty="${n}" style="${party === n ? "" : ghost}">${n}</button>`).join("")}
+      </div>
+      <div class="expense-add" style="margin-top:12px">
+        <input id="wrNames" placeholder="Names in your party (incl. you)" value="${esc(det.names || "")}" style="background:rgba(255,255,255,.94)" />
+        <input id="wrDiet" placeholder="Meals / dietary notes (allergies, vegetarian…)" value="${esc(det.dietary || "")}" style="background:rgba(255,255,255,.94)" />
+        <button class="btn ghost" id="wrDetSave" style="${ghost}">Save details</button>
+      </div>
+      <div id="wrDetMsg" class="r-sub" style="margin-top:4px"></div>` : ""}
     </div>`;
   }
   function weddingLinksCard() {
@@ -528,6 +549,43 @@
       <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
         ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet — be the first."}
       </p>`;
+  }
+  function weddingCostCard() {
+    const cost = (TRIP.links || {}).cost;
+    if (!cost) return "";
+    return `<div class="card"><h3>💵 What this weekend roughly costs</h3>
+      <p style="margin:8px 0 0;font-size:13.5px;color:var(--ink-2);line-height:1.6">${esc(cost)}</p></div>`;
+  }
+  function weddingFaqCard() {
+    const faq = (TRIP.links || {}).faq || [];
+    if (!faq.length) return "";
+    return `<div class="card"><h3>❓ Good to know</h3>
+      ${faq.map((f) => `<details style="margin-top:10px"><summary style="font-weight:700;font-size:13.5px;cursor:pointer">${esc(f.q)}</summary>
+        <p style="margin:6px 0 0;font-size:13px;color:var(--ink-2);line-height:1.55">${esc(f.a)}</p></details>`).join("")}
+    </div>`;
+  }
+  function weddingHostPanelHTML() {
+    if (!isHost()) return "";
+    const t = tally("wrsvp", "attend");
+    const responded = new Set(Object.values(t).flat());
+    const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id));
+    const yes = [];
+    Object.entries(t).forEach(([choice, voters]) => {
+      if (choice.startsWith("yes")) voters.forEach((v) => yes.push({ id: v, n: parseInt(choice.split(":")[1], 10) || 1 }));
+    });
+    const detailRows = yes.map(({ id, n }) => {
+      const tr = byId(id); if (!tr) return "";
+      let det = {}; try { det = JSON.parse((state.allVotes.find((v) => v.kind === "wrsvp" && v.topic === "details" && v.voter === id) || {}).choice || "{}") || {}; } catch { /* noop */ }
+      return `<div class="row">${avatarHTML(tr, 34, 11)}
+        <div class="r-main"><div class="r-title">${esc(tr.name)} · party of ${n}</div>
+          <div class="r-sub">${esc(det.names || "")}${det.names && det.dietary ? " · " : ""}${det.dietary ? "🍽 " + esc(det.dietary) : ""}${!det.names && !det.dietary ? "No details yet" : ""}</div></div>
+      </div>`;
+    }).join("");
+    return `<div class="card" style="border-color:var(--gold-soft)">
+      <h3>📋 Host view</h3>
+      ${waiting.length ? `<p class="section-sub" style="margin:6px 0 8px"><b>Waiting on ${waiting.length}:</b> ${waiting.map((w) => esc(w.name.split(" ")[0])).join(", ")}</p>` : `<p class="section-sub" style="margin:6px 0 8px">Everyone on the list has answered ✓</p>`}
+      ${detailRows ? `<div class="check-cat" style="margin:10px 0 2px">Accepted parties</div>${detailRows}` : ""}
+    </div>`;
   }
   function todayCard() {
     const now = new Date();
@@ -969,13 +1027,40 @@
         <div class="check-cat" style="margin:8px 0 8px">🛬 Arrival</div>${fields("fa", "arrive")}
         <div class="check-cat" style="margin:18px 0 8px">🛫 Departure</div>${fields("fd", "depart")}
       </div>`}
-      <div class="section-title" style="font-size:16px">🛬 Arrivals</div>
-      <div class="card">${arr.length ? arr.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>
-      <div class="section-title" style="font-size:16px">🛫 Departures</div>
-      <div class="card">${dep.length ? dep.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`;
+      <div class="section-title" style="font-size:16px">🛬 Arrivals${isWedding() ? " — shuttle windows" : ""}</div>
+      ${isWedding() ? shuttleBoard(arr, flightRow) : `<div class="card">${arr.length ? arr.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}
+      <div class="section-title" style="font-size:16px">🛫 Departures${isWedding() ? " — shuttle windows" : ""}</div>
+      ${isWedding() ? shuttleBoard(dep, flightRow) : `<div class="card">${dep.length ? dep.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}`;
     const w = $("#flWho"); if (w) w.addEventListener("click", openWho);
     const fa = $("#faSave"); if (fa) fa.addEventListener("click", () => saveFlight("arrive"));
     const fd = $("#fdSave"); if (fd) fd.addEventListener("click", () => saveFlight("depart"));
+  }
+  // Wedding: group flights by date, then 3-hour windows — shuttle groups assemble themselves.
+  function shuttleBoard(list, flightRow) {
+    if (!list.length) return `<div class="card"><div class="empty">None yet — everyone adds their own above.</div></div>`;
+    const byDate = {};
+    list.forEach((f) => { const d = f.date || "TBD"; (byDate[d] = byDate[d] || []).push(f); });
+    return Object.keys(byDate).sort().map((d) => {
+      const buckets = {};
+      byDate[d].forEach((f) => {
+        const h = f.time ? parseInt(f.time.slice(0, 2), 10) : NaN;
+        const key = Number.isNaN(h) ? "zz" : String(Math.floor(h / 3) * 3).padStart(2, "0");
+        (buckets[key] = buckets[key] || []).push(f);
+      });
+      const dh = d === "TBD" ? "Date TBD" : `${fmtDate(d).wd} ${fmtDate(d).mon} ${fmtDate(d).day}`;
+      return `<div class="card">
+        <h3 style="margin-bottom:2px">${dh}</h3>
+        ${Object.keys(buckets).sort().map((k) => {
+          const rows = buckets[k];
+          const label = k === "zz" ? "Time TBD" : `${k}:00–${String(+k + 3).padStart(2, "0")}:00`;
+          const airports = [...new Set(rows.map((f) => f.airport).filter(Boolean))].join("/");
+          return `<div style="margin-top:12px">
+            <div class="when-chip" style="display:inline-block">${label}${airports ? " · " + esc(airports) : ""} · ${rows.length}</div>
+            ${rows.map(flightRow).join("")}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }).join("");
   }
   async function saveFlight(dir) {
     if (!state.me) { openWho(); return; }
@@ -1509,7 +1594,11 @@
         <label class="wiz-label">Room block deadline</label>${inp("wlDeadline", (TRIP.links || {}).deadline, "e.g. March 1")}
         <label class="wiz-label">Registry link</label>${inp("wlReg", (TRIP.links || {}).registry, "https://…")}
         <label class="wiz-label">Wedding website</label>${inp("wlSite", (TRIP.links || {}).site, "https://…")}
-        <button class="btn primary" id="wlSave" style="width:100%;margin-top:14px">Save links</button>
+        <label class="wiz-label">RSVP deadline (shown on the RSVP card)</label>${inp("wlRsvpBy", (TRIP.links || {}).rsvp_deadline, "e.g. March 1")}
+        <label class="wiz-label">What it roughly costs guests (shown on Home)</label>${inp("wlCost", (TRIP.links || {}).cost, "e.g. Flights ~$450 · rooms $180/night · plan on ~$1,200")}
+        <label class="wiz-label">FAQ — one per line, format: Question? = Answer</label>
+        <textarea id="wlFaq" rows="5" placeholder="Are kids welcome? = We love your kids, but this one's adults-only.&#10;Is there a shuttle? = Yes — from the room-block hotel, times posted here." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;font-family:inherit;background:#fffdfa;color:var(--ink)">${esc(((TRIP.links || {}).faq || []).map((f) => `${f.q} = ${f.a}`).join("\n"))}</textarea>
+        <button class="btn primary" id="wlSave" style="width:100%;margin-top:14px">Save wedding info</button>
         <div id="wlMsg" class="r-sub" style="margin-top:6px"></div>
       </div>
 
@@ -1592,8 +1681,17 @@
       </div>`;
 
     const wls = $("#wlSave"); if (wls) wls.addEventListener("click", async () => {
-      const links = { roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(), registry: $("#wlReg").value.trim(), site: $("#wlSite").value.trim() };
+      const links = {
+        roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(),
+        registry: $("#wlReg").value.trim(), site: $("#wlSite").value.trim(),
+        rsvp_deadline: $("#wlRsvpBy").value.trim(), cost: $("#wlCost").value.trim(),
+      };
       Object.keys(links).forEach((k) => { if (!links[k]) delete links[k]; });
+      const faq = $("#wlFaq").value.split("\n").map((l) => {
+        const i = l.indexOf("=");
+        return i > 0 ? { q: l.slice(0, i).trim(), a: l.slice(i + 1).trim() } : null;
+      }).filter((f) => f && f.q && f.a).slice(0, 20);
+      if (faq.length) links.faq = faq;
       const ok = await Backend.updateTrip(TRIP_CODE, { links });
       $("#wlMsg").textContent = ok ? "Saved ✓" : "Couldn't save — try again.";
       if (ok) TRIP.links = links;
