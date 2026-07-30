@@ -42,7 +42,24 @@
     set(k, v) { try { localStorage.setItem("cv_" + k, JSON.stringify(v)); } catch {} },
   };
 
-  if (!TRIP_CODE) { bootLanding(); } else { bootTrip(); }
+  if (!TRIP_CODE) { bootLanding(); } else {
+    // Never leave a blank screen: if boot fails, say so and offer a clean reload.
+    bootTrip().catch((e) => {
+      console.error("boot failed", e);
+      const h = document.getElementById("screen-home");
+      if (h) h.innerHTML = `<div class="card" style="margin-top:20px"><h3>😕 Something went wrong loading this trip</h3>
+        <p class="r-sub" style="margin:6px 0 12px">${String(e && e.message ? e.message : e)}</p>
+        <button class="btn primary" id="bootRetry" style="width:100%">Reload the app</button></div>`;
+      const b = document.getElementById("bootRetry");
+      if (b) b.addEventListener("click", async () => {
+        try {
+          if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); }
+          if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map((r) => r.unregister())); }
+        } catch (err) { console.warn(err); }
+        location.reload(true);
+      });
+    });
+  }
 
   /* =========================================================================
      LANDING - create / join
@@ -83,7 +100,7 @@
     if (code.length < 4) { $("#joinErr").textContent = "That code looks too short."; return; }
     if (!HAS_BACKEND) { $("#joinErr").textContent = "Backend isn't configured yet."; return; }
     $("#joinErr").textContent = "Checking…";
-    Backend.init(code); // scope this lookup to the code they typed
+    try { Backend.init(code); } catch (e) { console.warn("init", e); } // scope the lookup to the typed code
     const trip = await Backend.getTrip(code);
     if (!trip) { $("#joinErr").textContent = "No trip found with that code. Double-check it."; return; }
     location.search = "?t=" + code;
@@ -313,7 +330,9 @@
 
   async function bootTrip() {
     $("#tripApp").style.display = "block";
-    if (!HAS_BACKEND || !Backend.init(TRIP_CODE)) {
+    let backendUp = false;
+    try { backendUp = !!Backend.init(TRIP_CODE); } catch (e) { console.warn("init", e); }
+    if (!HAS_BACKEND || !backendUp) {
       $("#screen-home").innerHTML = `<div class="card" style="margin-top:20px"><h3>⚙️ Backend not configured</h3>
         <p class="r-sub">Caravan needs its Supabase config filled in before trips can load. See the README.</p></div>`;
       return;
@@ -338,7 +357,7 @@
     LSG.set("mytrips", mine.slice(0, 8));
 
     await hydrate("all");
-    Backend.watch(async () => { await hydrate("all"); renderCurrent(); });
+    startSync();
 
     bindShell();
     renderAll();
@@ -348,6 +367,18 @@
     else setTimeout(maybeOfferInstall, 1200); // already tagged: nudge once, then snooze
     loadRate();
     registerSW();
+  }
+
+  /* Keeping in sync. Works with either backend build, so a half-updated
+     cache can never leave the app blank. */
+  function startSync() {
+    const refresh = async () => { try { await hydrate("all"); renderCurrent(); } catch (e) { console.warn("refresh", e); } };
+    try {
+      if (Backend && typeof Backend.watch === "function") { Backend.watch(refresh); return; }
+      if (Backend && typeof Backend.subscribe === "function") { Backend.subscribe(TRIP_CODE, refresh); return; }
+    } catch (e) { console.warn("sync setup", e); }
+    setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 15000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
   }
 
   async function hydrate(t) {
