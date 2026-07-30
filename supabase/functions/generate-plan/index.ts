@@ -1,5 +1,5 @@
 // =============================================================================
-// Caravan — "generate-plan" Edge Function.
+// SquadTrip — "generate-plan" Edge Function.
 // Two modes, both scoped to a trip's join code:
 //   mode "plan"  → drafts the full day-by-day itinerary into `days`
 //   mode "intel" → destination guide cards + neighborhood cards per stop
@@ -183,7 +183,7 @@ Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisi
         ideas: (ideas || []).map((i: Record<string, unknown>) => i.title),
       };
 
-      const system = `You are Caravan's trip assistant — a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers.
+      const system = `You are SquadTrip's trip assistant — a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers.
 
 If — and ONLY if — the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
 <<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one sentence"}]}]}<<<END>>>

@@ -1,6 +1,6 @@
 {
-  "name": "Caravan",
-  "short_name": "Caravan",
+  "name": "SquadTrip",
+  "short_name": "SquadTrip",
   "description": "Plan group trips together — shared itinerary, votes, stays, budget, photos. One link, no accounts.",
   "start_url": ".",
   "scope": ".",

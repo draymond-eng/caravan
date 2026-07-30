@@ -1,5 +1,5 @@
 /* =============================================================================
-   Caravan — app logic. Vanilla JS, no build step.
+   SquadTrip — app logic. Vanilla JS, no build step.
    Two modes:
      • Landing  (no ?t= code): create a trip / join by code
      • Trip app (?t=CODE): the full shared trip — everything scoped to the code
@@ -52,7 +52,7 @@
     if (!HAS_BACKEND) {
       $("#landingSetup").innerHTML = `<div class="card" style="border-color:#e2ad55;background:#fdf6ea">
         <h3>⚙️ One-time setup needed</h3>
-        <p class="r-sub" style="margin:6px 0 0">Caravan needs its Supabase backend connected before trips can be created.
+        <p class="r-sub" style="margin:6px 0 0">SquadTrip needs its Supabase backend connected before trips can be created.
         Create a free project, run <code>supabase/schema.sql</code>, and put the URL + publishable key in <code>js/config.js</code>.</p>
       </div>`;
       $("#createBtn").disabled = true;
@@ -248,7 +248,7 @@
     state.packing = LS.get("packing", {});
     $("#brandName").textContent = TRIP.name;
     $("#brandSub").textContent = fmtRange(TRIP.start_date, TRIP.end_date);
-    document.title = `${TRIP.name} · Caravan`;
+    document.title = `${TRIP.name} · SquadTrip`;
 
     // remember on this device
     const mine = LSG.get("mytrips", []).filter((t) => t.code !== TRIP.code);
@@ -328,7 +328,7 @@
 
   /* ---- welcome walkthrough (first open on this device) ---------------------- */
   const WELCOME_STEPS = [
-    { emoji: "\u{1F9ED}", title: "Welcome to Caravan", body: () => `This is <b>${esc(TRIP.name)}</b> \u2014 your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
+    { emoji: "\u{1F4CD}", title: "Welcome to SquadTrip", body: () => `This is <b>${esc(TRIP.name)}</b> \u2014 your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
     { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `You'll pick your name from the crew list in a second. Your votes, RSVPs, and expenses get tagged to you \u2014 that's the whole login.` },
     { emoji: "\u{1F5D3}\uFE0F", title: "Plan it together", body: () => `The <b>Plan</b> tab is the shared itinerary \u2014 anyone can add days and activities, and you tap <b>\uFF0B I'm in</b> on the ones you'd join. Empty plan? The <b>\u2728 AI setup</b> drafts the whole trip \u2014 itinerary, destination guide, neighborhoods \u2014 for the group to reshape.` },
     { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b> \u2014 everyone taps their pick and the tallies settle it.` },
@@ -425,7 +425,7 @@
         <button class="btn ghost" id="copyLink" style="width:100%">Copy invite link</button>
       </div>
 
-      <div class="foot-note">caravan · everything syncs live for the whole group</div>`;
+      <div class="foot-note">squadtrip · everything syncs live for the whole group</div>`;
     s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
     $("#copyLink").addEventListener("click", () => {
       const url = location.origin + location.pathname + "?t=" + TRIP.code;

@@ -1,4 +1,4 @@
-# Caravan 🧭
+# SquadTrip 📍
 
 **Plan group trips together.** Shared itinerary, group votes, stay proposals,
 budget splitting with settle-up, flight boards, a confirmations vault, photos,
@@ -14,7 +14,7 @@ GitHub Pages + Supabase. No build step — plain HTML/CSS/JS.
   name, and everything they do syncs live for the group
 - The code is the secret: anyone who has it can read/write that trip
 
-## One-time setup (own your own Caravan)
+## One-time setup (own your own SquadTrip)
 1. **Fork/clone this repo** and enable GitHub Pages (Settings → Pages →
    Deploy from a branch → `main` / root).
 2. **Create a free [Supabase](https://supabase.com) project.**
