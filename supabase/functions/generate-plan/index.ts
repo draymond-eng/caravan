@@ -22,7 +22,10 @@ const CORS = {
 const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+let LAST_AI_ERROR = "";
 async function callAnthropic(body: Record<string, unknown>): Promise<string | null> {
+  LAST_AI_ERROR = "";
+  if (!Deno.env.get("ANTHROPIC_API_KEY")) { LAST_AI_ERROR = "ANTHROPIC_API_KEY secret is not set"; return null; }
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -32,7 +35,14 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
     },
     body: JSON.stringify({ model: "claude-sonnet-5", ...body }),
   });
-  if (!resp.ok) { console.error("Anthropic", resp.status, await resp.text()); return null; }
+  if (!resp.ok) {
+    const detail = await resp.text();
+    console.error("Anthropic", resp.status, detail);
+    let msg = detail;
+    try { msg = JSON.parse(detail)?.error?.message ?? detail; } catch { /* raw */ }
+    LAST_AI_ERROR = `Anthropic ${resp.status}: ${String(msg).slice(0, 220)}`;
+    return null;
+  }
   const ai = await resp.json();
   return ai?.content?.[0]?.text ?? "";
 }
@@ -79,7 +89,7 @@ Stops in order (allocate dates sensibly; travel between stops on changeover days
 Respond with ONLY valid JSON, no markdown fences:
 {"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence (booking tips, timing tricks)"}]}]}
 Rules: 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.`);
-      if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: "AI returned an unreadable plan — try again." }, 502);
+      if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan — try again." }, 502);
 
       const rows = (plan.days as Array<Record<string, unknown>>)
         .filter((d) => typeof d.date === "string" && typeof d.title === "string")
@@ -121,7 +131,7 @@ Respond with ONLY valid JSON, no markdown fences:
  "ideas":[{"title":"a fun optional add-on","tag":"where/when","note":"one line"}]
 }
 Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic.`);
-      if (!intel) return json({ error: "AI returned unreadable intel — try again." }, 502);
+      if (!intel) return json({ error: LAST_AI_ERROR || "AI returned unreadable intel — try again." }, 502);
 
       const gRows: Array<Record<string, unknown>> = [];
       (Array.isArray(intel.guide) ? intel.guide as Array<Record<string, unknown>> : []).slice(0, 12).forEach((g) =>
@@ -179,7 +189,7 @@ TRIP CONTEXT:
 ${JSON.stringify(ctx)}`;
 
       const text = await callAnthropic({ max_tokens: 3000, system, messages: history });
-      if (text == null) return json({ error: "Assistant call failed — check the ANTHROPIC_API_KEY secret." }, 502);
+      if (text == null) return json({ error: LAST_AI_ERROR || "Assistant call failed." }, 502);
 
       // Split out a DAYS block if present
       let reply = text, daysBlock = null;

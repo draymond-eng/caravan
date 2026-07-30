@@ -19,7 +19,9 @@
 
   const initials = (name) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const avatarHTML = (t, size = 42, fs = 14) =>
-    `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${t.color}">${initials(t.name)}</span>`;
+    t.photo
+      ? `<span class="avatar" style="width:${size}px;height:${size}px;background-image:url('${t.photo}')"></span>`
+      : `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${t.color}">${initials(t.name)}</span>`;
 
   const fmtDate = (iso) => {
     const d = new Date(iso + "T12:00:00");
@@ -616,17 +618,51 @@
     const s = $("#screen-crew");
     s.innerHTML = `
       <div class="section-title">The crew</div>
-      <div class="section-sub">${(TRIP.travelers || []).length} travelers. Tap "Who are you?" up top to tag yourself.</div>
+      <div class="section-sub">${(TRIP.travelers || []).length} travelers. Tap "Who are you?" up top to tag yourself, then add a photo.</div>
       <div class="pair-card">
         ${(TRIP.travelers || []).map((t) => `<div class="person">
           ${avatarHTML(t, 52, 17)}
-          <div class="p-info"><div class="p-name">${esc(t.name)}${state.me === t.id ? '<span class="badge-you">YOU</span>' : ""}</div></div>
+          <div class="p-info"><div class="p-name">${esc(t.name)}${state.me === t.id ? '<span class="badge-you">YOU</span>' : ""}</div>
+            ${state.me === t.id ? `<div class="p-sub"><label class="tl-map" for="crewPhoto" style="cursor:pointer">📷 ${t.photo ? "Change photo" : "Add your photo"}</label></div>` : ""}</div>
         </div>`).join("")}
       </div>
+      <input id="crewPhoto" type="file" accept="image/*" style="display:none" />
+      <div id="crewPhotoStatus" class="r-sub" style="margin:0 4px 12px"></div>
       <div class="card">
         <h3>🧭 Invite someone</h3>
         <p class="section-sub" style="margin:4px 0 0">Share the code <b>${esc(TRIP.code)}</b> or copy the link from Home. New joiners pick their name from this list.</p>
       </div>`;
+    const cp = $("#crewPhoto");
+    if (cp) cp.addEventListener("change", async () => {
+      const file = cp.files[0]; if (!file || !state.me) return;
+      $("#crewPhotoStatus").textContent = "Uploading\u2026";
+      try {
+        const blob = await squarePhoto(file, 400);
+        const up = await Backend.uploadFile(TRIP_CODE, new File([blob], "avatar.jpg", { type: "image/jpeg" }));
+        if (!up) { $("#crewPhotoStatus").textContent = "Upload failed \u2014 try again."; return; }
+        const t = (TRIP.travelers || []).find((x) => x.id === state.me);
+        if (t) t.photo = up.url;
+        await Backend.updateTrip(TRIP.code, { travelers: TRIP.travelers });
+        renderCrew(); renderWhoami();
+      } catch (e) { $("#crewPhotoStatus").textContent = "Couldn't process that image."; }
+    });
+  }
+  // Center-crop an image file to a square JPEG of the given size.
+  function squarePhoto(file, size) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = c.height = size;
+        const s2 = Math.min(img.width, img.height);
+        const sx = (img.width - s2) / 2, sy = (img.height - s2) / 2;
+        c.getContext("2d").drawImage(img, sx, sy, s2, s2, 0, 0, size, size);
+        c.toBlob((b) => b ? resolve(b) : reject(new Error("blob")), "image/jpeg", 0.85);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   /* =========================================================================
