@@ -367,8 +367,48 @@
 
   /* Keeping in sync. Works with either backend build, so a half-updated
      cache can never leave the app blank. */
+  /* A background refresh must never eat what someone is typing. Snapshot the
+     fields on the active screen, re-render, then put the values, focus and
+     cursor position back exactly as they were. */
+  function fieldKey(el, i) {
+    return [el.tagName, el.id || "", el.name || "",
+            el.getAttribute("placeholder") || "",
+            el.dataset ? JSON.stringify(el.dataset) : "", i].join("|");
+  }
+  function preservingInput(render) {
+    const active = $("#tripApp .screen.active");
+    if (!active) { render(); return; }
+    const fields = Array.from(active.querySelectorAll("input, textarea, select"));
+    const focused = document.activeElement;
+    const snap = fields.map((el, i) => ({
+      key: fieldKey(el, i),
+      value: el.type === "checkbox" || el.type === "radio" ? el.checked : el.value,
+      checkable: el.type === "checkbox" || el.type === "radio",
+      focused: el === focused,
+      start: el.selectionStart, end: el.selectionEnd,
+    })).filter((f) => f.checkable ? true : (f.value !== "" || f.focused));
+    render();
+    if (!snap.length) return;
+    const after = Array.from(($("#tripApp .screen.active") || active).querySelectorAll("input, textarea, select"));
+    const byKey = new Map();
+    after.forEach((el, i) => byKey.set(fieldKey(el, i), el));
+    snap.forEach((f) => {
+      const el = byKey.get(f.key);
+      if (!el) return;
+      if (f.checkable) el.checked = f.value;
+      else if (el.value !== f.value) el.value = f.value;
+      if (f.focused) {
+        try { el.focus({ preventScroll: true }); if (f.start != null && el.setSelectionRange) el.setSelectionRange(f.start, f.end); }
+        catch (e) { /* not all inputs support selection */ }
+      }
+    });
+  }
+
   function startSync() {
-    const refresh = async () => { try { await hydrate("all"); renderCurrent(); } catch (e) { console.warn("refresh", e); } };
+    const refresh = async () => {
+      try { await hydrate("all"); preservingInput(renderCurrent); }
+      catch (e) { console.warn("refresh", e); }
+    };
     try {
       if (Backend && typeof Backend.watch === "function") { Backend.watch(refresh); return; }
       if (Backend && typeof Backend.subscribe === "function") { Backend.subscribe(TRIP_CODE, refresh); return; }
