@@ -490,9 +490,17 @@
   }
 
   function startSync() {
+    const isTyping = () => {
+      const el = document.activeElement;
+      return !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    };
     const refresh = async () => {
-      try { await hydrate("all"); preservingInput(renderCurrent); }
-      catch (e) { console.warn("refresh", e); }
+      try {
+        await hydrate("all");
+        // Fetch fresh data either way, but leave the screen alone mid-edit.
+        if (isTyping()) return;
+        preservingInput(renderCurrent);
+      } catch (e) { console.warn("refresh", e); }
     };
     try {
       if (Backend && typeof Backend.watch === "function") { Backend.watch(refresh); return; }
@@ -2147,6 +2155,7 @@
      STAYS - submit up to 2 per stop, vote
      ====================================================================== */
   const MAX_STAY = 2;
+  let stayForm = null; // {kind: "propose"|"booked"|"block", stop}
   /* A stop can be settled two ways: the group votes, or someone already
      booked it. A booked place takes over the stop and skips the vote. */
   function bookedCard(o, stopLabel) {
@@ -2168,8 +2177,9 @@
       </div>
     </div>`;
   }
-  function openBookedForm(stopId, container) {
+  function openBookedForm(stopId, container, keep) {
     if (!state.me) { openWho(); return; }
+    if (!keep) stayForm = { kind: "booked", stop: stopId, container };
     const st = stopById(stopId);
     $(container).innerHTML = `<div class="card" style="border-color:var(--matcha)">
       <h3>✓ Add the booked place in ${esc(st.label)}</h3>
@@ -2186,7 +2196,7 @@
         </div>
       </div>
     </div>`;
-    $("#bkCancel").addEventListener("click", () => { $(container).innerHTML = ""; });
+    $("#bkCancel").addEventListener("click", () => { stayForm = null; $(container).innerHTML = ""; });
     $("#bkSave").addEventListener("click", async () => {
       const name = $("#bkName").value.trim();
       if (!name) { alert("Add the name of the place."); return; }
@@ -2199,8 +2209,9 @@
       if (row) { state.stayOptions.push(row); renderStays(); }
     });
   }
-  function openBlockForm(container) {
+  function openBlockForm(container, keep) {
     if (!state.me) { openWho(); return; }
+    if (!keep) stayForm = { kind: "block", container };
     $(container).innerHTML = `<div class="card" style="border-color:var(--ai)">
       <h3>🏨 Add a room block</h3>
       <p class="section-sub" style="margin:4px 0 10px">Add each hotel you've reserved rooms at. Guests book from here.</p>
@@ -2217,7 +2228,7 @@
         </div>
       </div>
     </div>`;
-    $("#blCancel").addEventListener("click", () => { $(container).innerHTML = ""; });
+    $("#blCancel").addEventListener("click", () => { stayForm = null; $(container).innerHTML = ""; });
     $("#blSave").addEventListener("click", async () => {
       const name = $("#blName").value.trim();
       if (!name) { alert("Add the hotel name."); return; }
@@ -2227,7 +2238,7 @@
         address: $("#blAddr").value.trim(), note: $("#blNote").value.trim(),
         link: $("#blLink").value.trim(), tag: "Room block", booked: false, author: state.me,
       });
-      if (row) { state.stayOptions.push(row); renderStays(); }
+      if (row) { stayForm = null; state.stayOptions.push(row); renderStays(); }
     });
   }
   function renderStays() {
@@ -2316,6 +2327,14 @@
         state.stayOptions = state.stayOptions.filter((x) => x.id !== id); renderStays();
         await Backend.remove("stay_options", id);
       }));
+    // An open form is part of the screen's state, so bring it back.
+    if (stayForm) {
+      try {
+        if (stayForm.kind === "propose") openProposeStay(stayForm.stop, true);
+        else if (stayForm.kind === "booked") openBookedForm(stayForm.stop, stayForm.container || "#proposeForm", true);
+        else if (stayForm.kind === "block") openBlockForm(stayForm.container || "#blockForm", true);
+      } catch (e) { console.warn("reopen form", e); }
+    }
       return;
     }
     s.innerHTML = `
@@ -2393,6 +2412,14 @@
       state.stayOptions = state.stayOptions.filter((x) => x.id !== id); renderStays();
       await Backend.remove("stay_options", id);
     }));
+    // An open form is part of the screen's state, so bring it back.
+    if (stayForm) {
+      try {
+        if (stayForm.kind === "propose") openProposeStay(stayForm.stop, true);
+        else if (stayForm.kind === "booked") openBookedForm(stayForm.stop, stayForm.container || "#proposeForm", true);
+        else if (stayForm.kind === "block") openBlockForm(stayForm.container || "#blockForm", true);
+      } catch (e) { console.warn("reopen form", e); }
+    }
     const sai = $("#staysAI"); if (sai) sai.addEventListener("click", async () => {
       sai.disabled = true; sai.style.opacity = .6;
       $("#staysAIMsg").textContent = "✨ Finding places at each price point… (~20s)";
@@ -2401,8 +2428,9 @@
       else { $("#staysAIMsg").textContent = r.error || "Couldn't fetch suggestions."; sai.disabled = false; sai.style.opacity = 1; }
     });
   }
-  function openProposeStay(stopId) {
+  function openProposeStay(stopId, keep) {
     if (!state.me) { openWho(); return; }
+    if (!keep) stayForm = { kind: "propose", stop: stopId };
     const st = stopById(stopId);
     $("#proposeForm").innerHTML = `<div class="card" style="border-color:var(--ai)">
       <h3>Submit a place in ${esc(st.label)}</h3>
