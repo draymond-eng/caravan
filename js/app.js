@@ -662,8 +662,15 @@
     { emoji: "\u{1F5D3}️", title: "The weekend, in one place", body: () => `The <b>Plan</b> tab has every event: times, dress codes, locations. Tap <b>＋ I'm in</b> on the optional stuff so the hosts know who's joining.` },
     { emoji: "✈️", title: "Travel, handled", body: () => `Drop your flight into <b>Flights</b> so shuttle groups can be organized, check <b>Stays</b> for the room block, and put your pics in <b>Photos</b> all weekend. See you there!` },
   ];
+  const HOST_WELCOME = [
+    { emoji: "\u{1F48D}", title: "You're hosting", body: () => `<b>${esc(TRIP.name)}</b> is yours to run. Guests get the invitation side: schedule, RSVP, travel. You get the planning side, and they never see it.` },
+    { emoji: "\u{1F4E5}", title: "Get everyone in", body: () => `Paste your guest list in <b>Settings</b>, then share your trip code. As people accept, headcounts, meal counts and dietary notes fill themselves in on your Home screen.` },
+    { emoji: "\u23F1\uFE0F", title: "Day of is your document", body: () => `The <b>Day of</b> tab holds your run of show and every vendor number. Start from a typical wedding day and change what does not fit, then copy the whole thing to your coordinator.` },
+    { emoji: "\u{1FA91}", title: "Seating builds itself", body: () => `<b>Seating</b> turns the yeses into seats, plus-ones included, and totals the meals per table. Guests see only their own table.` },
+    { emoji: "\u{1F4CB}", title: "The timeline knows the order", body: () => `<b>Booking</b> is your planning calendar counted back from the date: venue, save the dates, vendors, invitations, final counts, seating, run of show. Have a great one.` },
+  ];
   let welcomeStep = 0;
-  const welcomeSteps = () => (isWedding() ? WEDDING_WELCOME : WELCOME_STEPS);
+  const welcomeSteps = () => (isWedding() ? (isHost() ? HOST_WELCOME : WEDDING_WELCOME) : WELCOME_STEPS);
   function openWelcome() {
     welcomeStep = 0;
     renderWelcome();
@@ -1073,7 +1080,73 @@
       <button class="btn act-btn" data-go="${go}">${cta}</button>
     </div>`;
   }
+  /* A host is not waiting to be asked anything. They are waiting on other
+     people, so their cards are about who has not answered and what is unbuilt. */
+  function hostNeedsYou() {
+    const cards = [];
+    const t = tally("wrsvp", "attend");
+    const responded = new Set(Object.values(t).flat());
+    const guests = (TRIP.travelers || []).filter((tr) => !(TRIP.hosts || []).includes(tr.id));
+    const waiting = guests.filter((tr) => !responded.has(tr.id));
+    const yes = [];
+    Object.entries(t).forEach(([choice, voters]) => {
+      if (String(choice).startsWith("yes")) voters.forEach((v) => yes.push({ id: v, n: parseInt(String(choice).split(":")[1], 10) || 1 }));
+    });
+    const heads = yes.reduce((a, y) => a + y.n, 0);
+
+    if (!guests.length) {
+      cards.push(actCard("rose", "Start here", "Nobody is invited yet",
+        "Import your guest list in Settings, then share the trip code. Everything else on this screen fills in as they reply.",
+        "⚙️ Add the guest list", "settings"));
+      return cards.join("");
+    }
+    if (waiting.length) {
+      cards.push(actCard("rose", "Waiting on guests", `${waiting.length} ${waiting.length === 1 ? "person has" : "people have"} not replied`,
+        waiting.slice(0, 4).map((w) => esc(w.name.split(" ")[0])).join(" · ") + (waiting.length > 4 ? " and more" : ""),
+        "💌 Nudge them", "booking"));
+    }
+    if (heads) {
+      const seats = allSeats();
+      const noMeal = seats.filter((x) => !x.meal).length;
+      if (noMeal && mealOptions().length) {
+        cards.push(actCard("amber", "Catering", `${noMeal} ${noMeal === 1 ? "guest has" : "guests have"} not picked a meal`,
+          "Catering wants a number. The Host view below totals what you have and lists every dietary note.",
+          "📋 See the counts", "home"));
+      }
+      const placed = new Set(seatTables().flatMap((g) => g.members || []));
+      const unseated = seats.filter((x) => !placed.has(x.key)).length;
+      if (unseated) {
+        cards.push(actCard("green", "Seating", `${unseated} of ${seats.length} ${unseated === 1 ? "seat is" : "seats are"} unplaced`,
+          seatTables().length ? "Tables are started. Keep going while the yeses are fresh." : "No tables yet. They build themselves from the guests who accepted.",
+          "🪑 Open the seating chart", "seating"));
+      }
+    }
+    if (!opsOf("run").length) {
+      cards.push(actCard("amber", "Day of", "The run of show is empty",
+        "Start from a typical wedding day and change what does not fit. Your coordinator will ask for this.",
+        "⏱️ Build the run of show", "dayof"));
+    } else if (!opsOf("vendor").length) {
+      cards.push(actCard("green", "Day of", "No vendor numbers saved",
+        "Coordinator, photographer, catering. The ones you would need to call in a hurry.",
+        "📇 Add your vendors", "dayof"));
+    }
+    if (TRIP.start_date) {
+      const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
+      if (due.length) {
+        cards.push(actCard("amber", "Worth doing now", `${due.length} thing${due.length === 1 ? "" : "s"} on the timeline`,
+          due.slice(0, 3).map((i) => esc(i.label)).join(" · "),
+          "📋 Open the planning timeline", "booking"));
+      }
+    }
+    if (!cards.length) {
+      cards.push(actCard("calm", "All caught up", "Everyone has answered and everything is built",
+        `${heads} coming, seated, and the day is mapped out. Nothing needs you right now.`,
+        "⏱️ Look over the day", "dayof"));
+    }
+    return cards.slice(0, 3).join("");
+  }
   function needsYou() {
+    if (isWedding() && isHost()) return hostNeedsYou();
     const cards = [];
     // votes you have not weighed in on
     const open = state.decisions.filter((d) => d.status !== "decided");
@@ -1122,7 +1195,7 @@
     s.innerHTML = `
       <div class="hero compact" data-scene="${heroScene()}">
         <div class="sun"></div>
-        <div class="kicker">${isWedding() ? "💍 You're invited · " + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
+        <div class="kicker">${isWedding() ? (isHost() ? "💍 You're hosting · " : "💍 You're invited · ") + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
         <h1 style="font-size:32px">${esc(TRIP.name)}</h1>
         <div class="dates">${fmtRange(TRIP.start_date, TRIP.end_date)} · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights</div>
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
@@ -1236,6 +1309,7 @@
     try { return JSON.parse(myVote("wrsvp", "details") || "{}") || {}; } catch { return {}; }
   }
   function weddingRsvpCard() {
+    if (isHost()) return "";   // you are throwing it, you do not RSVP to it
     const mine = myVote("wrsvp", "attend");
     const accepted = typeof mine === "string" && mine.startsWith("yes");
     const party = accepted ? (parseInt(mine.split(":")[1], 10) || 1) : 1;
@@ -2191,7 +2265,21 @@
     const L = TRIP.links || {};
     const wed = isWedding();
     const dest = TRIP.destination || "the destination";
-    const list = wed ? [
+    // Hosts and guests are running two different races on the same calendar.
+    const list = wed && isHost() ? [
+      { id: "hvenue",   by: 300, label: "Lock the venue and the date", note: "Everything else hangs off this. Get the contract signed and the deposit down." },
+      { id: "hblock",   by: 240, label: "Hold the room block", note: `Hotels want a headcount early and release unsold rooms later.${L.deadline ? ` Yours releases ${L.deadline}.` : ""}`, hard: L.deadline },
+      { id: "hsave",    by: 210, label: "Send save the dates", note: "People book flights around this. The trip code and link are on your Home screen." },
+      { id: "hvendors", by: 180, label: "Book the vendors who only do one wedding a day", note: "Photographer, band or DJ, and whoever is feeding everyone. Put them in Day of as you sign them." },
+      { id: "hinvite",  by: 120, label: "Send the invitations", note: `Import the guest list in Settings, then share the link.${L.rsvp_deadline ? ` Ask for answers by ${L.rsvp_deadline}.` : ""}` },
+      { id: "hchase",   by: 60,  label: "Chase the people who have not replied", note: "There are always some. The Host view has a nudge button that opens your share sheet." },
+      { id: "hmeals",   by: 45,  label: "Final headcount and meal counts to catering", note: "Copy the caterer list from the Host view. It totals the meals and lists every dietary note." },
+      { id: "hseating", by: 30,  label: "Build the seating chart", note: "Tables come straight from the yeses in the Seating tab, plus-ones included." },
+      { id: "hrun",     by: 21,  label: "Run of show to the coordinator", note: "Build it in Day of and copy it out as text. Vendors want it about three weeks ahead." },
+      { id: "hpay",     by: 14,  label: "Final payments and tips", note: "Sort the envelopes now so nobody is at an ATM on the day." },
+      { id: "hbags",    by: 10,  label: "Welcome bags, signage, place cards", note: "The last of the physical stuff. Anything printed needs the final seating chart." },
+      { id: "hshuttle", by: 7,   label: "Confirm transport against arrivals", note: "The Flights tab groups everyone into arrival windows, so shuttle times write themselves." },
+    ] : wed ? [
       { id: "rsvp",     by: 90, label: "RSVP", note: `Tell the hosts if you're coming and how many are in your party.${L.rsvp_deadline ? ` They asked for answers by ${L.rsvp_deadline}.` : ""}`, hard: L.rsvp_deadline },
       { id: "rooms",    by: 75, label: "Book your room", note: `Group rates are held for a limited time, then the block releases.${L.deadline ? ` Book by ${L.deadline}.` : ""}`, hard: L.deadline },
       { id: "flights",  by: 90, label: "Book flights", note: `Fares to ${dest} climb as the date gets close, and everyone booking at once makes it worse.` },
