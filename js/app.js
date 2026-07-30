@@ -1424,8 +1424,9 @@
         : "Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join."}</div>
       ${state.days.length < 2 && isHost() ? `<div class="card">
         <h3>📋 Already have a schedule?</h3>
-        <p class="section-sub" style="margin:4px 0 12px">Paste it to the assistant however you have it, tee times, a text from the group, notes from an email, and it turns it into days here.</p>
-        <button class="btn ghost" data-go="assistant" style="width:100%">Paste a schedule</button>
+        <p class="section-sub" style="margin:4px 0 12px">However you have it: tee times, a text from the group, notes from an email, or a photo of the confirmation. The assistant reads it and turns it into days here.</p>
+        <button class="btn ghost" data-go="assistant" style="width:100%;margin-bottom:8px">Paste a schedule</button>
+        <button class="btn ghost" id="planPhoto" style="width:100%">📷 Upload a photo of it</button>
       </div>` : ""}
       ${state.days.length < 2 && isHost() ? `<div class="card ai-card">
         <h3>✨ Set up my ${isWedding() ? "wedding weekend" : "trip"} with AI</h3>
@@ -1448,6 +1449,8 @@
     renderDayList();
     const da = $("#dAdd"); if (da) da.addEventListener("click", addDay);
     const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
+    // Photo lives with the assistant, so hop there and open the picker straight away.
+    const pp = $("#planPhoto"); if (pp) pp.addEventListener("click", () => { show("assistant"); setTimeout(pickChatPhoto, 150); });
   }
   async function callAI(mode) {
     const cfg = window.CARAVAN_CONFIG;
