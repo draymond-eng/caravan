@@ -14,6 +14,22 @@ GitHub Pages + Supabase. No build step — plain HTML/CSS/JS.
   name, and everything they do syncs live for the group
 - The code is the secret: anyone who has it can read/write that trip
 
+## Wedding mode 💍
+
+Creating a trip offers two types: **Group trip** and **Destination wedding**.
+Wedding mode flips the model from all-peers to hosts-and-guests: the couple
+(+ planners) edit the schedule, links, and settings; guests add themselves
+from the invite code, RSVP with a party size, see dress codes, the room
+block, and the registry, and drop flight info for shuttle planning.
+
+Projects created before wedding mode need one migration (SQL Editor):
+
+```sql
+alter table public.trips add column if not exists mode  text  not null default 'trip';
+alter table public.trips add column if not exists hosts jsonb not null default '[]';
+alter table public.trips add column if not exists links jsonb not null default '{}';
+```
+
 ## One-time setup (own your own SquadTrip)
 1. **Fork/clone this repo** and enable GitHub Pages (Settings → Pages →
    Deploy from a branch → `main` / root).

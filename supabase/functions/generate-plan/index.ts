@@ -82,8 +82,18 @@ Deno.serve(async (req) => {
       const { count } = await supabase.from("days").select("id", { count: "exact", head: true }).eq("trip", trip.code);
       if ((count ?? 0) >= 2) return json({ error: "This trip already has a plan — delete the existing days first for a fresh AI draft." }, 409);
 
-      const plan = await askClaude(
-`You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on — favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
+      const isWedding = trip.mode === "wedding";
+      const plan = await askClaude(isWedding
+? `You are an expert destination-wedding planner. Draft the guest-facing schedule for a wedding weekend — a STARTING POINT the hosts will edit. Typical shape: arrival/settle-in day, welcome event, the ceremony + reception day, a recovery brunch / beach day, departures. Keep guest logistics realistic (travel time, downtime before the ceremony).
+
+Wedding: "${trip.name}" in ${trip.destination || "?"}
+Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVERY date)
+Roughly ${travelers}+ guests expected. Location(s): ${stopsTxt}
+
+Respond with ONLY valid JSON, no markdown fences:
+{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"dress code / key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence for guests"}]}]}
+Rules: 2-4 items/day; put dress codes in the meetup field (e.g. "Dress code: beach formal"); use the given stop ids, not labels; leave exact venues generic (e.g. "Ceremony — venue TBA") since the hosts will fill them in.`
+: `You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on — favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
 
 Trip: "${trip.name}" to ${trip.destination || "?"}
 Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVERY date)
@@ -134,7 +144,8 @@ Respond with ONLY valid JSON, no markdown fences:
  "decisions":[{"title":"a real either/or choice this group will face on this trip","note":"one line of context","options":["option 1","option 2","option 3 (optional)"]}],
  "ideas":[{"title":"a fun optional add-on","tag":"where/when","note":"one line"}]
 }
-Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic.`);
+Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic.${trip.mode === "wedding" ? `
+This trip is a DESTINATION WEDDING: write guide cards for guests (getting there, weather for the dates, money, what to pack for the events); make hoods guest-lodging areas near the venue town; make decisions host-facing planning choices (e.g. welcome-dinner style, group excursion); make ideas optional guest activities around the wedding.` : ""}`);
       if (!intel) return json({ error: LAST_AI_ERROR || "AI returned unreadable intel — try again." }, 502);
 
       const gRows: Array<Record<string, unknown>> = [];

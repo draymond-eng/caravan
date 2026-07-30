@@ -89,7 +89,7 @@
   }
 
   /* ---- Create-trip wizard -------------------------------------------------- */
-  const wiz = { step: 0, name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD" };
+  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD" };
   function openWizard() {
     wiz.step = 0;
     wiz.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -103,11 +103,17 @@
     const B = $("#wizBody");
     const dots = `<div class="wiz-step-dots">${[0, 1, 2].map((i) => `<i class="${i <= wiz.step ? "on" : ""}"></i>`).join("")}</div>`;
     if (wiz.step === 0) {
+      const w = wiz.mode === "wedding";
       B.innerHTML = `${dots}
-        <label class="wiz-label">Trip name</label>
-        <input id="wName" class="wiz-in" placeholder="e.g. Japan 2027" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        <label class="wiz-label">What are we planning?</label>
+        <div style="display:flex;gap:8px;margin-bottom:4px">
+          <button class="who-opt ${!w ? "sel" : ""}" id="wModeTrip" style="flex:1;justify-content:center;margin:0">🌍 Group trip</button>
+          <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Destination wedding</button>
+        </div>
+        <label class="wiz-label">${w ? "Wedding name" : "Trip name"}</label>
+        <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan — Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <label class="wiz-label">Destination</label>
-        <input id="wDest" placeholder="e.g. Japan" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        <input id="wDest" placeholder="${w ? "e.g. Tulum, Mexico" : "e.g. Japan"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="wiz-label">First day</label>
             <input id="wStart" type="date" value="${esc(wiz.start)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
@@ -119,9 +125,11 @@
           <button class="btn primary" id="wNext" style="flex:2">Next: stops →</button>
         </div>`;
       $("#wCancel").addEventListener("click", closeWizard);
+      const keep = () => { wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim(); wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value; };
+      $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; renderWizard(); });
+      $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; renderWizard(); });
       $("#wNext").addEventListener("click", () => {
-        wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim();
-        wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value;
+        keep();
         if (!wiz.name) return alert("Give the trip a name.");
         if (!wiz.start || !wiz.end || wiz.end < wiz.start) return alert("Pick valid dates.");
         wiz.step = 1; renderWizard();
@@ -129,7 +137,7 @@
     } else if (wiz.step === 1) {
       if (!wiz.stops.length) wiz.stops = [""];
       B.innerHTML = `${dots}
-        <label class="wiz-label">Stops / bases (in order) — where you'll sleep</label>
+        <label class="wiz-label">${wiz.mode === "wedding" ? "Where is it happening? (venue town — add more stops if events span places)" : "Stops / bases (in order) — where you'll sleep"}</label>
         ${wiz.stops.map((s, i) => `<div class="trav-row">
           <input data-stop="${i}" placeholder="e.g. Tokyo" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.stops.length > 1 ? `<button class="rm" data-rmstop="${i}">✕</button>` : ""}
@@ -151,7 +159,7 @@
       });
     } else {
       B.innerHTML = `${dots}
-        <label class="wiz-label">Who's coming? (everyone, including you)</label>
+        <label class="wiz-label">${wiz.mode === "wedding" ? "The hosts — the couple + anyone helping plan. Guests add themselves when they join." : "Who's coming? (everyone, including you)"}</label>
         ${wiz.travelers.map((t, i) => `<div class="trav-row">
           <input data-trav="${i}" placeholder="Name" value="${esc(t)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.travelers.length > 1 ? `<button class="rm" data-rmtrav="${i}">✕</button>` : ""}
@@ -195,8 +203,11 @@
       currency: wiz.currency, home_currency: wiz.home_currency,
       travelers, stops,
     };
+    if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
     const created = await Backend.createTrip(row);
-    if (!created) { $("#wErr").textContent = "Couldn't create the trip — check the backend setup and try again."; return; }
+    if (!created) { $("#wErr").textContent = wiz.mode === "wedding"
+      ? "Couldn't create it — wedding mode needs the latest database migration (see README) run in Supabase."
+      : "Couldn't create the trip — check the backend setup and try again."; return; }
     const mine = LSG.get("mytrips", []);
     mine.unshift({ code: created.code, name: created.name, dates: fmtRange(created.start_date, created.end_date) });
     LSG.set("mytrips", mine.slice(0, 8));
@@ -222,6 +233,9 @@
   const byId = (id) => (TRIP.travelers || []).find((t) => t.id === id);
   const stopById = (id) => (TRIP.stops || []).find((s) => s.id === id) || { label: id };
   const stopPillClass = (id) => { const i = (TRIP.stops || []).findIndex((s) => s.id === id); return "pill " + (i >= 0 ? "s" + (i % 6) : "any"); };
+  // Wedding mode: one party plans (hosts), everyone else RSVPs and follows.
+  const isWedding = () => !!TRIP && TRIP.mode === "wedding";
+  const isHost = () => !isWedding() || (TRIP.hosts || []).includes(state.me);
   const voterChips = (ids) => (ids || []).map((id) => { const t = byId(id); return t ? `<span class="avatar vchip" style="background:${t.color}" title="${esc(t.name)}">${initials(t.name)}</span>` : ""; }).join("");
 
   const TYPE = {
@@ -334,17 +348,26 @@
     { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b> \u2014 everyone taps their pick and the tallies settle it.` },
     { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, and ask the <b>\u2728 Assistant</b> anything about your trip. Have a great one.` },
   ];
+  const WEDDING_WELCOME = [
+    { emoji: "\u{1F48D}", title: "You're invited", body: () => `Welcome to <b>${esc(TRIP.name)}</b> — everything about the wedding weekend lives here. Schedule, RSVP, where to stay, travel plans. No accounts, no downloads.` },
+    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `Pick your name from the guest list — or add yourself if you're not on it yet. Your RSVP gets tagged to you — that's the whole login.` },
+    { emoji: "\u{1F48C}", title: "RSVP on the Home screen", body: () => `Tap <b>Joyfully accept</b> (and how many are in your party) so the hosts can plan headcounts. You can change it any time.` },
+    { emoji: "\u{1F5D3}️", title: "The weekend, in one place", body: () => `The <b>Plan</b> tab has every event — times, dress codes, locations. Tap <b>＋ I'm in</b> on the optional stuff so the hosts know who's joining.` },
+    { emoji: "✈️", title: "Travel, handled", body: () => `Drop your flight into <b>Flights</b> so shuttle groups can be organized, check <b>Stays</b> for the room block, and put your pics in <b>Photos</b> all weekend. See you there!` },
+  ];
   let welcomeStep = 0;
+  const welcomeSteps = () => (isWedding() ? WEDDING_WELCOME : WELCOME_STEPS);
   function openWelcome() {
     welcomeStep = 0;
     renderWelcome();
     $("#welcomeModal").classList.add("open");
   }
   function renderWelcome() {
-    const s = WELCOME_STEPS[welcomeStep];
-    const last = welcomeStep === WELCOME_STEPS.length - 1;
+    const STEPS = welcomeSteps();
+    const s = STEPS[welcomeStep];
+    const last = welcomeStep === STEPS.length - 1;
     $("#welcomeBody").innerHTML = `
-      <div class="wiz-step-dots">${WELCOME_STEPS.map((_, i) => `<i class="${i <= welcomeStep ? "on" : ""}"></i>`).join("")}</div>
+      <div class="wiz-step-dots">${STEPS.map((_, i) => `<i class="${i <= welcomeStep ? "on" : ""}"></i>`).join("")}</div>
       <div style="text-align:center;font-size:52px;margin:6px 0 10px">${s.emoji}</div>
       <h3 style="text-align:center;margin:0 0 10px">${s.title}</h3>
       <p class="section-sub" style="text-align:center;margin:0 0 18px;font-size:14px;line-height:1.6">${s.body()}</p>
@@ -355,7 +378,7 @@
     const back = $("#wlBack"); if (back) back.addEventListener("click", () => { welcomeStep--; renderWelcome(); });
     const skip = $("#wlSkip"); if (skip) skip.addEventListener("click", finishWelcome);
     $("#wlNext").addEventListener("click", () => {
-      if (welcomeStep < WELCOME_STEPS.length - 1) { welcomeStep++; renderWelcome(); }
+      if (welcomeStep < welcomeSteps().length - 1) { welcomeStep++; renderWelcome(); }
       else finishWelcome();
     });
   }
@@ -373,12 +396,37 @@
   }
   function openWho() {
     $("#whoOptions").innerHTML = (TRIP.travelers || []).map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">
-      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("");
+      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
+      + (isWedding() ? `<div class="who-opt" id="whoAddMe" style="justify-content:center;font-weight:800;color:var(--ai-2)">＋ I'm not on the list — add me</div>` : "");
     $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
       state.me = o.dataset.me; LS.set("me", state.me); renderWhoami();
       $$("#whoOptions .who-opt").forEach((x) => x.classList.toggle("sel", x === o));
       renderCurrent();
     }));
+    const am = $("#whoAddMe"); if (am) am.addEventListener("click", () => {
+      $("#whoOptions").innerHTML = `
+        <input id="whoNewName" placeholder="Your full name" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;margin-bottom:10px" />
+        <button class="btn primary" id="whoNewSave" style="width:100%">That's me — add me to the guest list</button>
+        <div id="whoNewMsg" class="r-sub" style="margin-top:6px"></div>`;
+      $("#whoNewName").focus();
+      $("#whoNewSave").addEventListener("click", async () => {
+        const name = $("#whoNewName").value.trim();
+        if (!name) { $("#whoNewMsg").textContent = "Type your name first."; return; }
+        $("#whoNewMsg").textContent = "Adding you…";
+        const fresh = await Backend.getTrip(TRIP_CODE); // re-fetch so we don't clobber other new guests
+        if (fresh) TRIP = fresh;
+        const travs = TRIP.travelers || [];
+        const existing = travs.find((t) => t.name.toLowerCase() === name.toLowerCase());
+        if (existing) { state.me = existing.id; LS.set("me", state.me); renderWhoami(); renderCurrent(); openWho(); return; }
+        const me = { id: slug(name) + "-" + travs.length, name, color: PALETTE[travs.length % PALETTE.length] };
+        const next = [...travs, me];
+        const ok = await Backend.updateTrip(TRIP_CODE, { travelers: next });
+        if (!ok) { $("#whoNewMsg").textContent = "Couldn't save — try again."; return; }
+        TRIP.travelers = next;
+        state.me = me.id; LS.set("me", state.me);
+        renderWhoami(); renderCurrent(); openWho();
+      });
+    });
     $("#whoModal").classList.add("open");
   }
 
@@ -391,21 +439,25 @@
     s.innerHTML = `
       <div class="hero">
         <div class="sun"></div>
-        <div class="kicker">${esc(TRIP.destination || "The trip")}</div>
+        <div class="kicker">${isWedding() ? "💍 You're invited · " + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
         <h1 style="font-size:34px">${esc(TRIP.name)}</h1>
         <div class="dates">${fmtRange(TRIP.start_date, TRIP.end_date)} · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights</div>
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
       </div>
 
+      ${isWedding() ? weddingRsvpCard() : ""}
+
       <div class="countdown" id="countdown"></div>
       <div class="clocks" id="clocks"></div>
 
       ${todayCard()}
+      ${isWedding() ? weddingLinksCard() : ""}
 
-      <div class="section-title" style="margin-top:20px">The crew</div>
+      <div class="section-title" style="margin-top:20px">${isWedding() ? "Who's coming" : "The crew"}</div>
       <div class="card">
+        ${isWedding() ? weddingAttendanceHTML() : `
         <div class="crew-strip">${(TRIP.travelers || []).map((t) => `<span class="avatar stack" style="background:${t.color}" title="${esc(t.name)}">${initials(t.name)}</span>`).join("")}</div>
-        <p style="margin:12px 0 0;font-size:13px;color:var(--ink-2)">${(TRIP.travelers || []).length} travelers${openCount ? ` · <b>${openCount} open vote${openCount === 1 ? "" : "s"}</b>` : ""}</p>
+        <p style="margin:12px 0 0;font-size:13px;color:var(--ink-2)">${(TRIP.travelers || []).length} travelers${openCount ? ` · <b>${openCount} open vote${openCount === 1 ? "" : "s"}</b>` : ""}</p>`}
       </div>
 
       <div class="section-title">At a glance</div>
@@ -427,11 +479,55 @@
 
       <div class="foot-note">squadtrip · everything syncs live for the whole group</div>`;
     s.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
+    s.querySelectorAll("[data-wrsvp]").forEach((b) => b.addEventListener("click", () => setVote("wrsvp", "attend", b.dataset.wrsvp)));
+    s.querySelectorAll("[data-wparty]").forEach((b) => b.addEventListener("click", () => {
+      const cur = myVote("wrsvp", "attend");
+      if (cur !== "yes:" + b.dataset.wparty) setVote("wrsvp", "attend", "yes:" + b.dataset.wparty);
+    }));
     $("#copyLink").addEventListener("click", () => {
       const url = location.origin + location.pathname + "?t=" + TRIP.code;
       navigator.clipboard?.writeText(url).then(() => { $("#copyLink").textContent = "Copied ✓"; setTimeout(() => $("#copyLink").textContent = "Copy invite link", 1500); }).catch(() => {});
     });
     tickCountdown(); renderClocks();
+  }
+  /* ---- Wedding mode: RSVP, links, attendance ------------------------------ */
+  function weddingRsvpCard() {
+    const mine = myVote("wrsvp", "attend");
+    const accepted = typeof mine === "string" && mine.startsWith("yes");
+    const party = accepted ? (parseInt(mine.split(":")[1], 10) || 1) : 1;
+    return `<div class="card ai-card" style="margin-top:14px">
+      <h3>💌 Will you be there?</h3>
+      <p class="section-sub" style="margin:4px 0 12px">RSVP so the hosts can plan headcounts. You can change it any time.</p>
+      <div class="btn-row">
+        <button class="btn ${accepted ? "primary" : "ghost"}" data-wrsvp="yes:${party}" style="flex:1;${accepted ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">Joyfully accept</button>
+        <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-wrsvp="no" style="flex:1;${mine === "no" ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">Can't make it</button>
+      </div>
+      ${accepted ? `<div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700">In my party:</span>
+        ${[1, 2, 3, 4, 5].map((n) => `<button class="rsvp-btn ${party === n ? "on" : ""}" data-wparty="${n}" style="${party === n ? "" : "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)"}">${n}</button>`).join("")}
+      </div>` : ""}
+    </div>`;
+  }
+  function weddingLinksCard() {
+    const L = TRIP.links || {};
+    const rows = [
+      L.roomblock ? `<a class="btn ghost" href="${esc(L.roomblock)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:8px">🏨 Book the room block${L.deadline ? ` · by ${esc(L.deadline)}` : ""}</a>` : "",
+      L.registry ? `<a class="btn ghost" href="${esc(L.registry)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-bottom:8px">🎁 Registry</a>` : "",
+      L.site ? `<a class="btn ghost" href="${esc(L.site)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">💒 Wedding website</a>` : "",
+    ].filter(Boolean).join("");
+    if (!rows) return isHost() ? `<div class="card" style="margin-top:2px"><h3>💍 Wedding links</h3><p class="section-sub" style="margin:4px 0 0">Add the room block, registry, and website links in <b>More → Settings</b> so guests see them here.</p></div>` : "";
+    return `<div class="card" style="margin-top:2px"><h3>💍 The essentials</h3><div style="margin-top:10px">${rows}</div></div>`;
+  }
+  function weddingAttendanceHTML() {
+    const t = tally("wrsvp", "attend");
+    let parties = [], people = 0, declined = (t["no"] || []).length;
+    Object.entries(t).forEach(([choice, voters]) => {
+      if (choice.startsWith("yes")) { parties.push(...voters); people += voters.length * (parseInt(choice.split(":")[1], 10) || 1); }
+    });
+    return `${parties.length ? `<div class="crew-strip">${voterChips(parties)}</div>` : ""}
+      <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
+        ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet — be the first."}
+      </p>`;
   }
   function todayCard() {
     const now = new Date();
@@ -477,27 +573,29 @@
   function renderItinerary() {
     const s = $("#screen-itinerary");
     s.innerHTML = `
-      <div class="section-title">The plan</div>
-      <div class="section-sub">Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join.</div>
-      ${state.days.length < 2 ? `<div class="card ai-card">
-        <h3>✨ Set up my trip with AI</h3>
-        <p class="section-sub" style="margin:4px 0 12px">Claude drafts the works for ${esc(TRIP.destination || "your destination")}: a full day-by-day itinerary, destination guide, neighborhood breakdowns for picking where to stay, and starter votes & ideas for the group. Everything stays editable.</p>
-        <button class="btn primary" id="aiBuild" style="width:100%">✨ Set up my trip</button>
+      <div class="section-title">${isWedding() ? "The weekend" : "The plan"}</div>
+      <div class="section-sub">${isWedding()
+        ? (isHost() ? "The event schedule your guests see. Add days and events; guests tap <b>＋ I'm in</b> to RSVP to each one." : "The schedule of events. Tap <b>＋ I'm in</b> on anything you'll join so the hosts can plan headcounts.")
+        : "Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join."}</div>
+      ${state.days.length < 2 && isHost() ? `<div class="card ai-card">
+        <h3>✨ Set up my ${isWedding() ? "wedding weekend" : "trip"} with AI</h3>
+        <p class="section-sub" style="margin:4px 0 12px">Claude drafts the works for ${esc(TRIP.destination || "your destination")}: a full day-by-day ${isWedding() ? "schedule" : "itinerary"}, destination guide, neighborhood breakdowns${isWedding() ? "" : " for picking where to stay"}, and starter ${isWedding() ? "ideas" : "votes & ideas"} for the group. Everything stays editable.</p>
+        <button class="btn primary" id="aiBuild" style="width:100%">✨ Set it up</button>
         <div id="aiStatus" class="r-sub" style="margin-top:8px"></div>
       </div>` : ""}
       <div id="dayList"></div>
-      <div class="card">
+      ${isHost() ? `<div class="card">
         <h3>＋ Add a day</h3>
         <div class="expense-add">
           <input id="dDate" type="date" min="${esc(TRIP.start_date)}" max="${esc(TRIP.end_date)}" />
-          <input id="dTitle" placeholder="Title (e.g. Old-town day)" />
+          <input id="dTitle" placeholder="${isWedding() ? "Title (e.g. Welcome dinner day)" : "Title (e.g. Old-town day)"}" />
           <input id="dSummary" placeholder="One-line summary (optional)" />
-          <input id="dMeetup" placeholder="Meetup spot + time (optional)" />
+          <input id="dMeetup" placeholder="${isWedding() ? "Dress code / details (optional)" : "Meetup spot + time (optional)"}" />
           <button class="btn primary" id="dAdd">Add day</button>
         </div>
-      </div>`;
+      </div>` : ""}`;
     renderDayList();
-    $("#dAdd").addEventListener("click", addDay);
+    const da = $("#dAdd"); if (da) da.addEventListener("click", addDay);
     const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
   }
   async function callAI(mode) {
@@ -547,7 +645,7 @@
             <button class="rsvp-btn ${meIn ? "on" : ""}" data-rsvp="${iid}">${meIn ? "✓ You're in" : "＋ I'm in"}</button>
             ${going.length ? `<span class="tally" style="margin:0">${voterChips(going)}</span>` : ""}
             <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.title + " " + (TRIP.destination || ""))}" target="_blank" rel="noopener">📍</a>
-            <span class="tl-map" style="color:var(--vermilion)" data-rmitem="${d.id}#${ii}">✕</span>
+            ${isHost() ? `<span class="tl-map" style="color:var(--vermilion)" data-rmitem="${d.id}#${ii}">✕</span>` : ""}
           </div>
         </div>`;
       }).join("");
@@ -559,19 +657,19 @@
           <div class="caret">▶</div>
         </div>
         <div class="day-body">
-          ${d.meetup ? `<div class="meetup">📍 <span>Meetup: ${esc(d.meetup)}</span></div>` : ""}
+          ${d.meetup ? `<div class="meetup">${isWedding() ? "👔" : "📍"} <span>${isWedding() ? esc(d.meetup) : "Meetup: " + esc(d.meetup)}</span></div>` : ""}
           <div class="timeline">${items || ""}</div>
-          <div class="expense-add" style="margin:10px 0 8px">
+          ${isHost() ? `<div class="expense-add" style="margin:10px 0 8px">
             <div style="display:flex;gap:8px">
               <input data-itime="${d.id}" type="time" style="flex:1" />
               <select data-itype="${d.id}" style="flex:1.2">${Object.entries(TYPE).map(([k, v]) => `<option value="${k}">${v.emoji} ${v.label}</option>`).join("")}</select>
             </div>
-            <input data-ititle="${d.id}" placeholder="Add an activity…" />
+            <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : "Add an activity…"}" />
             <div class="btn-row">
               <button class="btn primary" data-iadd="${d.id}" style="flex:2">＋ Add</button>
               <button class="btn danger" data-rmday="${d.id}" style="flex:1">Delete day</button>
             </div>
-          </div>
+          </div>` : ""}
         </div>
       </div>`;
     }).join("");
@@ -673,7 +771,7 @@
     const s = $("#screen-decisions");
     s.innerHTML = `
       <div class="section-title">Votes</div>
-      <div class="section-sub">Open questions for the group — tap your pick, tallies update live. Anyone can add one.</div>
+      <div class="section-sub">${isWedding() ? "Questions from the hosts — tap your pick, tallies update live." : "Open questions for the group — tap your pick, tallies update live. Anyone can add one."}</div>
       ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b> — tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
       ${state.decisions.length ? state.decisions.map((d) => {
         const mine = myVote("decision", d.id);
@@ -700,7 +798,7 @@
           </div>
         </div>`;
       }).join("") : `<div class="empty">No questions yet — pose the first one.</div>`}
-      <div class="card">
+      ${isHost() ? `<div class="card">
         <h3>Ask the group</h3>
         <div class="expense-add">
           <input id="decTitle" placeholder="The question" />
@@ -711,13 +809,13 @@
           <input id="decO3" placeholder="Option 4 (optional)" />
           <button class="btn primary" id="decAdd">Post it</button>
         </div>
-      </div>`;
+      </div>` : ""}`;
     s.querySelectorAll("[data-dec]").forEach((b) => b.addEventListener("click", () => setVote("decision", b.dataset.dec, b.dataset.opt)));
     s.querySelectorAll("[data-decdel]").forEach((b) => b.addEventListener("click", async () => {
       state.decisions = state.decisions.filter((x) => x.id !== b.dataset.decdel); renderDecisions();
       await Backend.remove("decisions", b.dataset.decdel);
     }));
-    $("#decAdd").addEventListener("click", addDecision);
+    const dA = $("#decAdd"); if (dA) dA.addEventListener("click", addDecision);
     const dw = $("#decWho"); if (dw) dw.addEventListener("click", openWho);
   }
   async function addDecision() {
@@ -736,6 +834,30 @@
   const MAX_STAY = 2;
   function renderStays() {
     const s = $("#screen-stays");
+    if (isWedding()) {
+      const L = TRIP.links || {};
+      s.innerHTML = `
+        <div class="section-title">Where to stay</div>
+        <div class="section-sub">The hosts' picks for where guests should base themselves.</div>
+        ${L.roomblock ? `<div class="card ai-card">
+          <h3>🏨 Room block</h3>
+          <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` — <b>book by ${esc(L.deadline)}</b>` : ""}.</p>
+          <a class="btn primary" href="${esc(L.roomblock)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Book a room</a>
+        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : `<div class="empty">No room block posted yet — check back soon.</div>`)}
+        ${(TRIP.stops || []).map((st) => {
+          const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id);
+          return hoods.length ? `<div style="margin-bottom:20px">
+            <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="${stopPillClass(st.id)}">${esc(st.label)}</span><span class="r-sub" style="font-size:12px">neighborhoods, if you're booking your own</span></div>
+            <div class="hood-scroll">${hoods.map((n) => `<div class="hood-card">
+              <div class="hood-name">${esc(n.emoji || "📍")} ${esc(n.title)}</div>
+              <div class="hood-tags">${(n.tags || []).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
+              <div class="hood-blurb">${esc(n.body)}</div>
+              ${n.base ? `<div class="hood-base">🛏️ ${esc(n.base)}</div>` : ""}
+            </div>`).join("")}</div>
+          </div>` : "";
+        }).join("")}`;
+      return;
+    }
     s.innerHTML = `
       <div class="section-title">Where we sleep</div>
       <div class="section-sub">Everyone submits up to ${MAX_STAY} places per stop, then the group votes.</div>
@@ -1369,9 +1491,37 @@
     const s = $("#screen-settings");
     const inp = (id, val, ph, type = "text") =>
       `<input id="${id}" type="${type}" value="${esc(val ?? "")}" placeholder="${esc(ph)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />`;
+    if (!isHost()) {
+      s.innerHTML = `
+        <div class="section-title">Settings</div>
+        <div class="card"><h3>💍 Hosts only</h3>
+        <p class="section-sub" style="margin:4px 0 0">Only the hosts can change this wedding's setup. If you should be a host, ask them to add you in Settings → Hosts.</p></div>`;
+      return;
+    }
     s.innerHTML = `
       <div class="section-title">Trip settings</div>
       <div class="section-sub">Changes apply for everyone on the trip.</div>
+
+      ${isWedding() ? `<div class="card">
+        <h3>💍 Wedding links</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Shown to every guest on Home and in Stays.</p>
+        <label class="wiz-label">Room block link (hotel booking)</label>${inp("wlRoom", (TRIP.links || {}).roomblock, "https://…")}
+        <label class="wiz-label">Room block deadline</label>${inp("wlDeadline", (TRIP.links || {}).deadline, "e.g. March 1")}
+        <label class="wiz-label">Registry link</label>${inp("wlReg", (TRIP.links || {}).registry, "https://…")}
+        <label class="wiz-label">Wedding website</label>${inp("wlSite", (TRIP.links || {}).site, "https://…")}
+        <button class="btn primary" id="wlSave" style="width:100%;margin-top:14px">Save links</button>
+        <div id="wlMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Hosts</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Hosts can edit the schedule, links, and settings. Everyone else RSVPs and follows along.</p>
+        <div id="hostChips" style="display:flex;flex-wrap:wrap;gap:8px">
+          ${(TRIP.travelers || []).map((t) => `<label class="split-chip"><input type="checkbox" data-host="${t.id}" ${(TRIP.hosts || []).includes(t.id) ? "checked" : ""} /><span class="avatar" style="background:${t.color}">${initials(t.name)}</span>${esc(t.name.split(" ")[0])}</label>`).join("")}
+        </div>
+        <button class="btn primary" id="hostSave" style="width:100%;margin-top:12px">Save hosts</button>
+        <div id="hostMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>` : ""}
 
       <div class="card">
         <h3>Basics</h3>
@@ -1441,6 +1591,20 @@
         <button class="btn danger" id="stDelete" style="width:100%;padding:12px">Delete this trip forever</button>
       </div>`;
 
+    const wls = $("#wlSave"); if (wls) wls.addEventListener("click", async () => {
+      const links = { roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(), registry: $("#wlReg").value.trim(), site: $("#wlSite").value.trim() };
+      Object.keys(links).forEach((k) => { if (!links[k]) delete links[k]; });
+      const ok = await Backend.updateTrip(TRIP_CODE, { links });
+      $("#wlMsg").textContent = ok ? "Saved ✓" : "Couldn't save — try again.";
+      if (ok) TRIP.links = links;
+    });
+    const hs = $("#hostSave"); if (hs) hs.addEventListener("click", async () => {
+      const hosts = $$("#hostChips [data-host]").filter((c) => c.checked).map((c) => c.dataset.host);
+      if (!hosts.length) { $("#hostMsg").textContent = "Keep at least one host."; return; }
+      const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
+      $("#hostMsg").textContent = ok ? "Saved ✓" : "Couldn't save — try again.";
+      if (ok) TRIP.hosts = hosts;
+    });
     $("#stSaveBasics").addEventListener("click", async () => {
       const patch = {
         name: $("#stName").value.trim() || TRIP.name,

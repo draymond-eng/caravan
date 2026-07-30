@@ -20,8 +20,16 @@ create table if not exists public.trips (
   stops         jsonb not null default '[]',  -- [{id,label,nights}]
   gen_count     int default 0,                -- AI generations used
   chat_count    int default 0,                -- AI assistant messages used
+  mode          text not null default 'trip', -- 'trip' | 'wedding'
+  hosts         jsonb not null default '[]',  -- traveler ids who can edit (wedding mode)
+  links         jsonb not null default '{}',  -- wedding links {roomblock,deadline,registry,site}
   created_at    timestamptz default now()
 );
+
+-- Migration for projects created before wedding mode (safe to re-run):
+alter table public.trips add column if not exists mode  text  not null default 'trip';
+alter table public.trips add column if not exists hosts jsonb not null default '[]';
+alter table public.trips add column if not exists links jsonb not null default '{}';
 
 -- AI-generated destination intel: guide cards + neighborhood cards
 create table if not exists public.guides (
