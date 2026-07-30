@@ -411,6 +411,7 @@
   async function bootTrip() {
     $("#tripApp").style.display = "block";
     try { bindShell(); } catch (e) { console.warn("bindShell", e); } // navigation works no matter what
+    try { bindItineraryDelegates(); } catch (e) { console.warn("delegates", e); }
     let backendUp = false;
     try { backendUp = !!Backend.init(TRIP_CODE); } catch (e) { console.warn("init", e); }
     if (!HAS_BACKEND || !backendUp) {
@@ -543,6 +544,27 @@
   }
 
   /* ---- shell --------------------------------------------------------------- */
+  /* The itinerary re-renders constantly, so its buttons are handled by one
+     listener on the screen itself rather than re-attached to every button. */
+  function bindItineraryDelegates() {
+    const screen = $("#screen-itinerary");
+    if (!screen || screen.dataset.delegated) return;
+    screen.dataset.delegated = "1";
+    screen.addEventListener("click", async (e) => {
+      const add = e.target.closest("[data-iadd]");
+      if (!add) return;
+      e.preventDefault();
+      const dayId = add.dataset.iadd;
+      try { await addItem(dayId); }
+      catch (err) {
+        console.error("addItem", err);
+        const el = $(`[data-imsg="${dayId}"]`);
+        if (el) el.textContent = "Error: " + (err && err.message ? err.message : String(err));
+        else alert("Couldn't add that: " + (err && err.message ? err.message : err));
+      }
+    });
+  }
+
   function bindShell() {
     $$(".tab[data-screen]").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $$(".sheet-item").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
@@ -1442,14 +1464,7 @@
       h.parentElement.classList.toggle("open");
     }));
     list.querySelectorAll("[data-rsvp]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setVote("rsvp", b.dataset.rsvp, "in"); }));
-    list.querySelectorAll("[data-iadd]").forEach((b) => b.addEventListener("click", async () => {
-      try { await addItem(b.dataset.iadd); }
-      catch (err) {
-        console.error("addItem", err);
-        const el = $(`[data-imsg="${b.dataset.iadd}"]`);
-        if (el) el.textContent = "Error: " + (err && err.message ? err.message : String(err));
-      }
-    }));
+
     list.querySelectorAll("[data-rmitem]").forEach((b) => b.addEventListener("click", () => removeItem(b.dataset.rmitem)));
     list.querySelectorAll("[data-rmday]").forEach((b) => b.addEventListener("click", async () => {
       if (!confirm("Delete this whole day?")) return;
