@@ -6,6 +6,6 @@
    Then run supabase/schema.sql once in the SQL Editor.
    ========================================================================== */
 window.CARAVAN_CONFIG = {
-  url: "",
-  anonKey: "",
+  url: "https://wkazcpezjughsggluafd.supabase.co",
+  anonKey: "sb_publishable_Mcu1nZ6YTnjsq_fiFka4Iw_sLRcS08v",
 };
