@@ -284,3 +284,22 @@ exception when duplicate_object then null; end $$;
 
 -- Cached map coordinates per place name. Safe to re-run.
 alter table public.trips add column if not exists geo jsonb not null default '{}';
+
+-- Fare watch: what people spot while shopping flights. Routes themselves live
+-- on trips.links so adding one needs no migration. Safe to re-run.
+create table if not exists public.fares (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null references public.trips(code) on delete cascade,
+  route      text not null default '',   -- "DCA-TPA"
+  price      numeric not null,
+  note       text default '',
+  author     text default '',
+  created_at timestamptz default now()
+);
+create index if not exists fares_trip_idx on public.fares(trip, route);
+
+alter table public.fares enable row level security;
+do $$ begin
+  create policy "trip scoped" on public.fares for all
+    using (trip = public.req_trip()) with check (trip = public.req_trip());
+exception when duplicate_object then null; end $$;

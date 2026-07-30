@@ -50,6 +50,25 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
   }
   return ai?.content?.find((c: { type?: string }) => c?.type === "text")?.text ?? "";
 }
+/* A chat turn may carry a photo of a schedule. Only let through the block
+   shapes the API accepts, at a size a phone camera can actually produce. */
+const OK_IMAGE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+function cleanBlocks(blocks: unknown[]): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const raw of blocks.slice(0, 6)) {
+    const b = raw as Record<string, unknown>;
+    if (b?.type === "text" && typeof b.text === "string" && b.text) {
+      out.push({ type: "text", text: b.text.slice(0, 4000) });
+    } else if (b?.type === "image") {
+      const src = b.source as Record<string, unknown> | undefined;
+      if (src?.type === "base64" && typeof src.media_type === "string" && OK_IMAGE.includes(src.media_type)
+          && typeof src.data === "string" && src.data.length > 0 && src.data.length <= 5_200_000) {
+        out.push({ type: "image", source: { type: "base64", media_type: src.media_type, data: src.data } });
+      }
+    }
+  }
+  return out.length ? out : [{ type: "text", text: "(no readable content)" }];
+}
 async function askClaude(prompt: string): Promise<Record<string, unknown> | null> {
   let text = await callAnthropic({ max_tokens: 8000, messages: [{ role: "user", content: prompt }] });
   if (text == null) return null;
@@ -219,10 +238,15 @@ Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of e
     /* ---------------- mode: chat - the trip assistant ----------------------- */
     if (mode === "chat") {
       if ((trip.chat_count ?? 0) >= 150) return json({ error: "This trip has used all its assistant messages." }, 429);
+      const hasBody = (m: Record<string, unknown>) =>
+        typeof m.content === "string" ? !!m.content : (Array.isArray(m.content) && m.content.length > 0);
       const history = (Array.isArray(messages) ? messages : [])
-        .filter((m: Record<string, unknown>) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content)
+        .filter((m: Record<string, unknown>) => (m.role === "user" || m.role === "assistant") && hasBody(m))
         .slice(-12)
-        .map((m: Record<string, unknown>) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
+        .map((m: Record<string, unknown>) => ({
+          role: m.role,
+          content: typeof m.content === "string" ? String(m.content).slice(0, 4000) : cleanBlocks(m.content as unknown[]),
+        }));
       if (!history.length || history[history.length - 1].role !== "user") return json({ error: "No message to answer." }, 400);
 
       // Compact trip context for grounding
@@ -243,6 +267,8 @@ Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of e
       const system = `You are SquadTrip's trip assistant - a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers. Never use an em dash ("\u2014"); use commas or periods instead.
 
 If the user pastes a schedule, a list of times, tee times, or notes from an email or a text message, treat that as a request to add it to the plan. Work out the dates from the trip dates and whatever they wrote, put times in time, places in where, and say briefly what you understood before the block.
+
+The same goes for a PHOTO. If the user attaches an image, read everything on it: a booking confirmation, a tee sheet, a screenshot of a text, a printed schedule, handwriting on a napkin. Pull out the dates, times, places and names, and build the plan from that. If part of it is unreadable, say which part you could not make out and build the rest anyway rather than refusing. If the photo has no dates on it, map it onto the trip dates in order and say that is what you did.
 
 If - and ONLY if - the user asks you to change or add itinerary days, or pastes a schedule, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
 <<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet|tee","title":"...","where":"location or empty","dress":"dress code or empty","note":"one sentence"}]}]}<<<END>>>

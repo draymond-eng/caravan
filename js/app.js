@@ -275,7 +275,7 @@
   const state = {
     me: null, packing: {}, cityFilter: "all",
     days: [], allVotes: [], expenses: [], decisions: [], stayOptions: [],
-    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [], comments: [], groups: [],
+    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [], comments: [], groups: [], fares: [],
     liveRate: null,
   };
 
@@ -528,6 +528,7 @@
     J("announcements", Backend.list("announcements", TRIP_CODE, "created_at", false).then((r) => state.announcements = r));
     J("comments", Backend.list("comments", TRIP_CODE, "created_at", true).then((r) => state.comments = r));
     J("groups", Backend.list("groups", TRIP_CODE, "sort", true).then((r) => state.groups = r));
+    J("fares", Backend.list("fares", TRIP_CODE, "created_at", true).then((r) => state.fares = r).catch(() => {}));
     await Promise.all(jobs);
   }
 
@@ -2591,6 +2592,170 @@
   }
 
   /* =========================================================================
+     FARES - watch prices, log what people find, book when it hits target
+     Routes live on trips.links so adding one never needs a migration.
+     ====================================================================== */
+  const fareRoutes = () => ((TRIP.links || {}).fare_routes) || [];
+  const fareTarget = () => Number((TRIP.links || {}).fare_target) || 0;
+  const routeId = (from, to) => `${from}-${to}`;
+  /* Google Flights and Kayak both take the route and dates in the URL, so one
+     tap lands on the right search with price tracking one more tap away. */
+  function fareLinks(r) {
+    const dep = TRIP.start_date || "", ret = TRIP.end_date || "";
+    const g = "https://www.google.com/travel/flights?q=" +
+      encodeURIComponent(`Flights from ${r.from} to ${r.to} on ${dep} through ${ret}`);
+    const k = `https://www.kayak.com/flights/${encodeURIComponent(r.from)}-${encodeURIComponent(r.to)}/${dep}/${ret}`;
+    return { g, k };
+  }
+  /* A tiny inline chart. Enough to see the shape of the price without a library. */
+  function sparkline(values, target) {
+    if (values.length < 2) return "";
+    const w = 260, h = 44, pad = 3;
+    const all = target > 0 ? values.concat([target]) : values;
+    const lo = Math.min(...all), hi = Math.max(...all);
+    const span = hi - lo || 1;
+    const x = (i) => pad + (i * (w - pad * 2)) / (values.length - 1);
+    const y = (v) => pad + (h - pad * 2) * (1 - (v - lo) / span);
+    const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const tY = target > 0 ? y(target).toFixed(1) : null;
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" aria-hidden="true">
+      ${tY ? `<line x1="0" y1="${tY}" x2="${w}" y2="${tY}" stroke="var(--matcha)" stroke-width="1" stroke-dasharray="4 3" opacity=".7"/>` : ""}
+      <polyline points="${pts}" fill="none" stroke="var(--ai-2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(values.length - 1).toFixed(1)}" cy="${y(values[values.length - 1]).toFixed(1)}" r="3.2" fill="var(--vermilion)"/>
+    </svg>`;
+  }
+  function renderFares() {
+    const s = $("#screen-fares");
+    const routes = fareRoutes(), target = fareTarget();
+    const money = (n) => "$" + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const dates = TRIP.start_date && TRIP.end_date
+      ? `${fmtDate(TRIP.start_date).mon} ${fmtDate(TRIP.start_date).day} → ${fmtDate(TRIP.end_date).mon} ${fmtDate(TRIP.end_date).day}` : "your dates";
+    s.innerHTML = `
+      <div class="section-title">Fares</div>
+      <div class="section-sub">Set a free price alert per route, then log what you spot. ${target ? `Target: <b>${money(target)}</b> a person. Book when it hits.` : "Set a target and everyone knows when to pull the trigger."}</div>
+
+      ${routes.length ? `<div class="card">
+        <h3>📉 Set price alerts (free)</h3>
+        <p class="section-sub" style="margin:4px 0 12px">Open a route and tap <b>Track prices</b> on Google Flights. It emails you when the fare moves. Once per route is enough.</p>
+        ${routes.map((r) => {
+          const L = fareLinks(r);
+          return `<div class="row" style="padding-bottom:6px">
+            <div class="r-main"><div class="r-title">${esc(r.label || routeId(r.from, r.to))}</div>
+              <div class="r-sub">${r.who ? esc(r.who) : "Round trip"}</div></div>
+            <button class="btn danger" data-farerte="${esc(r.id)}">✕</button>
+          </div>
+          <div class="btn-row" style="margin:0 0 12px">
+            <a class="btn primary" href="${L.g}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none">Google Flights</a>
+            <a class="btn ghost" href="${L.k}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none">Kayak</a>
+          </div>`;
+        }).join("")}
+        <p class="section-sub" style="margin:2px 0 0">${dates} · round trip.</p>
+      </div>` : emptyState("📉", "No routes yet", "Add where people are flying from and SquadTrip will build the search links, so everyone can set a free price alert and log what they find.")}
+
+      ${routes.map((r) => {
+        const rows = state.fares.filter((f) => f.route === r.id)
+          .slice().sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+        const prices = rows.map((x) => Number(x.price)).filter((n) => n > 0);
+        const low = prices.length ? Math.min(...prices) : null;
+        const latest = prices.length ? prices[prices.length - 1] : null;
+        const hit = target > 0 && low != null && low <= target;
+        return `<div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <h3 style="margin:0">${esc(r.label || routeId(r.from, r.to))}</h3>
+            ${low != null ? `<span class="pill ${hit ? "s3" : "s1"}">low ${money(low)}</span>` : `<span class="pill any">no data</span>`}
+          </div>
+          ${prices.length >= 2 ? `<div style="margin:12px 0 4px">${sparkline(prices, target)}</div>` : ""}
+          <div class="r-sub" style="margin-top:6px">${latest != null
+            ? `Latest ${money(latest)} · ${prices.length} log${prices.length === 1 ? "" : "s"}${target ? ` · target ${money(target)}` : ""}${hit ? " · <b style=\"color:var(--matcha)\">at or under target, book it</b>" : ""}`
+            : "Nothing logged yet. Add the first price you see."}</div>
+          ${rows.slice().reverse().slice(0, 5).map((x) => {
+            const t = byId(x.author) || { name: "Someone", color: "#999" };
+            return `<div class="row">${avatarHTML(t, 26, 9)}
+              <div class="r-main"><div class="r-title">${money(x.price)}</div>
+                <div class="r-sub">${x.created_at ? esc(new Date(x.created_at).toLocaleDateString()) : ""}${x.note ? " · " + esc(x.note) : ""}</div></div>
+              ${x.author === state.me ? `<button class="btn danger" data-faredel="${esc(x.id)}">✕</button>` : ""}</div>`;
+          }).join("")}
+        </div>`;
+      }).join("")}
+
+      ${routes.length ? `<div class="card">
+        <h3>Log a price you found</h3>
+        <div class="expense-add">
+          <select id="fareRoute">${routes.map((r) => `<option value="${esc(r.id)}">${esc(r.label || routeId(r.from, r.to))}</option>`).join("")}</select>
+          <input id="farePrice" type="number" inputmode="decimal" placeholder="Price per person" />
+          <input id="fareNote" placeholder="Airline, site, anything worth remembering" />
+          <button class="btn primary" id="fareAdd">Log this price</button>
+        </div>
+        <div id="fareMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>` : ""}
+
+      <div class="card">
+        <h3>➕ Add a route</h3>
+        <p class="section-sub" style="margin:4px 0 10px">Airport codes. One per group of people flying from the same place.</p>
+        <div class="expense-add">
+          <div style="display:flex;gap:8px">
+            <input id="frFrom" placeholder="From (DCA)" maxlength="4" style="flex:1;text-transform:uppercase" />
+            <input id="frTo" placeholder="To (TPA)" maxlength="4" style="flex:1;text-transform:uppercase" />
+          </div>
+          <input id="frWho" placeholder="Who's on it (optional)" />
+          <button class="btn primary" id="frAdd">Add route</button>
+        </div>
+        <div class="check-cat" style="margin:16px 0 8px">Target price a person</div>
+        <div style="display:flex;gap:8px">
+          <input id="frTarget" type="number" inputmode="decimal" placeholder="e.g. 350" value="${target || ""}" style="flex:2" />
+          <button class="btn ghost" id="frTargetSave" style="flex:1">Save</button>
+        </div>
+        <div id="frMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>`;
+    const fa = $("#fareAdd"); if (fa) fa.addEventListener("click", addFare);
+    $("#frAdd").addEventListener("click", addFareRoute);
+    $("#frTargetSave").addEventListener("click", saveFareTarget);
+    s.querySelectorAll("[data-faredel]").forEach((b) => b.addEventListener("click", async () => {
+      state.fares = state.fares.filter((f) => f.id !== b.dataset.faredel);
+      renderFares();
+      await Backend.remove("fares", b.dataset.faredel);
+    }));
+    s.querySelectorAll("[data-farerte]").forEach((b) => b.addEventListener("click", () => removeFareRoute(b.dataset.farerte)));
+  }
+  async function saveFareLinks(next) {
+    const links = { ...(TRIP.links || {}), ...next };
+    TRIP.links = links;
+    renderFares();
+    const ok = await Backend.updateTrip(TRIP_CODE, { links });
+    const msg = $("#frMsg");
+    if (!ok && msg) msg.textContent = "Saved on this phone but the group didn't get it. Check your connection.";
+  }
+  async function addFareRoute() {
+    const from = $("#frFrom").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const to = $("#frTo").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const who = $("#frWho").value.trim();
+    if (from.length < 3 || to.length < 3) { $("#frMsg").textContent = "Both airport codes are needed, like DCA and TPA."; return; }
+    if (from === to) { $("#frMsg").textContent = "Those are the same airport."; return; }
+    const id = routeId(from, to);
+    if (fareRoutes().some((r) => r.id === id)) { $("#frMsg").textContent = "That route is already on the list."; return; }
+    await saveFareLinks({ fare_routes: fareRoutes().concat([{ id, from, to, who, label: `${from} → ${to}` }]) });
+  }
+  async function removeFareRoute(id) {
+    await saveFareLinks({ fare_routes: fareRoutes().filter((r) => r.id !== id) });
+  }
+  async function saveFareTarget() {
+    const v = parseFloat($("#frTarget").value);
+    if (!(v > 0)) { $("#frMsg").textContent = "Enter a number, or leave it blank for no target."; return; }
+    await saveFareLinks({ fare_target: v });
+  }
+  async function addFare() {
+    if (!state.me) { openWho(); return; }
+    const price = parseFloat($("#farePrice").value);
+    if (!(price > 0)) { $("#fareMsg").textContent = "Enter the price you saw."; return; }
+    const row = { trip: TRIP_CODE, route: $("#fareRoute").value, price,
+      note: $("#fareNote").value.trim().slice(0, 200), author: state.me };
+    const saved = await Backend.insert("fares", row);
+    if (!saved) { $("#fareMsg").textContent = "Couldn't save it. Has the fares table been added in Supabase?"; return; }
+    state.fares.push(saved);
+    renderFares();
+  }
+
+  /* =========================================================================
      BUDGET - expenses, settle-up, converter
      ====================================================================== */
   const effectiveRate = () => Number(state.liveRate) || 1;
@@ -3056,8 +3221,57 @@
   /* =========================================================================
      ASSISTANT - trip-aware AI chat with apply-able itinerary edits
      ====================================================================== */
-  let chatLog = null;      // [{role, content}]
+  let chatLog = null;      // [{role, content, photo}]
   let pendingDays = null;  // days block awaiting Apply
+  let pendingImage = null; // {media_type, data, preview} attached to the next send
+  /* A photo straight off a phone is many times bigger than the AI needs, and an
+     iPhone hands over HEIC that nothing else reads. Drawing it to a canvas and
+     re-encoding as JPEG fixes both at once. */
+  function shrinkForAI(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error("Couldn't read that file"));
+      fr.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("Couldn't open that image"));
+        img.onload = () => {
+          const max = 1400;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          c.getContext("2d").drawImage(img, 0, 0, w, h);
+          const url = c.toDataURL("image/jpeg", 0.82);
+          const data = url.split(",")[1] || "";
+          if (!data) return reject(new Error("Couldn't convert that image"));
+          resolve({ media_type: "image/jpeg", data, preview: url });
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  function pickChatPhoto() {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.addEventListener("change", async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      const st = $("#chatStatus"); if (st) st.textContent = "Reading the photo…";
+      try {
+        pendingImage = await shrinkForAI(f);
+        renderAssistant();
+        $("#chatStatus").textContent = "Photo attached. Add a note if you want, then hit Send.";
+      } catch (e) {
+        pendingImage = null;
+        renderAssistant();
+        $("#chatStatus").textContent = (e && e.message ? e.message : "Couldn't read that image") + ". A screenshot usually works.";
+      }
+    });
+    inp.click();
+  }
+
   function renderAssistant() {
     const s = $("#screen-assistant");
     if (chatLog == null) chatLog = LS.get("chat", []);
@@ -3065,11 +3279,12 @@
       <div class="section-title">Assistant</div>
       <div class="section-sub">Knows this trip: the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
       <div id="chatFeed">
-        ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join("")
+        ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${m.photo ? "📷 " : ""}${esc(m.content)}</div>`).join("")
           : `<div class="card ai-card">
               <h3>📋 Paste your schedule and I'll build it</h3>
-              <p class="section-sub" style="margin:4px 0 10px">Drop it in however you have it: a text from the group, a list of tee times, notes from an email. I'll turn it into days on the Plan tab for you to approve.</p>
-              <button class="btn primary" id="chatPaste" style="width:100%">Paste a schedule</button>
+              <p class="section-sub" style="margin:4px 0 10px">However you have it: a text from the group, a list of tee times, an email, or a photo of the confirmation. I'll turn it into days on the Plan tab for you to approve.</p>
+              <button class="btn primary" id="chatPaste" style="width:100%;margin-bottom:8px">Paste a schedule</button>
+              <button class="btn ghost" id="chatPhoto" style="width:100%">📷 Upload a photo of it</button>
             </div>
             <div class="card"><h3>✨ Or just ask</h3><p class="section-sub" style="margin:4px 0 10px">I know your dates, stops, itinerary, votes and who's coming.</p><div class="r-sub" style="line-height:2">
               “What's our most packed day, and how would you lighten it?”<br>
@@ -3091,14 +3306,23 @@
         </div>
       </div>` : ""}
       <div class="card" style="position:sticky;bottom:calc(var(--nav-h) + 10px)">
+        ${pendingImage ? `<div class="chat-attach">
+          <img src="${pendingImage.preview}" alt="Attached photo" />
+          <div class="r-sub" style="flex:1">Photo ready to send. I'll read the times and places off it.</div>
+          <button class="btn danger" id="chatDrop">✕</button>
+        </div>` : ""}
         <div style="display:flex;gap:8px">
-          <textarea id="chatInput" rows="1" placeholder="Ask, or paste a schedule…" style="flex:1;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:none;max-height:40vh"></textarea>
+          <button class="btn ghost" id="chatCam" aria-label="Attach a photo" style="padding:12px 13px;font-size:17px">📷</button>
+          <textarea id="chatInput" rows="1" placeholder="Ask, paste a schedule, or attach a photo…" style="flex:1;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:none;max-height:40vh"></textarea>
           <button class="btn primary" id="chatSend">Send</button>
         </div>
         <div id="chatStatus" class="r-sub" style="margin-top:6px"></div>
       </div>`;
     const send = () => sendChat();
     $("#chatSend").addEventListener("click", send);
+    $("#chatCam").addEventListener("click", pickChatPhoto);
+    const cph = $("#chatPhoto"); if (cph) cph.addEventListener("click", pickChatPhoto);
+    const cd = $("#chatDrop"); if (cd) cd.addEventListener("click", () => { pendingImage = null; renderAssistant(); });
     const cp = $("#chatPaste"); if (cp) cp.addEventListener("click", () => {
       const inp = $("#chatInput");
       inp.value = "Here is our schedule, please add it to the plan:\n\n";
@@ -3114,18 +3338,30 @@
   }
   async function sendChat() {
     const inp = $("#chatInput"), st = $("#chatStatus");
-    const text = inp.value.trim(); if (!text) return;
-    chatLog.push({ role: "user", content: text });
+    const text = inp.value.trim();
+    const img = pendingImage;
+    if (!text && !img) return;
+    chatLog.push({ role: "user", content: text || "Here is our schedule. Please read it and add it to the plan.", photo: !!img });
+    // The base64 never goes into storage; it would fill the quota in a few sends.
     LS.set("chat", chatLog.slice(-30));
     inp.value = "";
+    pendingImage = null;
     renderAssistant();
-    $("#chatStatus").textContent = "✨ Thinking…";
+    $("#chatStatus").textContent = img ? "✨ Reading the photo…" : "✨ Thinking…";
     try {
       const cfg = window.CARAVAN_CONFIG;
+      const history = chatLog.slice(-12).map((m) => ({ role: m.role, content: m.content }));
+      if (img) {
+        const last = history[history.length - 1];
+        last.content = [
+          { type: "image", source: { type: "base64", media_type: img.media_type, data: img.data } },
+          { type: "text", text: last.content },
+        ];
+      }
       const res = await fetch(`${cfg.url}/functions/v1/generate-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
-        body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: chatLog.slice(-12) }),
+        body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: history }),
       });
       const data = await res.json().catch(() => ({}));
       if (!data.ok) { chatLog.push({ role: "assistant", content: "⚠️ " + (data.error || "Something went wrong. Try again.") }); }
@@ -3519,6 +3755,7 @@
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
     settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups, map: renderMap,
+    fares: renderFares,
   };
   function renderCurrent() {
     if (!TRIP) return;
