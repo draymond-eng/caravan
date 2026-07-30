@@ -1198,12 +1198,178 @@
   }
 
   /* =========================================================================
+     SETTINGS — edit the trip after creation
+     ====================================================================== */
+  function renderSettings() {
+    const s = $("#screen-settings");
+    const inp = (id, val, ph, type = "text") =>
+      `<input id="${id}" type="${type}" value="${esc(val ?? "")}" placeholder="${esc(ph)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />`;
+    s.innerHTML = `
+      <div class="section-title">Trip settings</div>
+      <div class="section-sub">Changes apply for everyone on the trip.</div>
+
+      <div class="card">
+        <h3>Basics</h3>
+        <label class="wiz-label">Trip name</label>${inp("stName", TRIP.name, "Trip name")}
+        <label class="wiz-label">Destination</label>${inp("stDest", TRIP.destination, "Destination")}
+        <div style="display:flex;gap:10px">
+          <div style="flex:1"><label class="wiz-label">First day</label>${inp("stStart", TRIP.start_date, "", "date")}</div>
+          <div style="flex:1"><label class="wiz-label">Last day</label>${inp("stEnd", TRIP.end_date, "", "date")}</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1"><label class="wiz-label">Their money</label>${inp("stCur", TRIP.currency, "JPY")}</div>
+          <div style="flex:1"><label class="wiz-label">Your money</label>${inp("stHomeCur", TRIP.home_currency, "USD")}</div>
+        </div>
+        <label class="wiz-label">Destination timezone</label>
+        <input id="stTz" list="tzlist2" value="${esc(TRIP.tz)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
+        <datalist id="tzlist2">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
+        <button class="btn primary" id="stSaveBasics" style="width:100%;margin-top:14px">Save basics</button>
+        <div id="stBasicsMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Travelers</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Rename anyone, add newcomers, or remove someone.</p>
+        <div id="stTravs">
+          ${(TRIP.travelers || []).map((t, i) => `<div class="trav-row">
+            ${avatarHTML(t, 34, 12)}
+            <input data-sttrav="${i}" value="${esc(t.name)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+            <button class="rm" data-strmtrav="${i}" title="Remove">✕</button>
+          </div>`).join("")}
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn ghost" id="stAddTrav" style="flex:1">＋ Add traveler</button>
+          <button class="btn primary" id="stSaveTravs" style="flex:1">Save travelers</button>
+        </div>
+        <div id="stTravMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>Stops</h3>
+        <p class="section-sub" style="margin:2px 0 10px">The bases you'll sleep in, in order. Removing a stop hides its stay submissions.</p>
+        <div id="stStops">
+          ${(TRIP.stops || []).map((st, i) => `<div class="trav-row">
+            <input data-ststop="${i}" value="${esc(st.label)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+            <button class="rm" data-strmstop="${i}" title="Remove">✕</button>
+          </div>`).join("")}
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn ghost" id="stAddStop" style="flex:1">＋ Add stop</button>
+          <button class="btn primary" id="stSaveStops" style="flex:1">Save stops</button>
+        </div>
+        <div id="stStopMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>AI plan</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Clear the itinerary or guide to unlock a fresh ✨ AI draft (${Math.max(0, 6 - (TRIP.gen_count || 0))} generation${6 - (TRIP.gen_count || 0) === 1 ? "" : "s"} left).</p>
+        <div class="btn-row">
+          <button class="btn ghost" id="stClearPlan" style="flex:1">Clear itinerary</button>
+          <button class="btn ghost" id="stClearGuide" style="flex:1">Clear guide</button>
+        </div>
+        <div id="stAiMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card" style="border-color:var(--sakura-deep)">
+        <h3 style="color:var(--vermilion)">Danger zone</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Deletes the trip and everything in it, for everyone. No undo.</p>
+        <button class="btn danger" id="stDelete" style="width:100%;padding:12px">Delete this trip forever</button>
+      </div>`;
+
+    $("#stSaveBasics").addEventListener("click", async () => {
+      const patch = {
+        name: $("#stName").value.trim() || TRIP.name,
+        destination: $("#stDest").value.trim(),
+        start_date: $("#stStart").value || TRIP.start_date,
+        end_date: $("#stEnd").value || TRIP.end_date,
+        currency: ($("#stCur").value.trim() || "USD").toUpperCase(),
+        home_currency: ($("#stHomeCur").value.trim() || "USD").toUpperCase(),
+        tz: $("#stTz").value.trim() || TRIP.tz,
+      };
+      if (patch.end_date < patch.start_date) { $("#stBasicsMsg").textContent = "Last day can't be before the first day."; return; }
+      Object.assign(TRIP, patch);
+      $("#stBasicsMsg").textContent = "Saved ✓";
+      $("#brandName").textContent = TRIP.name;
+      $("#brandSub").textContent = fmtRange(TRIP.start_date, TRIP.end_date);
+      await Backend.updateTrip(TRIP.code, patch);
+      loadRate();
+    });
+
+    $("#stAddTrav").addEventListener("click", () => {
+      TRIP.travelers = [...(TRIP.travelers || []), { id: "t" + Date.now().toString(36), name: "New traveler", color: PALETTE[(TRIP.travelers || []).length % PALETTE.length] }];
+      renderSettings();
+    });
+    $$("#stTravs [data-strmtrav]").forEach((b) => b.addEventListener("click", () => {
+      const i = +b.dataset.strmtrav;
+      const t = TRIP.travelers[i];
+      if (!confirm(`Remove ${t.name} from the trip?`)) return;
+      TRIP.travelers = TRIP.travelers.filter((_, x) => x !== i);
+      if (state.me === t.id) { state.me = null; LS.set("me", null); renderWhoami(); }
+      renderSettings();
+      Backend.updateTrip(TRIP.code, { travelers: TRIP.travelers });
+    }));
+    $("#stSaveTravs").addEventListener("click", async () => {
+      $$("#stTravs [data-sttrav]").forEach((inp2) => {
+        const i = +inp2.dataset.sttrav;
+        if (TRIP.travelers[i]) TRIP.travelers[i].name = inp2.value.trim() || TRIP.travelers[i].name;
+      });
+      $("#stTravMsg").textContent = "Saved ✓";
+      await Backend.updateTrip(TRIP.code, { travelers: TRIP.travelers });
+      renderWhoami();
+    });
+
+    $("#stAddStop").addEventListener("click", () => {
+      TRIP.stops = [...(TRIP.stops || []), { id: "s" + Date.now().toString(36), label: "New stop" }];
+      renderSettings();
+    });
+    $$("#stStops [data-strmstop]").forEach((b) => b.addEventListener("click", () => {
+      const i = +b.dataset.strmstop;
+      if (!confirm(`Remove ${TRIP.stops[i].label}?`)) return;
+      TRIP.stops = TRIP.stops.filter((_, x) => x !== i);
+      renderSettings();
+      Backend.updateTrip(TRIP.code, { stops: TRIP.stops });
+    }));
+    $("#stSaveStops").addEventListener("click", async () => {
+      $$("#stStops [data-ststop]").forEach((inp2) => {
+        const i = +inp2.dataset.ststop;
+        if (TRIP.stops[i]) TRIP.stops[i].label = inp2.value.trim() || TRIP.stops[i].label;
+      });
+      $("#stStopMsg").textContent = "Saved ✓";
+      await Backend.updateTrip(TRIP.code, { stops: TRIP.stops });
+    });
+
+    $("#stClearPlan").addEventListener("click", async () => {
+      if (!confirm("Clear the whole itinerary for everyone?")) return;
+      $("#stAiMsg").textContent = "Clearing…";
+      await Backend.clearTable("days", TRIP.code);
+      state.days = [];
+      $("#stAiMsg").textContent = "Itinerary cleared — the ✨ AI card is back on the Plan tab.";
+    });
+    $("#stClearGuide").addEventListener("click", async () => {
+      if (!confirm("Clear the destination guide + neighborhoods?")) return;
+      $("#stAiMsg").textContent = "Clearing…";
+      await Backend.clearTable("guides", TRIP.code);
+      state.guides = [];
+      $("#stAiMsg").textContent = "Guide cleared.";
+    });
+
+    $("#stDelete").addEventListener("click", async () => {
+      const typed = prompt(`This deletes "${TRIP.name}" for EVERYONE, permanently.\nType the trip code (${TRIP.code}) to confirm:`);
+      if ((typed || "").trim().toUpperCase() !== TRIP.code) { alert("Code didn't match — nothing deleted."); return; }
+      await Backend.deleteTrip(TRIP.code);
+      LSG.set("mytrips", LSG.get("mytrips", []).filter((t) => t.code !== TRIP.code));
+      location.href = location.pathname; // back to the landing page
+    });
+  }
+
+  /* =========================================================================
      BOOT / RENDER
      ====================================================================== */
   const RENDERERS = {
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
+    settings: renderSettings,
   };
   function renderCurrent() {
     if (!TRIP) return;

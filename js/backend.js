@@ -60,6 +60,20 @@
     } catch (e) { console.warn("castVote", e); return false; }
   }
 
+  /* ---- Bulk helpers --------------------------------------------------------- */
+  async function clearTable(table, trip) {
+    try { await client.from(table).delete().eq("trip", trip); return true; }
+    catch (e) { console.warn("clearTable " + table, e); return false; }
+  }
+  async function deleteTrip(code) {
+    try {
+      const tables = ["days", "votes", "expenses", "decisions", "stay_options", "ideas", "flights", "notes", "confirmations", "photos", "guides"];
+      for (const t of tables) await client.from(t).delete().eq("trip", code);
+      await client.from("trips").delete().eq("code", code);
+      return true;
+    } catch (e) { console.warn("deleteTrip", e); return false; }
+  }
+
   /* ---- Flights (upsert per traveler+dir) ------------------------------------ */
   async function upsertFlight(row) {
     try { const { data, error } = await client.from("flights").upsert(row, { onConflict: "trip,traveler,dir" }).select().single(); if (error) throw error; return data; }
@@ -97,8 +111,8 @@
 
   window.Backend = {
     init, isReady: () => ready, configured,
-    createTrip, getTrip, updateTrip,
-    list, insert, update, remove,
+    createTrip, getTrip, updateTrip, deleteTrip,
+    list, insert, update, remove, clearTable,
     castVote, upsertFlight,
     uploadFile, removeFile,
     subscribe,
