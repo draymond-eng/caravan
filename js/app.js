@@ -591,13 +591,51 @@
     bindGoDelegate();
     $$(".tab[data-screen]").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $$(".sheet-item").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
-    $("#moreTab").addEventListener("click", () => { $("#moreSheet").classList.add("open"); $("#sheetBackdrop").classList.add("open"); });
+    // Tapping More again puts the sheet away, the same as tapping it opened it.
+    $("#moreTab").addEventListener("click", () => {
+      const sheet = $("#moreSheet");
+      if (sheet.classList.contains("open")) return closeSheet();
+      sheet.classList.add("open"); $("#sheetBackdrop").classList.add("open");
+    });
     $("#sheetBackdrop").addEventListener("click", closeSheet);
+    bindSheetGrab();
     $("#whoamiBtn").addEventListener("click", openWho);
     $("#whoClose").addEventListener("click", () => $("#whoModal").classList.remove("open"));
     $("#whoModal").addEventListener("click", (e) => { if (e.target.id === "whoModal") $("#whoModal").classList.remove("open"); });
   }
-  function closeSheet() { $("#moreSheet").classList.remove("open"); $("#sheetBackdrop").classList.remove("open"); }
+  function closeSheet() {
+    const sheet = $("#moreSheet");
+    sheet.classList.remove("open");
+    sheet.style.transform = "";
+    $("#sheetBackdrop").classList.remove("open");
+  }
+  /* The handle looks like every drag-to-dismiss pill on a phone, so it has to
+     work like one: tap closes it, and a drag down follows your thumb. */
+  function bindSheetGrab() {
+    const hit = $("#sheetGrab"), sheet = $("#moreSheet");
+    if (!hit || !sheet) return;
+    let startY = null, dy = 0;
+    hit.addEventListener("click", (e) => { e.preventDefault(); if (dy < 6) closeSheet(); });
+    const down = (y) => { startY = y; dy = 0; sheet.style.transition = "none"; };
+    const move = (y) => {
+      if (startY == null) return;
+      dy = Math.max(0, y - startY);
+      sheet.style.transform = `translateX(-50%) translateY(${dy}px)`;
+    };
+    const up = () => {
+      if (startY == null) return;
+      startY = null;
+      sheet.style.transition = "";
+      if (dy > 60) closeSheet(); else sheet.style.transform = "";
+    };
+    hit.addEventListener("touchstart", (e) => down(e.touches[0].clientY), { passive: true });
+    hit.addEventListener("touchmove", (e) => { move(e.touches[0].clientY); if (dy > 4) e.preventDefault(); }, { passive: false });
+    hit.addEventListener("touchend", up);
+    hit.addEventListener("touchcancel", up);
+    hit.addEventListener("pointerdown", (e) => { if (e.pointerType !== "touch") down(e.clientY); });
+    window.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch") move(e.clientY); });
+    window.addEventListener("pointerup", (e) => { if (e.pointerType !== "touch") up(); });
+  }
   function show(screen) {
     $$("#tripApp .screen").forEach((s) => s.classList.remove("active"));
     const el = $("#screen-" + screen); if (el) el.classList.add("active");

@@ -443,7 +443,13 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   transition: transform .3s cubic-bezier(.2,.85,.2,1); box-shadow: var(--shadow-lg); border-top: 1px solid var(--line);
   max-height: 82vh; overflow-y: auto; }
 .sheet.open { transform: translateX(-50%) translateY(0); }
-.sheet .grab { width: 38px; height: 5px; background: var(--line); border-radius: 999px; margin: 7px auto 16px; }
+/* The pill reads as a drag handle, so it has to behave like one: a wide,
+   thumb-sized target that closes the sheet, and a drag-down that does too. */
+.sheet .grab-hit { display: block; width: 100%; padding: 10px 0 14px; margin: 0 0 4px;
+  background: none; border: 0; touch-action: none; }
+.sheet .grab { display: block; width: 38px; height: 5px; background: var(--line); border-radius: 999px; margin: 0 auto;
+  transition: background .15s, width .15s; }
+.sheet .grab-hit:active .grab { background: var(--ink-3); width: 46px; }
 .sheet h4 { font-family: var(--serif); margin: 0 0 13px; font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); font-weight: 600; }
 .sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .sheet-item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line);
@@ -541,6 +547,9 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
     var(--g-dusk);
   color: #f6f1e8; box-shadow: var(--shadow-lg); }
 .ai-card h3 { color: #fff; }
+/* A ghost button defaults to dark ink, which vanishes on the dusk card. */
+.ai-card .btn.ghost { color: #f6f1e8; border-color: rgba(246,241,232,.42); background: rgba(255,255,255,.10); }
+.ai-card .btn.ghost:active { background: rgba(255,255,255,.18); }
 .ai-card .section-sub, .ai-card .r-sub { color: rgba(246,241,232,.82); }
 .ai-card::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .6;
   background-image: radial-gradient(rgba(255,255,255,.4) 1px, transparent 1.5px);
