@@ -1,0 +1,14 @@
+{
+  "name": "Caravan",
+  "short_name": "Caravan",
+  "description": "Plan group trips together — shared itinerary, votes, stays, budget, photos. One link, no accounts.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3ede2",
+  "theme_color": "#1e3150",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

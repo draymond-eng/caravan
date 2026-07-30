@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <title>Caravan · plan trips together</title>
+  <meta name="description" content="Caravan — plan group trips together. Shared itinerary, decisions and voting, stays, budget splitting, photos, and more. No accounts, just a link." />
+  <meta name="theme-color" content="#1e3150" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icon.svg" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Caravan" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- ============ LANDING (no trip code in URL) ============ -->
+    <div id="landing" style="display:none">
+      <div class="screen active" style="padding-top:28px">
+        <div class="hero" style="margin-bottom:22px">
+          <div class="sun"></div>
+          <div class="kicker">Plan trips together</div>
+          <h1>caravan</h1>
+          <div class="dates">Shared itinerary · group votes · split costs · one link, no accounts</div>
+        </div>
+
+        <div id="landingSetup"></div>
+
+        <div class="card">
+          <h3>Join a trip</h3>
+          <p class="section-sub" style="margin:4px 0 12px">Got a code from your group? Punch it in.</p>
+          <div style="display:flex;gap:8px">
+            <input id="joinCode" placeholder="e.g. X7KQ2P" maxlength="8" autocapitalize="characters"
+                   style="flex:1;padding:13px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:17px;letter-spacing:3px;font-weight:700;text-transform:uppercase;background:#fffdfa;color:var(--ink)" />
+            <button class="btn primary" id="joinBtn">Join</button>
+          </div>
+          <div id="joinErr" class="r-sub" style="color:var(--vermilion);margin-top:8px"></div>
+        </div>
+
+        <div class="card" id="createCard">
+          <h3>Start a new trip</h3>
+          <p class="section-sub" style="margin:4px 0 12px">Name it, add your crew, get a code to share. ~2 minutes.</p>
+          <button class="btn primary" id="createBtn" style="width:100%">＋ Create a trip</button>
+        </div>
+
+        <div id="myTrips"></div>
+
+        <div class="foot-note">caravan · your group's trip, in everyone's pocket</div>
+      </div>
+
+      <!-- Create-trip wizard (modal) -->
+      <div class="modal-backdrop" id="wizModal">
+        <div class="modal" style="max-height:86vh;overflow-y:auto">
+          <h3>Create your trip</h3>
+          <div id="wizBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ TRIP APP (has trip code) ============ -->
+    <div id="tripApp" style="display:none">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark">🧭</span>
+          <div>
+            <div class="name" id="brandName">Caravan</div>
+            <div class="sub" id="brandSub"></div>
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <button class="whoami" id="whoamiBtn" aria-label="Set who you are">
+          <span id="whoamiAvatar">👤</span>
+          <span id="whoamiName">Who are you?</span>
+        </button>
+      </header>
+
+      <main>
+        <section class="screen active" id="screen-home"></section>
+        <section class="screen" id="screen-itinerary"></section>
+        <section class="screen" id="screen-crew"></section>
+        <section class="screen" id="screen-decisions"></section>
+        <section class="screen" id="screen-stays"></section>
+        <section class="screen" id="screen-flights"></section>
+        <section class="screen" id="screen-budget"></section>
+        <section class="screen" id="screen-vault"></section>
+        <section class="screen" id="screen-photos"></section>
+        <section class="screen" id="screen-notes"></section>
+        <section class="screen" id="screen-ideas"></section>
+        <section class="screen" id="screen-packing"></section>
+        <section class="screen" id="screen-translate"></section>
+      </main>
+
+      <nav class="tabbar" id="tabbar">
+        <button class="tab active" data-screen="home"><span class="ti"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9.5 20v-5.5h5V20"/></svg></span>Home</button>
+        <button class="tab" data-screen="itinerary"><span class="ti"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg></span>Plan</button>
+        <button class="tab" data-screen="decisions"><span class="ti"><svg viewBox="0 0 24 24"><path d="M7 13.5 10.5 17 17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="3"/></svg></span>Votes</button>
+        <button class="tab" data-screen="crew"><span class="ti"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17 14.8c2.3.5 4 2.4 4 5.2"/></svg></span>Crew</button>
+        <button class="tab" id="moreTab"><span class="ti"><svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span>More</button>
+      </nav>
+
+      <div class="sheet-backdrop" id="sheetBackdrop"></div>
+      <div class="sheet" id="moreSheet" role="dialog" aria-label="More sections">
+        <div class="grab"></div>
+        <h4>More</h4>
+        <div class="sheet-grid">
+          <button class="sheet-item" data-screen="stays"><span class="si">🏨</span> Stays</button>
+          <button class="sheet-item" data-screen="flights"><span class="si">✈️</span> Flights</button>
+          <button class="sheet-item" data-screen="budget"><span class="si">💰</span> Budget</button>
+          <button class="sheet-item" data-screen="vault"><span class="si">🔐</span> Vault</button>
+          <button class="sheet-item" data-screen="photos"><span class="si">📸</span> Photos</button>
+          <button class="sheet-item" data-screen="notes"><span class="si">📝</span> Notes</button>
+          <button class="sheet-item" data-screen="ideas"><span class="si">💡</span> Ideas</button>
+          <button class="sheet-item" data-screen="packing"><span class="si">🧳</span> Packing</button>
+          <button class="sheet-item" data-screen="translate"><span class="si">🗣️</span> Translate</button>
+        </div>
+      </div>
+
+      <div class="modal-backdrop" id="whoModal" role="dialog" aria-label="Who are you?">
+        <div class="modal">
+          <h3>Who are you?</h3>
+          <p class="section-sub" style="margin-top:-8px">Pick yourself so votes and entries are tagged to you (saved on this phone).</p>
+          <div id="whoOptions"></div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn ghost" id="whoClose" style="flex:1">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/backend.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
