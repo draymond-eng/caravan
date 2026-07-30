@@ -44,7 +44,7 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
     return null;
   }
   const ai = await resp.json();
-  return ai?.content?.[0]?.text ?? "";
+  return ai?.content?.find((c: { type?: string }) => c?.type === "text")?.text ?? "";
 }
 async function askClaude(prompt: string): Promise<Record<string, unknown> | null> {
   let text = await callAnthropic({ max_tokens: 8000, messages: [{ role: "user", content: prompt }] });
