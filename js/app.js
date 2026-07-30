@@ -330,6 +330,7 @@
 
   async function bootTrip() {
     $("#tripApp").style.display = "block";
+    try { bindShell(); } catch (e) { console.warn("bindShell", e); } // navigation works no matter what
     let backendUp = false;
     try { backendUp = !!Backend.init(TRIP_CODE); } catch (e) { console.warn("init", e); }
     if (!HAS_BACKEND || !backendUp) {
@@ -359,7 +360,6 @@
     await hydrate("all");
     startSync();
 
-    bindShell();
     renderAll();
     renderWhoami();
     if (!LSG.get("onboarded", false)) setTimeout(openWelcome, 500);
@@ -430,7 +430,7 @@
     $("#whoClose").addEventListener("click", () => $("#whoModal").classList.remove("open"));
     $("#whoModal").addEventListener("click", (e) => { if (e.target.id === "whoModal") $("#whoModal").classList.remove("open"); });
   }
-  const closeSheet = () => { $("#moreSheet").classList.remove("open"); $("#sheetBackdrop").classList.remove("open"); };
+  function closeSheet() { $("#moreSheet").classList.remove("open"); $("#sheetBackdrop").classList.remove("open"); }
   function show(screen) {
     $$("#tripApp .screen").forEach((s) => s.classList.remove("active"));
     const el = $("#screen-" + screen); if (el) el.classList.add("active");
@@ -2397,7 +2397,14 @@
     if (!TRIP) return;
     const active = $("#tripApp .screen.active");
     const id = active ? active.id.replace("screen-", "") : "home";
-    if (RENDERERS[id]) RENDERERS[id]();
+    if (!RENDERERS[id]) return;
+    try { RENDERERS[id](); }
+    catch (e) {
+      console.error("render " + id, e);
+      const el = $("#screen-" + id);
+      if (el) el.innerHTML = `<div class="card" style="margin-top:16px"><h3>😕 This screen hit a snag</h3>
+        <p class="r-sub" style="margin:6px 0 0">${esc(String(e && e.message ? e.message : e))}</p></div>`;
+    }
   }
   function renderAll() { renderCurrent(); }
 
