@@ -303,3 +303,25 @@ do $$ begin
   create policy "trip scoped" on public.fares for all
     using (trip = public.req_trip()) with check (trip = public.req_trip());
 exception when duplicate_object then null; end $$;
+
+-- Wedding day-of operations: the run of show and the vendor list. Host-only in
+-- the UI; kind separates them so one table serves both. Safe to re-run.
+create table if not exists public.wedding_ops (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null references public.trips(code) on delete cascade,
+  kind       text not null default 'run',   -- 'run' = run of show, 'vendor'
+  time       text default '',               -- 'HH:MM' for run items
+  label      text not null default '',      -- what happens / vendor role
+  who        text default '',               -- who it involves / vendor name
+  phone      text default '',
+  note       text default '',
+  sort       int default 0,
+  created_at timestamptz default now()
+);
+create index if not exists wedding_ops_trip_idx on public.wedding_ops(trip, kind);
+
+alter table public.wedding_ops enable row level security;
+do $$ begin
+  create policy "trip scoped" on public.wedding_ops for all
+    using (trip = public.req_trip()) with check (trip = public.req_trip());
+exception when duplicate_object then null; end $$;

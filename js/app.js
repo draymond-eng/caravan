@@ -275,7 +275,7 @@
   const state = {
     me: null, packing: {}, cityFilter: "all",
     days: [], allVotes: [], expenses: [], decisions: [], stayOptions: [],
-    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [], comments: [], groups: [], fares: [],
+    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [], comments: [], groups: [], fares: [], ops: [],
     liveRate: null,
   };
 
@@ -529,6 +529,7 @@
     J("comments", Backend.list("comments", TRIP_CODE, "created_at", true).then((r) => state.comments = r));
     J("groups", Backend.list("groups", TRIP_CODE, "sort", true).then((r) => state.groups = r));
     J("fares", Backend.list("fares", TRIP_CODE, "created_at", true).then((r) => state.fares = r).catch(() => {}));
+    J("wedding_ops", Backend.list("wedding_ops", TRIP_CODE, "sort", true).then((r) => state.ops = r).catch(() => {}));
     await Promise.all(jobs);
   }
 
@@ -1136,7 +1137,7 @@
       <div class="countdown" id="countdown"></div>
       <div class="clocks" id="clocks"></div>
 
-      ${isWedding() ? weddingLinksCard() : ""}
+      ${isWedding() ? weddingYouCard() + weddingLinksCard() : ""}
 
       <div class="section-title" style="margin-top:20px">${isWedding() ? "Who's coming" : "The crew"}</div>
       <div class="card">
@@ -1169,16 +1170,7 @@
         .then(() => { $("#hostMsg2").textContent = "Copied. Paste it straight into an email."; })
         .catch(() => { $("#hostMsg2").textContent = "Couldn't copy on this device."; });
     });
-    const hn = $("#hostNudge"); if (hn) hn.addEventListener("click", () => {
-      const t = tally("wrsvp", "attend");
-      const responded = new Set(Object.values(t).flat());
-      const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id));
-      const L = TRIP.links || {};
-      const msg = `Quick nudge about ${TRIP.name}: we still need your RSVP${L.rsvp_deadline ? ` by ${L.rsvp_deadline}` : ""}. It takes a minute here: ${location.origin + location.pathname}?t=${TRIP.code}`;
-      navigator.clipboard?.writeText(`${waiting.map((w) => w.name).join(", ")}\n\n${msg}`)
-        .then(() => { $("#hostMsg2").textContent = `Copied a nudge for ${waiting.length}. Paste it into your group chat or an email.`; })
-        .catch(() => { $("#hostMsg2").textContent = "Couldn't copy on this device."; });
-    });
+    const hn = $("#hostNudge"); if (hn) hn.addEventListener("click", () => nudgeMissing());
     const tzf = $("#tzFixNow"); if (tzf) tzf.addEventListener("click", async () => {
       const guess = tzForCity(TRIP.destination) || tzForCity((TRIP.stops || [])[0] && TRIP.stops[0].label);
       $("#tzFixMsg").textContent = "Saving…";
@@ -1285,6 +1277,43 @@
       })() : ""}
     </div>`;
   }
+  /* One card that answers "where do I go and what do I wear", pulled from what
+     the hosts already filled in. Guests should not have to hunt five tabs. */
+  function weddingYouCard() {
+    if (!isWedding() || isHost() || !state.me) return "";
+    const mine = myVote("wrsvp", "attend");
+    if (typeof mine !== "string" || !mine.startsWith("yes")) return "";
+    const today = new Date().toISOString().slice(0, 10);
+    const next = (state.days || []).filter((d) => d.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+    const ev = next && (next.items || [])[0];
+    const table = myTable();
+    const mineFlight = (state.flights || []).find((f) => f.traveler === state.me && f.dir === "arrive");
+    const shuttle = mineFlight && mineFlight.time
+      ? `${String(mineFlight.time).slice(0, 2)}:00 window${mineFlight.airport ? " from " + esc(mineFlight.airport) : ""}`
+      : "";
+    const seats = myParty().length || (parseInt(mine.split(":")[1], 10) || 1);
+    const rows = [];
+    if (next) {
+      const f = fmtDate(next.date);
+      rows.push(["🗓️", "Next up", `${f.wd} ${f.mon} ${f.day} · ${esc(next.title)}${ev && ev.time ? " at " + esc(ev.time) : ""}`]);
+      if (ev && ev.where) rows.push(["📍", "Where", esc(ev.where)]);
+      if (ev && ev.dress) rows.push(["👗", "Dress code", esc(ev.dress)]);
+    }
+    if (table) rows.push(["🪑", "Your table", esc(table)]);
+    if (shuttle) rows.push(["🚐", "Your shuttle", shuttle]);
+    rows.push(["🎟️", "Your party", `${seats} ${seats === 1 ? "seat" : "seats"}`]);
+    if (!rows.length) return "";
+    return `<div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fdfaf3,#fffdf8)">
+      <h3>✨ Your wedding at a glance</h3>
+      <div style="margin-top:10px">
+        ${rows.map(([emoji, label, val]) => `<div class="row" style="padding:7px 0">
+          <span style="font-size:17px;width:26px;text-align:center">${emoji}</span>
+          <div class="r-main"><div class="r-sub" style="font-size:11px;letter-spacing:.6px;text-transform:uppercase">${label}</div>
+            <div class="r-title" style="font-size:14.5px">${val}</div></div>
+        </div>`).join("")}
+      </div>
+    </div>`;
+  }
   function weddingLinksCard() {
     const L = TRIP.links || {};
     const rows = [
@@ -1351,6 +1380,42 @@
       ${faq.map((f) => `<details style="margin-top:10px"><summary style="font-weight:700;font-size:13.5px;cursor:pointer">${esc(f.q)}</summary>
         <p style="margin:6px 0 0;font-size:13px;color:var(--ink-2);line-height:1.55">${esc(f.a)}</p></details>`).join("")}
     </div>`;
+  }
+  /* Buzz the phones that have alerts on, then hand the rest to the share sheet
+     so the nudge actually leaves the app instead of sitting on a clipboard. */
+  async function nudgeMissing() {
+    const say = (m) => { const el = $("#hostMsg2"); if (el) el.textContent = m; };
+    const t = tally("wrsvp", "attend");
+    const responded = new Set(Object.values(t).flat());
+    const waiting = (TRIP.travelers || []).filter((tr) => !responded.has(tr.id));
+    if (!waiting.length) { say("Everyone has answered."); return; }
+    const L = TRIP.links || {};
+    const link = `${location.origin + location.pathname}?t=${TRIP.code}`;
+    const msg = `Quick nudge about ${TRIP.name}: we still need your RSVP${L.rsvp_deadline ? ` by ${L.rsvp_deadline}` : ""}. It takes a minute here: ${link}`;
+    say("Nudging…");
+    let buzzed = 0;
+    try {
+      const cfg = window.CARAVAN_CONFIG;
+      const res = await fetch(`${cfg.url}/functions/v1/send-push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
+        body: JSON.stringify({ code: TRIP_CODE, title: "RSVP reminder", body: msg, author: state.me, silent: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      buzzed = (data && data.sent) || 0;
+    } catch (e) { /* push may not be deployed; the share sheet still works */ }
+    const names = waiting.map((w) => w.name).join(", ");
+    const buzzTxt = buzzed ? `Buzzed ${buzzed} phone${buzzed === 1 ? "" : "s"}. ` : "";
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: TRIP.name, text: `${msg}\n\nStill waiting on: ${names}` });
+        say(`${buzzTxt}Nudge sent.`);
+        return;
+      } catch (e) { if (e && e.name === "AbortError") { say(buzzTxt || "Cancelled."); return; } }
+    }
+    navigator.clipboard?.writeText(`${names}\n\n${msg}`)
+      .then(() => say(`${buzzTxt}Copied a nudge for ${waiting.length}. Paste it into your group chat.`))
+      .catch(() => say(buzzTxt || "Couldn't copy on this device."));
   }
   function weddingHostPanelHTML() {
     if (!isHost()) return "";
@@ -2651,6 +2716,313 @@
   }
 
   /* =========================================================================
+     SEATING - tables built from who actually said yes, plus-ones included.
+     Rides on the groups table under a reserved set name, so no new schema.
+     ====================================================================== */
+  const SEAT_SET = "__seating";
+  let seatPick = null;
+  /* Every seat that RSVP'd yes, as {key, name, meal, diet, host}. The key is
+     voter id plus seat index, because a plus-one is not a traveler. */
+  function allSeats() {
+    const out = [];
+    const t = tally("wrsvp", "attend");
+    Object.entries(t).forEach(([choice, voters]) => {
+      if (!String(choice).startsWith("yes")) return;
+      const claimed = parseInt(String(choice).split(":")[1], 10) || 1;
+      voters.forEach((v) => {
+        const who = byId(v) || { name: "Guest" };
+        const party = partyOf(v);
+        for (let i = 0; i < claimed; i++) {
+          const seat = party[i] || {};
+          out.push({
+            key: `${v}#${i}`,
+            name: seat.name || (i === 0 ? who.name : `Guest of ${who.name.split(" ")[0]}`),
+            meal: seat.meal || "", diet: seat.diet || "", host: v,
+          });
+        }
+      });
+    });
+    return out;
+  }
+  const seatTables = () => state.groups.filter((g) => g.set_name === SEAT_SET)
+    .slice().sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  function renderSeating() {
+    const s = $("#screen-seating");
+    if (!isWedding() || !isHost()) {
+      s.innerHTML = `<div class="section-title">Seating</div>${emptyState("🪑", "Hosts only", "The table plan is yours to build. Guests will see their own table on the Home screen once you place them.")}`;
+      return;
+    }
+    const seats = allSeats();
+    const tables = seatTables();
+    const placed = new Set(tables.flatMap((g) => g.members || []));
+    const byKey = {}; seats.forEach((x) => byKey[x.key] = x);
+    const spare = seats.filter((x) => !placed.has(x.key));
+    // a seat can linger on a table after someone lowers their party size
+    const stale = [...placed].filter((k) => !byKey[k]).length;
+    const chip = (x, action) => `<span class="split-chip" data-${action}="${esc(x.key)}">${esc(x.name)}${x.meal ? ` · ${esc(x.meal)}` : ""}${action === "seatrm" ? " ✕" : ""}</span>`;
+    s.innerHTML = `
+      <div class="section-title">Seating</div>
+      <div class="section-sub">${seats.length} ${seats.length === 1 ? "seat" : "seats"} from the yeses, plus-ones included. ${placed.size ? `${Math.min(placed.size, seats.length)} placed.` : "None placed yet."}</div>
+
+      ${!seats.length ? emptyState("🪑", "Nobody has said yes yet", "Tables build themselves from the RSVPs. Once guests accept, every seat including plus-ones shows up here to be placed.") : ""}
+
+      ${tables.map((g) => {
+        const mem = (g.members || []).filter((k) => byKey[k]);
+        const picking = seatPick === g.id;
+        const meals = {}; mem.forEach((k) => { const m = byKey[k].meal; if (m) meals[m] = (meals[m] || 0) + 1; });
+        const diets = mem.filter((k) => byKey[k].diet);
+        const cap = parseInt(g.note, 10) || 0;
+        return `<div class="card" style="${picking ? "border-color:var(--ai)" : ""}">
+          <div style="display:flex;align-items:center;gap:8px">
+            <h3 style="margin:0;flex:1">${esc(g.label)}</h3>
+            <span class="r-sub" style="font-size:11.5px">${mem.length}${cap ? ` / ${cap}` : ""}</span>
+            <button class="btn danger" data-tabledel="${esc(g.id)}">✕</button>
+          </div>
+          ${cap && mem.length > cap ? `<div class="r-sub" style="color:var(--vermilion);margin-top:4px">${mem.length - cap} over the ${cap} seats at this table</div>` : ""}
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">
+            ${mem.length ? mem.map((k) => chip(byKey[k], "seatrm")).join("") : `<span class="r-sub">Empty.</span>`}
+          </div>
+          ${Object.keys(meals).length ? `<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">
+            ${Object.entries(meals).map(([m, n]) => `<span class="when-chip">${esc(m)}: <b>${n}</b></span>`).join("")}</div>` : ""}
+          ${diets.length ? `<div class="r-sub" style="margin-top:8px">⚠️ ${diets.map((k) => esc(byKey[k].name + ": " + byKey[k].diet)).join(" · ")}</div>` : ""}
+          <button class="btn ghost" data-tablepick="${esc(g.id)}" style="width:100%;margin-top:12px">${picking ? "Done" : "＋ Seat someone here"}</button>
+          ${picking ? `<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">
+            ${spare.length ? spare.map((x) => chip(x, "seatadd")).join("") : `<span class="r-sub">Everyone has a seat.</span>`}
+          </div>` : ""}
+        </div>`;
+      }).join("")}
+
+      ${seats.length ? `<div class="card">
+        <h3>＋ Add a table</h3>
+        <div class="expense-add">
+          <div style="display:flex;gap:8px">
+            <input id="tblName" placeholder="Table ${tables.length + 1}" style="flex:2" />
+            <input id="tblCap" type="number" inputmode="numeric" placeholder="Seats" style="flex:1" />
+          </div>
+          <button class="btn primary" id="tblAdd">Add table</button>
+        </div>
+        <div id="tblMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>` : ""}
+
+      ${spare.length ? `<div class="card" style="border-color:var(--sakura-deep)">
+        <h3>Not seated yet (${spare.length})</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">${spare.map((x) => `<span class="split-chip">${esc(x.name)}</span>`).join("")}</div>
+      </div>` : (seats.length && tables.length ? `<div class="card" style="border-color:var(--matcha)">
+        <h3>✓ Everyone has a seat</h3>
+        <p class="section-sub" style="margin:6px 0 0">All ${seats.length} seats are placed${stale ? `. ${stale} old placement${stale === 1 ? " was" : "s were"} dropped when party sizes changed` : ""}.</p>
+      </div>` : "")}
+
+      ${tables.length ? `<button class="btn ghost" id="seatCopy" style="width:100%">Copy the seating chart</button>
+      <div id="seatMsg" class="r-sub" style="margin-top:8px;text-align:center"></div>` : ""}`;
+    const ta = $("#tblAdd"); if (ta) ta.addEventListener("click", addTable);
+    s.querySelectorAll("[data-tablepick]").forEach((b) => b.addEventListener("click", () => {
+      seatPick = seatPick === b.dataset.tablepick ? null : b.dataset.tablepick; renderSeating();
+    }));
+    s.querySelectorAll("[data-tabledel]").forEach((b) => b.addEventListener("click", async () => {
+      state.groups = state.groups.filter((g) => String(g.id) !== String(b.dataset.tabledel));
+      seatPick = null; renderSeating();
+      await Backend.remove("groups", b.dataset.tabledel);
+    }));
+    s.querySelectorAll("[data-seatadd]").forEach((b) => b.addEventListener("click", () => moveSeat(seatPick, b.dataset.seatadd, true)));
+    s.querySelectorAll("[data-seatrm]").forEach((b) => b.addEventListener("click", () => {
+      const g = seatTables().find((x) => (x.members || []).includes(b.dataset.seatrm));
+      if (g) moveSeat(g.id, b.dataset.seatrm, false);
+    }));
+    const sc = $("#seatCopy"); if (sc) sc.addEventListener("click", () => {
+      navigator.clipboard?.writeText(seatingText())
+        .then(() => { $("#seatMsg").textContent = "Copied. Send it to the venue."; })
+        .catch(() => { $("#seatMsg").textContent = "Couldn't copy on this device."; });
+    });
+  }
+  async function addTable() {
+    const label = ($("#tblName").value.trim() || `Table ${seatTables().length + 1}`).slice(0, 60);
+    const cap = $("#tblCap").value.trim();
+    const row = await Backend.insert("groups", { trip: TRIP_CODE, set_name: SEAT_SET, label, members: [], note: cap, sort: seatTables().length });
+    if (!row) { $("#tblMsg").textContent = "Couldn't add it. Has the groups table been added in Supabase?"; return; }
+    state.groups.push(row);
+    renderSeating();
+  }
+  async function moveSeat(tableId, seatKey, add) {
+    const g = state.groups.find((x) => String(x.id) === String(tableId));
+    if (!g) return;
+    // a seat belongs to one table, so clear it from any other first
+    if (add) seatTables().forEach((o) => { if (o !== g) o.members = (o.members || []).filter((k) => k !== seatKey); });
+    g.members = add ? [...new Set([...(g.members || []), seatKey])] : (g.members || []).filter((k) => k !== seatKey);
+    renderSeating();
+    await Backend.update("groups", g.id, { members: g.members });
+    if (add) for (const o of seatTables()) if (o !== g) await Backend.update("groups", o.id, { members: o.members });
+  }
+  function seatingText() {
+    const seats = {}; allSeats().forEach((x) => seats[x.key] = x);
+    const lines = [`${TRIP.name} - seating`, ""];
+    seatTables().forEach((g) => {
+      const mem = (g.members || []).filter((k) => seats[k]);
+      lines.push(`${g.label} (${mem.length})`);
+      mem.forEach((k) => lines.push(`  ${seats[k].name}${seats[k].meal ? " - " + seats[k].meal : ""}${seats[k].diet ? " (" + seats[k].diet + ")" : ""}`));
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+  /* A guest only needs one line: which table they are at. */
+  function myTable() {
+    const mine = seatTables().find((g) => (g.members || []).some((k) => String(k).split("#")[0] === state.me));
+    return mine ? mine.label : "";
+  }
+
+  /* =========================================================================
+     DAY OF - the run of show and the vendor list. Hosts only: this is the
+     couple's working document, not something guests should be reading.
+     ====================================================================== */
+  const opsOf = (kind) => state.ops.filter((o) => o.kind === kind)
+    .slice().sort((a, b) => (a.kind === "run" ? String(a.time || "~").localeCompare(String(b.time || "~")) : (a.sort || 0) - (b.sort || 0)));
+  const VENDOR_ROLES = ["Coordinator", "Venue", "Photographer", "Videographer", "Florist", "Band or DJ", "Catering", "Cake", "Hair", "Makeup", "Transport", "Officiant", "Rentals", "Other"];
+  /* A first draft beats a blank page, and every wedding runs roughly this shape. */
+  const RUN_TEMPLATE = [
+    { time: "09:00", label: "Hair and makeup starts", who: "Bridal party" },
+    { time: "12:00", label: "Lunch delivered", who: "Everyone getting ready" },
+    { time: "13:30", label: "Photographer arrives", who: "" },
+    { time: "14:00", label: "Getting-ready photos", who: "" },
+    { time: "15:00", label: "First look", who: "Couple" },
+    { time: "15:30", label: "Wedding party photos", who: "" },
+    { time: "16:00", label: "Guests arrive, music starts", who: "Ushers" },
+    { time: "16:30", label: "Ceremony", who: "" },
+    { time: "17:00", label: "Cocktail hour", who: "" },
+    { time: "17:15", label: "Family photos", who: "See the shot list" },
+    { time: "18:15", label: "Guests seated for dinner", who: "" },
+    { time: "18:30", label: "Entrances and first dance", who: "" },
+    { time: "19:00", label: "Dinner served", who: "Catering" },
+    { time: "19:45", label: "Toasts", who: "" },
+    { time: "20:30", label: "Cake and dancing", who: "" },
+    { time: "23:00", label: "Last song and send-off", who: "" },
+  ];
+  function renderDayOf() {
+    const s = $("#screen-dayof");
+    if (!isWedding()) {
+      s.innerHTML = `<div class="section-title">Day of</div>${emptyState("⏱️", "Wedding trips only", "This is the run of show and vendor list for a wedding. Switch the trip to wedding mode in Settings to use it.")}`;
+      return;
+    }
+    if (!isHost()) {
+      s.innerHTML = `<div class="section-title">Day of</div>${emptyState("⏱️", "Hosts only", "This is the couple's working timeline for the day, with vendor phone numbers. Your schedule is on the Plan tab.")}`;
+      return;
+    }
+    const run = opsOf("run"), vendors = opsOf("vendor");
+    s.innerHTML = `
+      <div class="section-title">Day of</div>
+      <div class="section-sub">Your run of show and everyone you need to call. Guests never see this.</div>
+
+      <div class="card">
+        <h3>⏱️ Run of show</h3>
+        ${run.length ? `<div style="margin-top:10px">${run.map((r) => `<div class="row">
+          <span class="when-chip" style="min-width:58px;text-align:center">${esc(r.time || "TBD")}</span>
+          <div class="r-main"><div class="r-title">${esc(r.label)}</div>
+            ${r.who || r.note ? `<div class="r-sub">${esc([r.who, r.note].filter(Boolean).join(" · "))}</div>` : ""}</div>
+          <button class="btn danger" data-opdel="${esc(r.id)}">✕</button>
+        </div>`).join("")}</div>`
+        : `<p class="section-sub" style="margin:6px 0 12px">Nothing yet. Start from the usual shape and change what does not fit, or add your own below.</p>
+           <button class="btn primary" id="runSeed" style="width:100%">Start from a typical day</button>`}
+      </div>
+
+      <div class="card">
+        <h3>＋ Add to the run of show</h3>
+        <div class="expense-add">
+          <div style="display:flex;gap:8px">
+            <input id="runTime" type="time" style="flex:1" />
+            <input id="runLabel" placeholder="What happens" style="flex:2" />
+          </div>
+          <input id="runWho" placeholder="Who it involves (optional)" />
+          <input id="runNote" placeholder="Note (optional)" />
+          <button class="btn primary" id="runAdd">Add</button>
+        </div>
+        <div id="runMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>
+
+      <div class="section-title" style="margin-top:22px">Vendors</div>
+      <div class="section-sub">Tap a number to call it.</div>
+      ${vendors.length ? vendors.map((v) => `<div class="card">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div class="r-title">${esc(v.who || v.label)}</div>
+            <div class="r-sub">${esc(v.label)}${v.note ? " · " + esc(v.note) : ""}</div>
+            ${v.phone ? `<a class="tl-map" href="tel:${esc(String(v.phone).replace(/[^0-9+]/g, ""))}" style="margin-top:6px">📞 ${esc(v.phone)}</a>` : ""}
+          </div>
+          <button class="btn danger" data-opdel="${esc(v.id)}">✕</button>
+        </div>
+      </div>`).join("") : emptyState("📇", "No vendors yet", "Add the coordinator, photographer, and anyone else you would have to call in a hurry.")}
+
+      <div class="card">
+        <h3>＋ Add a vendor</h3>
+        <div class="expense-add">
+          <select id="venRole">${VENDOR_ROLES.map((r) => `<option>${r}</option>`).join("")}</select>
+          <input id="venName" placeholder="Name or company" />
+          <input id="venPhone" type="tel" inputmode="tel" placeholder="Phone" />
+          <input id="venNote" placeholder="Note (arrival time, what they need)" />
+          <button class="btn primary" id="venAdd">Add vendor</button>
+        </div>
+        <div id="venMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>
+
+      ${run.length || vendors.length ? `<button class="btn ghost" id="opsCopy" style="width:100%">Copy the whole day as text</button>
+      <div id="opsMsg" class="r-sub" style="margin-top:8px;text-align:center"></div>` : ""}`;
+    const seed = $("#runSeed"); if (seed) seed.addEventListener("click", seedRunOfShow);
+    $("#runAdd").addEventListener("click", addRunItem);
+    $("#venAdd").addEventListener("click", addVendor);
+    const cp = $("#opsCopy"); if (cp) cp.addEventListener("click", () => {
+      navigator.clipboard?.writeText(dayOfText())
+        .then(() => { $("#opsMsg").textContent = "Copied. Paste it to the coordinator."; })
+        .catch(() => { $("#opsMsg").textContent = "Couldn't copy on this device."; });
+    });
+    s.querySelectorAll("[data-opdel]").forEach((b) => b.addEventListener("click", async () => {
+      state.ops = state.ops.filter((o) => String(o.id) !== String(b.dataset.opdel));
+      renderDayOf();
+      await Backend.remove("wedding_ops", b.dataset.opdel);
+    }));
+  }
+  async function seedRunOfShow() {
+    const btn = $("#runSeed"); if (btn) { btn.disabled = true; btn.textContent = "Building…"; }
+    for (let i = 0; i < RUN_TEMPLATE.length; i++) {
+      const t = RUN_TEMPLATE[i];
+      const row = await Backend.insert("wedding_ops", { trip: TRIP_CODE, kind: "run", time: t.time, label: t.label, who: t.who, phone: "", note: "", sort: i });
+      if (row) state.ops.push(row);
+      else { const m = $("#runMsg"); if (m) m.textContent = "Couldn't save. Has the wedding_ops table been added in Supabase?"; break; }
+    }
+    renderDayOf();
+  }
+  async function addRunItem() {
+    const label = $("#runLabel").value.trim();
+    if (!label) { $("#runMsg").textContent = "Say what happens."; return; }
+    const row = await Backend.insert("wedding_ops", { trip: TRIP_CODE, kind: "run",
+      time: $("#runTime").value, label: label.slice(0, 140), who: $("#runWho").value.trim().slice(0, 120),
+      phone: "", note: $("#runNote").value.trim().slice(0, 200), sort: state.ops.length });
+    if (!row) { $("#runMsg").textContent = "Couldn't save it. Has the wedding_ops table been added in Supabase?"; return; }
+    state.ops.push(row);
+    renderDayOf();
+  }
+  async function addVendor() {
+    const name = $("#venName").value.trim();
+    if (!name) { $("#venMsg").textContent = "Add a name."; return; }
+    const row = await Backend.insert("wedding_ops", { trip: TRIP_CODE, kind: "vendor", time: "",
+      label: $("#venRole").value, who: name.slice(0, 120), phone: $("#venPhone").value.trim().slice(0, 40),
+      note: $("#venNote").value.trim().slice(0, 200), sort: state.ops.length });
+    if (!row) { $("#venMsg").textContent = "Couldn't save it. Has the wedding_ops table been added in Supabase?"; return; }
+    state.ops.push(row);
+    renderDayOf();
+  }
+  function dayOfText() {
+    const lines = [`${TRIP.name} - day of`, ""];
+    const run = opsOf("run"), vendors = opsOf("vendor");
+    if (run.length) {
+      lines.push("RUN OF SHOW");
+      run.forEach((r) => lines.push(`${r.time || "TBD"}  ${r.label}${r.who ? " (" + r.who + ")" : ""}${r.note ? " - " + r.note : ""}`));
+      lines.push("");
+    }
+    if (vendors.length) {
+      lines.push("VENDORS");
+      vendors.forEach((v) => lines.push(`${v.label}: ${v.who}${v.phone ? " - " + v.phone : ""}${v.note ? " - " + v.note : ""}`));
+    }
+    return lines.join("\n");
+  }
+
+  /* =========================================================================
      FARES - watch prices, log what people find, book when it hits target
      Routes live on trips.links so adding one never needs a migration.
      ====================================================================== */
@@ -3850,10 +4222,16 @@
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
     settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups, map: renderMap,
-    fares: renderFares,
+    fares: renderFares, dayof: renderDayOf, seating: renderSeating,
   };
   function renderCurrent() {
     if (!TRIP) return;
+    // Day of is the couple's working document, so it only appears for them.
+    const hostOnly = isWedding() && isHost();
+    const dayofTab = $("#sheetDayof");
+    if (dayofTab) dayofTab.hidden = !hostOnly;
+    const seatTab = $("#sheetSeating");
+    if (seatTab) seatTab.hidden = !hostOnly;
     const active = $("#tripApp .screen.active");
     const id = active ? active.id.replace("screen-", "") : "home";
     if (!RENDERERS[id]) return;
