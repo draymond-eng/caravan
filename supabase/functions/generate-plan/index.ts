@@ -75,6 +75,16 @@ Deno.serve(async (req) => {
 
     const stopsTxt = (trip.stops || []).map((s: { id: string; label: string }) => `${s.label} (id: ${s.id})`).join(", ") || trip.destination || "the destination";
     const travelers = (trip.travelers || []).length || 2;
+    const KIND: Record<string, string> = {
+      golf: "This is a GOLF trip: build days around tee times (early), give the group a real course each round, and leave room for the 19th hole. Mention booking tee times well ahead.",
+      ski: "This is a SKI trip: days start on the mountain, account for lift tickets and rentals booked ahead, and include apres and a rest day option.",
+      beach: "This is a BEACH trip: keep days loose, one anchor activity a day, sunset and seafood matter more than sightseeing.",
+      city: "This is a CITY trip: dense walkable days by neighborhood, strong food picks, one night out.",
+      bachelor: "This is a BACHELOR or BACHELORETTE party: a big night out, one daytime group activity, a recovery morning, and a nice group dinner.",
+      reunion: "This is a FAMILY trip: mixed ages and paces, shorter days, options that work for kids and grandparents, one big group meal.",
+      outdoors: "This is an OUTDOORS trip: hikes and trails rated by effort, early starts, weather backups, and gear notes.",
+    };
+    const kindNote = KIND[String(trip.trip_type || "")] || "";
     const bump = () => supabase.from("trips").update({ gen_count: (trip.gen_count ?? 0) + 1 }).eq("code", trip.code);
 
     /* ---------------- mode: plan - the day-by-day itinerary ---------------- */
@@ -102,7 +112,7 @@ Stops in order (allocate dates sensibly; travel between stops on changeover days
 
 Respond with ONLY valid JSON, no markdown fences:
 {"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"neighborhood or landmark, if useful","note":"one practical sentence (booking tips, timing tricks)"}]}]}
-Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.`);
+Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.${kindNote ? "\n" + kindNote : ""}`);
       if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan - try again." }, 502);
 
       const rows = (plan.days as Array<Record<string, unknown>>)
@@ -146,7 +156,7 @@ Respond with ONLY valid JSON, no markdown fences:
  "decisions":[{"title":"a real either/or choice this group will face on this trip","note":"one line of context","options":["option 1","option 2","option 3 (optional)"]}],
  "ideas":[{"title":"a fun optional add-on","tag":"where/when","note":"one line"}]
 }
-Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic. Never use an em dash ("\u2014") in any text.${trip.mode === "wedding" ? `
+Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic. Never use an em dash ("\u2014") in any text.${kindNote ? "\n" + kindNote : ""}${trip.mode === "wedding" ? `
 This trip is a DESTINATION WEDDING: write guide cards for guests (getting there, weather for the dates, money, what to pack for the events); make hoods guest-lodging areas near the venue town; make decisions host-facing planning choices (e.g. welcome-dinner style, group excursion); make ideas optional guest activities around the wedding.` : ""}`);
       if (!intel) return json({ error: LAST_AI_ERROR || "AI returned unreadable intel - try again." }, 502);
 

@@ -245,3 +245,39 @@ alter table public.stay_options add column if not exists conf    text default ''
 alter table public.stay_options add column if not exists kind     text default 'option'; -- option | block
 alter table public.stay_options add column if not exists rate     text default '';
 alter table public.stay_options add column if not exists deadline text default '';
+
+-- Trip flavour (golf, ski, beach...), comments, and groupings. Safe to re-run.
+alter table public.trips add column if not exists trip_type text default 'general';
+
+create table if not exists public.comments (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null references public.trips(code) on delete cascade,
+  topic      text not null,            -- e.g. decision:<id>, idea:<id>, day:<id>
+  author     text default '',
+  body       text not null,
+  created_at timestamptz default now()
+);
+create index if not exists comments_trip_idx on public.comments(trip, topic);
+
+create table if not exists public.groups (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null references public.trips(code) on delete cascade,
+  set_name   text not null default '',  -- "Saturday foursomes"
+  label      text not null default '',  -- "Group A"
+  members    jsonb not null default '[]',
+  note       text default '',
+  sort       int default 0,
+  created_at timestamptz default now()
+);
+create index if not exists groups_trip_idx on public.groups(trip);
+
+alter table public.comments enable row level security;
+alter table public.groups   enable row level security;
+do $$ begin
+  create policy "trip scoped" on public.comments for all
+    using (trip = public.req_trip()) with check (trip = public.req_trip());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "trip scoped" on public.groups for all
+    using (trip = public.req_trip()) with check (trip = public.req_trip());
+exception when duplicate_object then null; end $$;

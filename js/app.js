@@ -89,7 +89,7 @@
   }
 
   /* ---- Create-trip wizard -------------------------------------------------- */
-  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "" };
+  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "", trip_type: "general" };
   function openWizard() {
     wiz.step = 0;
     wiz.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -110,6 +110,10 @@
           <button class="who-opt ${!w ? "sel" : ""}" id="wModeTrip" style="flex:1;justify-content:center;margin:0">🌍 Group trip</button>
           <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Destination wedding</button>
         </div>
+        ${w ? "" : `<label class="wiz-label">What kind of trip?</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+          ${TRIP_TYPES.map((t) => `<button class="chip ${wiz.trip_type === t.id ? "active" : ""}" data-wtype="${t.id}">${t.emoji} ${t.label}</button>`).join("")}
+        </div>`}
         <label class="wiz-label">${w ? "Wedding name" : "Trip name"}</label>
         <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan in Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <label class="wiz-label">Destination</label>
@@ -127,6 +131,7 @@
         </div>`;
       $("#wCancel").addEventListener("click", closeWizard);
       const keep = () => { wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim(); wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value; };
+      $$("#wizBody [data-wtype]").forEach((b) => b.addEventListener("click", () => { keep(); wiz.trip_type = b.dataset.wtype; renderWizard(); }));
       $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; document.body.classList.remove("theme-wedding"); renderWizard(); });
       $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; document.body.classList.add("theme-wedding"); renderWizard(); });
       const syncDestTz = () => {
@@ -234,7 +239,7 @@
       code: makeCode(), name: wiz.name, destination: wiz.destination,
       start_date: wiz.start, end_date: wiz.end, tz: wiz.tz,
       currency: wiz.currency, home_currency: wiz.home_currency,
-      home_city: wiz.home_city, home_airport: wiz.home_airport,
+      home_city: wiz.home_city, home_airport: wiz.home_airport, trip_type: wiz.trip_type || "general",
       home_tz: tzForCity(wiz.home_city) || wiz.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       travelers, stops,
     };
@@ -270,7 +275,7 @@
   const state = {
     me: null, packing: {}, cityFilter: "all",
     days: [], allVotes: [], expenses: [], decisions: [], stayOptions: [],
-    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [],
+    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [], announcements: [], comments: [], groups: [],
     liveRate: null,
   };
 
@@ -388,6 +393,8 @@
     J("photos", Backend.list("photos", TRIP_CODE, "created_at", false).then((r) => state.photos = r));
     J("guides", Backend.list("guides", TRIP_CODE).then((r) => state.guides = r));
     J("announcements", Backend.list("announcements", TRIP_CODE, "created_at", false).then((r) => state.announcements = r));
+    J("comments", Backend.list("comments", TRIP_CODE, "created_at", true).then((r) => state.comments = r));
+    J("groups", Backend.list("groups", TRIP_CODE, "sort", true).then((r) => state.groups = r));
     await Promise.all(jobs);
   }
 
@@ -741,6 +748,34 @@
     });
     $("#whoModal").classList.add("open");
   }
+
+  /* What kind of trip this is. Tunes the AI, the group presets and the
+     packing prompts, without forcing anyone to pick one. */
+  const TRIP_TYPES = [
+    { id: "general",   emoji: "🌍", label: "General" },
+    { id: "golf",      emoji: "⛳️", label: "Golf" },
+    { id: "ski",       emoji: "🎿", label: "Ski" },
+    { id: "beach",     emoji: "🏖️", label: "Beach" },
+    { id: "city",      emoji: "🌆", label: "City" },
+    { id: "bachelor",  emoji: "🥂", label: "Bach party" },
+    { id: "reunion",   emoji: "👨‍👩‍👧", label: "Family" },
+    { id: "outdoors",  emoji: "🏔️", label: "Outdoors" },
+  ];
+  const tripType = () => (TRIP && TRIP.trip_type) || "general";
+  const typeMeta = (id) => TRIP_TYPES.find((t) => t.id === (id || tripType())) || TRIP_TYPES[0];
+  /* Sensible groupings per kind of trip. Every trip can make its own too. */
+  const GROUP_PRESETS = {
+    golf:     [{ name: "Foursomes", size: 4, note: "Four to a group, one card each." }, { name: "Cars", size: 4 }, { name: "Bedrooms", size: 2 }],
+    ski:      [{ name: "Ability groups", size: 4, note: "Keep people with others at their pace." }, { name: "Cars", size: 4 }, { name: "Bedrooms", size: 2 }],
+    beach:    [{ name: "Bedrooms", size: 2 }, { name: "Boat groups", size: 6 }, { name: "Cars", size: 4 }],
+    city:     [{ name: "Dinner tables", size: 6 }, { name: "Rooms", size: 2 }],
+    bachelor: [{ name: "Rooms", size: 2 }, { name: "Cars", size: 4 }, { name: "Teams", size: 4 }],
+    reunion:  [{ name: "Rooms", size: 3 }, { name: "Cars", size: 5 }],
+    outdoors: [{ name: "Tents", size: 2 }, { name: "Hiking groups", size: 4 }, { name: "Cars", size: 4 }],
+    wedding:  [{ name: "Shuttle runs", size: 8, note: "Match these to the arrival windows in Flights." }, { name: "Tables", size: 8 }],
+    general:  [{ name: "Rooms", size: 2 }, { name: "Cars", size: 4 }, { name: "Teams", size: 4 }],
+  };
+  const presetsForTrip = () => GROUP_PRESETS[isWedding() ? "wedding" : tripType()] || GROUP_PRESETS.general;
 
   /* A wedding has two audiences. Guests say their own name and never see the
      rest of the list. Hosts pick themselves from the short host list. */
@@ -1136,6 +1171,7 @@
         <div class="day-body">
           ${d.meetup ? `<div class="meetup">${isWedding() ? "👔" : "📍"} <span>${isWedding() ? esc(d.meetup) : "Meetup: " + esc(d.meetup)}</span></div>` : ""}
           <div class="timeline">${items || ""}</div>
+          ${commentBlock("day:" + d.id)}
           ${isHost() ? `<div class="expense-add" style="margin:10px 0 8px">
             <div style="display:flex;gap:8px">
               <input data-itime="${d.id}" type="time" style="flex:1" />
@@ -1152,6 +1188,7 @@
         </div>
       </div>`;
     }).join("");
+    bindComments(list);
     list.querySelectorAll(".day-head").forEach((h) => h.addEventListener("click", () => {
       const id = h.parentElement.dataset.date;
       if (openDays.has(id)) openDays.delete(id); else openDays.add(id);
@@ -1300,6 +1337,217 @@
   }
 
   /* =========================================================================
+     GROUPS - split the crew into foursomes, cars, bedrooms, shuttle runs.
+     One idea that covers golf pairings, ski ability groups, wedding
+     shuttles and who sleeps in which room of the house.
+     ====================================================================== */
+  let groupPick = null; // {set, id} waiting for a person to be tapped
+  function setsOf() {
+    const names = [];
+    state.groups.forEach((g) => { if (!names.includes(g.set_name)) names.push(g.set_name); });
+    return names;
+  }
+  function renderGroups() {
+    const s = $("#screen-groups");
+    const sets = setsOf();
+    const people = TRIP.travelers || [];
+    s.innerHTML = `
+      <div class="section-title">Groups</div>
+      <div class="section-sub">${isWedding()
+        ? "Shuttle runs, tables, whatever needs splitting up. Everyone can see where they are."
+        : "Foursomes, cars, bedrooms, teams. Make a set, then tap a group and tap who goes in it."}</div>
+
+      ${sets.map((setName) => {
+        const rows = state.groups.filter((g) => g.set_name === setName);
+        const assigned = new Set(rows.flatMap((g) => g.members || []));
+        const spare = people.filter((p) => !assigned.has(p.id));
+        return `<div style="margin-bottom:26px">
+          <div style="display:flex;align-items:center;gap:8px;margin:0 2px 10px">
+            <span class="pill s0">${esc(setName)}</span>
+            <span class="r-sub" style="font-size:11.5px">${assigned.size}/${people.length} placed</span>
+            <span style="flex:1"></span>
+            <span class="tl-map" style="color:var(--vermilion);cursor:pointer" data-setdel="${esc(setName)}">Delete set</span>
+          </div>
+          ${rows.map((g) => {
+            const picking = groupPick && groupPick.id === g.id;
+            return `<div class="card" style="${picking ? "border-color:var(--ai)" : ""}">
+              <div style="display:flex;align-items:center;gap:8px">
+                <h3 style="margin:0;flex:1">${esc(g.label)}</h3>
+                <span class="r-sub" style="font-size:11.5px">${(g.members || []).length}</span>
+              </div>
+              ${g.note ? `<div class="r-sub" style="margin-top:2px">${esc(g.note)}</div>` : ""}
+              <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">
+                ${(g.members || []).map((id) => { const t = byId(id); return t
+                  ? `<span class="split-chip" data-gremove="${g.id}:${id}">${avatarHTML(t, 24, 9)}${esc(t.name.split(" ")[0])} ✕</span>` : ""; }).join("")
+                  || `<span class="r-sub">Nobody yet.</span>`}
+              </div>
+              <button class="btn ghost" data-gpick="${g.id}" style="width:100%;margin-top:12px">${picking ? "Done adding" : "＋ Add people"}</button>
+              ${picking ? `<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px">
+                ${spare.length ? spare.map((p) => `<span class="split-chip" data-gadd="${g.id}:${p.id}">${avatarHTML(p, 24, 9)}${esc(p.name.split(" ")[0])}</span>`).join("")
+                              : `<span class="r-sub">Everyone is placed.</span>`}
+              </div>` : ""}
+            </div>`;
+          }).join("")}
+          <div class="btn-row">
+            <button class="btn ghost" data-gaddgroup="${esc(setName)}" style="flex:1">＋ Add a group</button>
+            <button class="btn ghost" data-gshuffle="${esc(setName)}" style="flex:1">🎲 Shuffle everyone</button>
+          </div>
+        </div>`;
+      }).join("")}
+
+      ${!sets.length ? emptyState("👥", "No groups yet", isWedding()
+        ? "Split guests into shuttle runs or tables, and everyone can see which one they are in."
+        : "Split the crew into foursomes, cars, bedrooms or teams. Pick a starting point below.") : ""}
+
+      <div class="card">
+        <h3>New set</h3>
+        <p class="section-sub" style="margin:2px 0 10px">${presetsForTrip().length ? "Common ones for this kind of trip:" : ""}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          ${presetsForTrip().map((pz) => `<button class="chip" data-gpreset="${esc(pz.name)}|${pz.size}|${esc(pz.note || "")}">${esc(pz.name)}</button>`).join("")}
+        </div>
+        <div class="expense-add">
+          <input id="gName" placeholder="Or name your own, e.g. Saturday foursomes" />
+          <button class="btn primary" id="gCreate">Create set</button>
+        </div>
+        <div id="gMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>`;
+
+    s.querySelectorAll("[data-gpick]").forEach((b) => b.addEventListener("click", () => {
+      groupPick = groupPick && groupPick.id === b.dataset.gpick ? null : { id: b.dataset.gpick };
+      renderGroups();
+    }));
+    s.querySelectorAll("[data-gadd]").forEach((b) => b.addEventListener("click", async () => {
+      const [gid, pid] = b.dataset.gadd.split(":");
+      const g = state.groups.find((x) => x.id === gid); if (!g) return;
+      g.members = [...(g.members || []), pid];
+      renderGroups();
+      await Backend.update("groups", gid, { members: g.members });
+    }));
+    s.querySelectorAll("[data-gremove]").forEach((b) => b.addEventListener("click", async () => {
+      const [gid, pid] = b.dataset.gremove.split(":");
+      const g = state.groups.find((x) => x.id === gid); if (!g) return;
+      g.members = (g.members || []).filter((m) => m !== pid);
+      renderGroups();
+      await Backend.update("groups", gid, { members: g.members });
+    }));
+    s.querySelectorAll("[data-gaddgroup]").forEach((b) => b.addEventListener("click", () => addGroupTo(b.dataset.gaddgroup)));
+    s.querySelectorAll("[data-gshuffle]").forEach((b) => b.addEventListener("click", () => shuffleSet(b.dataset.gshuffle)));
+    s.querySelectorAll("[data-setdel]").forEach((b) => b.addEventListener("click", async () => {
+      const setName = b.dataset.setdel;
+      if (!confirm(`Delete "${setName}" and its groups?`)) return;
+      const doomed = state.groups.filter((g) => g.set_name === setName);
+      state.groups = state.groups.filter((g) => g.set_name !== setName);
+      renderGroups();
+      for (const g of doomed) await Backend.remove("groups", g.id);
+    }));
+    s.querySelectorAll("[data-gpreset]").forEach((b) => b.addEventListener("click", () => {
+      const [name, size, note] = b.dataset.gpreset.split("|");
+      createSet(name, parseInt(size, 10) || 4, note);
+    }));
+    $("#gCreate").addEventListener("click", () => {
+      const name = $("#gName").value.trim();
+      if (!name) { $("#gMsg").textContent = "Give the set a name."; return; }
+      createSet(name, 4, "");
+    });
+  }
+  const LETTERS = "ABCDEFGHIJKL";
+  async function createSet(name, size, note) {
+    if (setsOf().includes(name)) { const el = $("#gMsg"); if (el) el.textContent = "There's already a set with that name."; return; }
+    const people = (TRIP.travelers || []).length || size;
+    const count = Math.max(1, Math.ceil(people / (size || 4)));
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const row = await Backend.insert("groups", {
+        trip: TRIP_CODE, set_name: name, label: `Group ${LETTERS[i] || i + 1}`,
+        members: [], note: i === 0 ? (note || "") : "", sort: i,
+      });
+      if (row) rows.push(row);
+    }
+    if (!rows.length) { const el = $("#gMsg"); if (el) el.textContent = "Couldn't create it. Has the groups table been added in Supabase?"; return; }
+    state.groups.push(...rows);
+    renderGroups();
+  }
+  async function addGroupTo(setName) {
+    const rows = state.groups.filter((g) => g.set_name === setName);
+    const row = await Backend.insert("groups", {
+      trip: TRIP_CODE, set_name: setName, label: `Group ${LETTERS[rows.length] || rows.length + 1}`,
+      members: [], note: "", sort: rows.length,
+    });
+    if (row) { state.groups.push(row); renderGroups(); }
+  }
+  async function shuffleSet(setName) {
+    const rows = state.groups.filter((g) => g.set_name === setName);
+    if (!rows.length) return;
+    const people = (TRIP.travelers || []).map((t) => t.id);
+    for (let i = people.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [people[i], people[j]] = [people[j], people[i]];
+    }
+    rows.forEach((g) => (g.members = []));
+    people.forEach((id, i) => rows[i % rows.length].members.push(id));
+    renderGroups();
+    for (const g of rows) await Backend.update("groups", g.id, { members: g.members });
+  }
+
+  /* =========================================================================
+     COMMENTS - discussion attached to the thing being discussed, so the
+     group chat does not have to stay alive alongside the app.
+     ====================================================================== */
+  const openThreads = new Set();
+  const commentsFor = (topic) => state.comments.filter((c) => c.topic === topic);
+  function commentBlock(topic) {
+    const list = commentsFor(topic);
+    const open = openThreads.has(topic);
+    if (!open) {
+      return `<div class="thread-toggle" data-thread="${topic}">${list.length
+        ? `💬 ${list.length} comment${list.length === 1 ? "" : "s"}`
+        : "💬 Add a comment"}</div>`;
+    }
+    return `<div class="thread">
+      ${list.map((c) => {
+        const who = byId(c.author);
+        return `<div class="cmt">
+          ${who ? avatarHTML(who, 26, 9) : `<span class="avatar" style="width:26px;height:26px;font-size:9px;background:var(--ink-3)">?</span>`}
+          <div class="cmt-main">
+            <div class="cmt-head">${who ? esc(who.name.split(" ")[0]) : "Someone"} <span>${fmtWhen(c.created_at)}</span></div>
+            <div class="cmt-body">${esc(c.body)}</div>
+          </div>
+          ${c.author === state.me ? `<span class="cmt-del" data-cmtdel="${c.id}">✕</span>` : ""}
+        </div>`;
+      }).join("")}
+      <div class="cmt-add">
+        <input data-cmtinput="${topic}" placeholder="Say something…" />
+        <button class="btn primary" data-cmtsend="${topic}">Post</button>
+      </div>
+      <div class="thread-toggle" data-thread="${topic}" style="margin-top:6px">Hide</div>
+    </div>`;
+  }
+  function bindComments(root) {
+    root.querySelectorAll("[data-thread]").forEach((b) => b.addEventListener("click", () => {
+      const t = b.dataset.thread;
+      if (openThreads.has(t)) openThreads.delete(t); else openThreads.add(t);
+      renderCurrent();
+    }));
+    root.querySelectorAll("[data-cmtsend]").forEach((b) => b.addEventListener("click", () => postComment(b.dataset.cmtsend)));
+    root.querySelectorAll("[data-cmtinput]").forEach((i) => i.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") postComment(i.dataset.cmtinput);
+    }));
+    root.querySelectorAll("[data-cmtdel]").forEach((b) => b.addEventListener("click", async () => {
+      state.comments = state.comments.filter((c) => c.id !== b.dataset.cmtdel);
+      renderCurrent();
+      await Backend.remove("comments", b.dataset.cmtdel);
+    }));
+  }
+  async function postComment(topic) {
+    if (!state.me) { openWho(); return; }
+    const input = $(`[data-cmtinput="${topic}"]`); if (!input) return;
+    const body = input.value.trim(); if (!body) return;
+    input.value = "";
+    const row = await Backend.insert("comments", { trip: TRIP_CODE, topic, body: body.slice(0, 600), author: state.me });
+    if (row) { state.comments.push(row); renderCurrent(); }
+  }
+
+  /* =========================================================================
      BOOKING TIMELINE - what to lock in, and when, built from this trip's dates
      ====================================================================== */
   function daysUntilTrip() {
@@ -1429,6 +1677,7 @@
             <span class="r-sub" style="font-size:11px">${author ? "asked by " + esc(author.split(" ")[0]) : ""}</span>
             ${d.author === state.me ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
           </div>
+          ${commentBlock("decision:" + d.id)}
         </div>`;
       }).join("") : emptyState("🗳️", "Nothing to vote on yet", isHost() ? "Pose a question below: where to eat, which day for the big excursion, whatever the group keeps going back and forth on. Everyone taps a pick and the tally settles it." : "When a question goes up, you'll vote on it here.")}
       ${isHost() ? `<div class="card">
@@ -1448,6 +1697,7 @@
       state.decisions = state.decisions.filter((x) => x.id !== b.dataset.decdel); renderDecisions();
       await Backend.remove("decisions", b.dataset.decdel);
     }));
+    bindComments(s);
     const dA = $("#decAdd"); if (dA) dA.addEventListener("click", addDecision);
     const dw = $("#decWho"); if (dw) dw.addEventListener("click", openWho);
   }
@@ -2093,6 +2343,7 @@
             <div class="i-note">${esc(i.note || "")}${author ? ` · <i>by ${esc(author)}</i>` : ""}</div>
             ${voters.length ? `<div class="tally" style="margin-top:8px">${voterChips(voters)}</div>` : ""}
             ${i.author === state.me ? `<button class="btn danger" data-iddel="${i.id}" style="margin-top:8px">Remove</button>` : ""}
+            ${commentBlock("idea:" + i.id)}
           </div>
           <div class="vote"><button class="${on ? "voted" : ""}" data-idea="${i.id}">👍</button><span class="vcount">${voters.length || ""}</span></div>
         </div>`;
@@ -2106,6 +2357,7 @@
           <button class="btn primary" id="ideaAdd">Post idea</button>
         </div>
       </div>`;
+    bindComments(s);
     s.querySelectorAll("[data-idea]").forEach((b) => b.addEventListener("click", () => setVote("idea", b.dataset.idea, "up")));
     s.querySelectorAll("[data-iddel]").forEach((b) => b.addEventListener("click", async () => {
       state.ideas = state.ideas.filter((x) => String(x.id) !== String(b.dataset.iddel)); renderIdeas();
@@ -2401,6 +2653,10 @@
       <div class="card">
         <h3>Basics</h3>
         <label class="wiz-label">Trip name</label>${inp("stName", TRIP.name, "Trip name")}
+        ${isWedding() ? "" : `<label class="wiz-label">Kind of trip</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px" id="stTypes">
+          ${TRIP_TYPES.map((t) => `<button class="chip ${tripType() === t.id ? "active" : ""}" data-sttype="${t.id}">${t.emoji} ${t.label}</button>`).join("")}
+        </div>`}
         <label class="wiz-label">Destination</label>
         <input id="stDest" list="citylist" autocomplete="off" value="${esc(TRIP.destination || "")}" placeholder="Start typing a city" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
         ${cityListHTML()}
@@ -2499,6 +2755,11 @@
         <button class="btn danger" id="stDelete" style="width:100%;padding:12px">Delete this trip forever</button>
       </div>`;
 
+    let pendingType = null;
+    $$("#stTypes [data-sttype]").forEach((b) => b.addEventListener("click", () => {
+      pendingType = b.dataset.sttype;
+      $$("#stTypes [data-sttype]").forEach((x) => x.classList.toggle("active", x === b));
+    }));
     const sti = $("#stInstall"); if (sti) sti.addEventListener("click", () => maybeOfferInstall(true));
 
     /* ---- guest list import ------------------------------------------------ */
@@ -2582,6 +2843,7 @@
         home_city: $("#stHome").value.trim(),
         home_airport: $("#stHomeAir").value.trim().toUpperCase(),
         home_tz: $("#stHomeTz").value.trim() || tzForCity($("#stHome").value) || TRIP.home_tz || "UTC",
+        trip_type: pendingType || tripType(),
       };
       if (patch.end_date < patch.start_date) { $("#stBasicsMsg").textContent = "Last day can't be before the first day."; return; }
       Object.assign(TRIP, patch);
@@ -2666,7 +2928,7 @@
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
-    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking,
+    settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups,
   };
   function renderCurrent() {
     if (!TRIP) return;
