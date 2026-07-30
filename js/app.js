@@ -89,7 +89,7 @@
   }
 
   /* ---- Create-trip wizard -------------------------------------------------- */
-  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD" };
+  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "" };
   function openWizard() {
     wiz.step = 0;
     wiz.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -113,7 +113,8 @@
         <label class="wiz-label">${w ? "Wedding name" : "Trip name"}</label>
         <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan in Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <label class="wiz-label">Destination</label>
-        <input id="wDest" placeholder="${w ? "e.g. Tulum, Mexico" : "e.g. Japan"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        <input id="wDest" list="citylist" autocomplete="off" placeholder="${w ? "Start typing, e.g. Tulum" : "Start typing, e.g. Tokyo"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        ${cityListHTML()}
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="wiz-label">First day</label>
             <input id="wStart" type="date" value="${esc(wiz.start)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
@@ -139,9 +140,10 @@
       B.innerHTML = `${dots}
         <label class="wiz-label">${wiz.mode === "wedding" ? "Where is it happening? (venue town; add more stops if events span places)" : "Stops / bases (in order): where you'll sleep"}</label>
         ${wiz.stops.map((s, i) => `<div class="trav-row">
-          <input data-stop="${i}" placeholder="e.g. Tokyo" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+          <input data-stop="${i}" list="citylist" autocomplete="off" placeholder="Start typing a city" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.stops.length > 1 ? `<button class="rm" data-rmstop="${i}">✕</button>` : ""}
         </div>`).join("")}
+        ${cityListHTML()}
         <button class="btn ghost" id="wAddStop" style="width:100%">＋ Add a stop</button>
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wBack" style="flex:1">← Back</button>
@@ -174,6 +176,14 @@
         <label class="wiz-label">Destination timezone</label>
         <input id="wTz" list="tzlist" value="${esc(wiz.tz)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
         <datalist id="tzlist">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
+        <div style="display:flex;gap:10px">
+          <div style="flex:2"><label class="wiz-label">Where's home?</label>
+            <input id="wHome" list="citylist" autocomplete="off" placeholder="e.g. Chicago, USA" value="${esc(wiz.home_city)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
+          <div style="flex:1"><label class="wiz-label">Home airport</label>
+            <input id="wHomeAir" maxlength="3" autocomplete="off" placeholder="ORD" value="${esc(wiz.home_airport)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;text-transform:uppercase" /></div>
+        </div>
+        <div class="r-sub" style="margin-top:4px;font-size:11.5px">Used for the home clock and for watching fares from your airport.</div>
+        ${cityListHTML()}
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wBack" style="flex:1">← Back</button>
           <button class="btn primary" id="wCreate" style="flex:2">Create trip</button>
@@ -193,6 +203,8 @@
     wiz.currency = ($("#wCur").value.trim() || "USD").toUpperCase();
     wiz.home_currency = ($("#wHomeCur").value.trim() || "USD").toUpperCase();
     wiz.tz = $("#wTz").value.trim() || "UTC";
+    wiz.home_city = $("#wHome").value.trim();
+    wiz.home_airport = $("#wHomeAir").value.trim().toUpperCase();
     $("#wErr").textContent = "Creating…";
 
     const travelers = wiz.travelers.map((n, i) => ({ id: slug(n) + "-" + i, name: n, color: PALETTE[i % PALETTE.length] }));
@@ -201,6 +213,8 @@
       code: makeCode(), name: wiz.name, destination: wiz.destination,
       start_date: wiz.start, end_date: wiz.end, tz: wiz.tz,
       currency: wiz.currency, home_currency: wiz.home_currency,
+      home_city: wiz.home_city, home_airport: wiz.home_airport,
+      home_tz: tzForCity(wiz.home_city) || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       travelers, stops,
     };
     if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
@@ -231,6 +245,24 @@
   };
 
   const byId = (id) => (TRIP.travelers || []).find((t) => t.id === id);
+  /* Every screen explains itself when it has nothing in it yet. */
+  function emptyState(emoji, title, body, ctaLabel, ctaGo) {
+    return `<div class="card empty-state">
+      <div class="es-emoji">${emoji}</div>
+      <h3>${title}</h3>
+      <p class="section-sub" style="margin:6px 0 ${ctaLabel ? "14px" : "0"}">${body}</p>
+      ${ctaLabel ? `<button class="btn ghost" data-go="${ctaGo}" style="width:100%">${ctaLabel}</button>` : ""}
+    </div>`;
+  }
+  const cityListHTML = () => `<datalist id="citylist">${(window.CITIES || []).map((c) => `<option value="${esc(c)}">`).join("")}</datalist>`;
+  const tzForCity = (city) => {
+    // Best effort: match a timezone whose city segment looks like the typed city.
+    const key = String(city || "").split(",")[0].trim().toLowerCase().replace(/\s+/g, "_");
+    if (!key) return "";
+    const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : [];
+    return zones.find((z) => z.split("/").pop().toLowerCase() === key)
+        || zones.find((z) => z.toLowerCase().includes(key)) || "";
+  };
   const stopById = (id) => (TRIP.stops || []).find((s) => s.id === id) || { label: id };
   const stopPillClass = (id) => { const i = (TRIP.stops || []).findIndex((s) => s.id === id); return "pill " + (i >= 0 ? "s" + (i % 6) : "any"); };
   // Wedding mode: one party plans (hosts), everyone else RSVPs and follows.
@@ -345,10 +377,10 @@
 
   /* ---- welcome walkthrough (first open on this device) ---------------------- */
   const WELCOME_STEPS = [
-    { emoji: "\u{1F4CD}", title: "Welcome to SquadTrip", body: () => `This is <b>${esc(TRIP.name)}</b> \u2014 your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
-    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `You'll pick your name from the crew list in a second. Your votes, RSVPs, and expenses get tagged to you \u2014 that's the whole login.` },
-    { emoji: "\u{1F5D3}\uFE0F", title: "Plan it together", body: () => `The <b>Plan</b> tab is the shared itinerary \u2014 anyone can add days and activities, and you tap <b>\uFF0B I'm in</b> on the ones you'd join. Empty plan? The <b>\u2728 AI setup</b> drafts the whole trip \u2014 itinerary, destination guide, neighborhoods \u2014 for the group to reshape.` },
-    { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b> \u2014 everyone taps their pick and the tallies settle it.` },
+    { emoji: "\u{1F4CD}", title: "Welcome to SquadTrip", body: () => `This is <b>${esc(TRIP.name)}</b>, your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
+    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `You'll pick your name from the crew list in a second. Your votes, RSVPs, and expenses get tagged to you. That's the whole login.` },
+    { emoji: "\u{1F5D3}\uFE0F", title: "Plan it together", body: () => `The <b>Plan</b> tab is the shared itinerary. Anyone can add days and activities, and you tap <b>\uFF0B I'm in</b> on the ones you'd join. Empty plan? The <b>\u2728 AI setup</b> drafts the whole trip (itinerary, destination guide, neighborhoods) for the group to reshape.` },
+    { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b>. Everyone taps their pick and the tallies settle it.` },
     { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, and ask the <b>\u2728 Assistant</b> anything about your trip. Have a great one.` },
   ];
   const WEDDING_WELCOME = [
@@ -558,7 +590,7 @@
           <div style="font-size:14px;line-height:1.55;white-space:pre-wrap">${esc(a.body)}</div>
           <div class="r-sub" style="margin-top:8px;font-size:11.5px">${who ? esc(who.name.split(" ")[0]) + " · " : ""}${fmtWhen(a.created_at)}${canPost ? ` · <span style="color:var(--vermilion);cursor:pointer" data-anndel="${a.id}">Remove</span>` : ""}</div>
         </div>`;
-      }).join("") : `<div class="empty">No updates yet.</div>`}`;
+      }).join("") : emptyState("📣", "No updates yet", isHost() ? "Post one above and it lands on everyone's phone. Great for time changes, shuttle info, or a last-minute plan." : "When the " + (isWedding() ? "hosts" : "group") + " post something important, it shows up here and on your lock screen.")}`;
 
     const on = $("#pushOn"); if (on) on.addEventListener("click", async () => {
       $("#pushMsg").textContent = "Asking your phone…";
@@ -854,10 +886,10 @@
   setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active")) tickCountdown(); }, 1000);
   function renderClocks() {
     const box = $("#clocks"); if (!box) return;
-    const homeTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const homeTz = TRIP.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
     const fmt = (tz) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()); } catch { return "–"; } };
     box.innerHTML = `
-      <div class="clock"><div class="place">Home</div><div class="time">${fmt(homeTz)}</div></div>
+      <div class="clock"><div class="place">${esc(TRIP.home_city ? TRIP.home_city.split(",")[0] : "Home")}</div><div class="time">${fmt(homeTz)}</div></div>
       <div class="clock"><div class="place">${esc(TRIP.destination || "There")}</div><div class="time">${fmt(TRIP.tz)}</div></div>`;
   }
   setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active")) renderClocks(); }, 15000);
@@ -907,15 +939,18 @@
     const btn = $("#aiBuild"), st = $("#aiStatus");
     btn.disabled = true; btn.style.opacity = 0.6;
     try {
-      st.textContent = "✨ Step 1/2: drafting your day-by-day itinerary… (~30s)";
+      st.textContent = "✨ Step 1/3: drafting your day-by-day itinerary… (~30s)";
       const plan = await callAI("plan");
       if (!plan.ok) { st.textContent = plan.error || "Generation failed. Is the edge function deployed?"; btn.disabled = false; btn.style.opacity = 1; return; }
       await hydrate("days");
-      st.textContent = `✓ ${plan.days} days drafted. ✨ Step 2/2: guides, neighborhoods & starter votes… (~30s)`;
+      st.textContent = `✓ ${plan.days} days drafted. ✨ Step 2/3: guides, neighborhoods & starter votes… (~30s)`;
       const intel = await callAI("intel");
       await hydrate("all");
+      st.textContent = `✓ Guides in. ✨ Step 3/3: recommended places to stay… (~20s)`;
+      const stays = await callAI("stays");
+      await hydrate("all");
       st.textContent = intel.ok
-        ? `Done! ${plan.days} days, ${intel.guides} guide cards, ${intel.decisions} votes, ${intel.ideas} ideas. Explore the Guide tab + Votes.`
+        ? `Done! ${plan.days} days, ${intel.guides} guide cards, ${intel.decisions} votes, ${intel.ideas} ideas${stays.ok ? `, ${stays.stays} stay picks` : ""}. Explore Stays, Guide, and Votes.`
         : `Itinerary done (${plan.days} days). Intel step: ${intel.error || "failed"}.`;
       renderItinerary();
     } catch (e) {
@@ -925,7 +960,7 @@
   }
   function renderDayList() {
     const list = $("#dayList"); if (!list) return;
-    if (!state.days.length) { list.innerHTML = `<div class="empty">No days yet. Add the first one below.</div>`; return; }
+    if (!state.days.length) { list.innerHTML = emptyState("🗓️", "The plan is empty", isHost() ? "Add your first day below, or let ✨ AI draft the whole thing in about a minute. Everything stays editable." : "The " + (isWedding() ? "hosts haven't" : "group hasn't") + " added days yet. Check back soon."); return; }
     list.innerHTML = state.days.map((d) => {
       const f = fmtDate(d.date);
       const items = (d.items || []).map((it, ii) => {
@@ -1034,7 +1069,7 @@
       try {
         const blob = await squarePhoto(file, 400);
         const up = await Backend.uploadFile(TRIP_CODE, new File([blob], "avatar.jpg", { type: "image/jpeg" }));
-        if (!up) { $("#crewPhotoStatus").textContent = "Upload failed \u2014 try again."; return; }
+        if (!up) { $("#crewPhotoStatus").textContent = "Upload failed. Try again."; return; }
         const t = (TRIP.travelers || []).find((x) => x.id === state.me);
         if (t) t.photo = up.url;
         await Backend.updateTrip(TRIP.code, { travelers: TRIP.travelers });
@@ -1093,7 +1128,7 @@
             ${d.author === state.me ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
           </div>
         </div>`;
-      }).join("") : `<div class="empty">No questions yet. Pose the first one.</div>`}
+      }).join("") : emptyState("🗳️", "Nothing to vote on yet", isHost() ? "Pose a question below: where to eat, which day for the big excursion, whatever the group keeps going back and forth on. Everyone taps a pick and the tally settles it." : "When a question goes up, you'll vote on it here.")}
       ${isHost() ? `<div class="card">
         <h3>Ask the group</h3>
         <div class="expense-add">
@@ -1139,7 +1174,7 @@
           <h3>🏨 Room block</h3>
           <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` (<b>book by ${esc(L.deadline)}</b>)` : ""}.</p>
           <a class="btn primary" href="${esc(L.roomblock)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Book a room</a>
-        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : `<div class="empty">No room block posted yet. Check back soon.</div>`)}
+        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : emptyState("🏨", "No room block yet", "The hosts haven't posted where to stay. Once they do, you'll get a booking link and the deadline right here."))}
         ${(TRIP.stops || []).map((st) => {
           const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id);
           return hoods.length ? `<div style="margin-bottom:20px">
@@ -1170,7 +1205,19 @@
             <div class="hood-blurb">${esc(n.body)}</div>
             ${n.base ? `<div class="hood-base">🛏️ ${esc(n.base)}</div>` : ""}
           </div>`).join("")}</div>` : ""; })()}
-          ${options.length ? options.map((o) => {
+          ${(() => {
+            const recs = options.filter((o) => o.author === "ai");
+            if (!recs.length) return "";
+            return `<div class="check-cat" style="margin:4px 0 8px">Recommended to get you started</div>` + recs.map((o) => `<div class="stay-opt" style="cursor:default">
+              <div class="stay-opt-main">
+                <div class="stay-opt-name">${esc(o.name)}</div>
+                <div class="stay-opt-tag">${esc(o.tag || "")}</div>
+                ${o.note ? `<div class="stay-opt-note">${esc(o.note)}</div>` : ""}
+                <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.name + " " + st.label)}" target="_blank" rel="noopener">📍 Look it up</a>
+              </div>
+            </div>`).join("") + `<div class="check-cat" style="margin:16px 0 8px">The group's picks</div>`;
+          })()}
+          ${options.filter((o) => o.author !== "ai").length ? options.filter((o) => o.author !== "ai").map((o) => {
             const voters = counts[o.id] || [];
             const sel = mine === o.id;
             const author = byId(o.author);
@@ -1188,7 +1235,8 @@
               </div>
               <div class="stay-check">${sel ? "◉" : "◯"}</div>
             </button>`;
-          }).join("") : `<div class="empty" style="padding:14px">Nothing for ${esc(st.label)} yet.</div>`}
+          }).join("") : emptyState("🏨", `No submissions for ${esc(st.label)} yet`, "Everyone submits up to " + MAX_STAY + " places, then the group votes. Use the recommendations above as a starting point, or add your own find.")}
+          ${!options.some((o) => o.author === "ai") && isHost() ? `<button class="btn ghost" id="staysAI" data-stopfor="${st.id}" style="width:100%;margin-bottom:10px">✨ Suggest places at every price point</button><div id="staysAIMsg" class="r-sub" style="margin-bottom:10px"></div>` : ""}
           ${myCount < MAX_STAY
             ? `<button class="btn ghost" data-proposestop="${st.id}" style="width:100%">+ Submit a place (${MAX_STAY - myCount} left)</button>`
             : `<div class="r-sub" style="text-align:center;padding:8px">You've used your ${MAX_STAY} for ${esc(st.label)}.</div>`}
@@ -1202,6 +1250,13 @@
       await Backend.remove("stay_options", b.dataset.staydel);
     }));
     s.querySelectorAll("[data-proposestop]").forEach((b) => b.addEventListener("click", () => openProposeStay(b.dataset.proposestop)));
+    const sai = $("#staysAI"); if (sai) sai.addEventListener("click", async () => {
+      sai.disabled = true; sai.style.opacity = .6;
+      $("#staysAIMsg").textContent = "✨ Finding places at each price point… (~20s)";
+      const r = await callAI("stays");
+      if (r.ok) { await hydrate("stay_options"); renderStays(); }
+      else { $("#staysAIMsg").textContent = r.error || "Couldn't fetch suggestions."; sai.disabled = false; sai.style.opacity = 1; }
+    });
   }
   function openProposeStay(stopId) {
     if (!state.me) { openWho(); return; }
@@ -1266,16 +1321,16 @@
         <div class="check-cat" style="margin:18px 0 8px">🛫 Departure</div>${fields("fd", "depart")}
       </div>`}
       <div class="section-title" style="font-size:16px">🛬 Arrivals${isWedding() ? " · shuttle windows" : ""}</div>
-      ${isWedding() ? shuttleBoard(arr, flightRow) : `<div class="card">${arr.length ? arr.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}
+      ${isWedding() ? shuttleBoard(arr, flightRow) : `<div class="card">${arr.length ? arr.map(flightRow).join("") : emptyState("🛬", "No arrivals yet", "Add yours above. Once a few people do, everyone can see who lands when and share rides in.")}</div>`}
       <div class="section-title" style="font-size:16px">🛫 Departures${isWedding() ? " · shuttle windows" : ""}</div>
-      ${isWedding() ? shuttleBoard(dep, flightRow) : `<div class="card">${dep.length ? dep.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}`;
+      ${isWedding() ? shuttleBoard(dep, flightRow) : `<div class="card">${dep.length ? dep.map(flightRow).join("") : emptyState("🛫", "No departures yet", "Add yours above so the group knows who leaves when.")}</div>`}`;
     const w = $("#flWho"); if (w) w.addEventListener("click", openWho);
     const fa = $("#faSave"); if (fa) fa.addEventListener("click", () => saveFlight("arrive"));
     const fd = $("#fdSave"); if (fd) fd.addEventListener("click", () => saveFlight("depart"));
   }
   // Wedding: group flights by date, then 3-hour windows - shuttle groups assemble themselves.
   function shuttleBoard(list, flightRow) {
-    if (!list.length) return `<div class="card"><div class="empty">None yet. Everyone adds their own above.</div></div>`;
+    if (!list.length) return emptyState("✈️", "No flights entered yet", "As guests add their flights, they group into arrival windows here so you can plan shuttles.");
     const byDate = {};
     list.forEach((f) => { const d = f.date || "TBD"; (byDate[d] = byDate[d] || []).push(f); });
     return Object.keys(byDate).sort().map((d) => {
@@ -1390,7 +1445,7 @@
         <div class="r-main"><div class="r-title">${esc(e.label)}</div>
           <div class="r-sub">${esc(e.currency)} ${Number(e.amount).toLocaleString()} · paid by ${esc((byId(e.paid_by) || { name: "?" }).name.split(" ")[0])} · split ${(e.split_among || []).length}</div></div>
         <button class="btn danger" data-del="${e.id}">Delete</button>
-      </div>`).join("") : `<div class="empty">No expenses yet.</div>`}</div>`;
+      </div>`).join("") : emptyState("💰", "No expenses yet", "Add the first one above. Anything anyone covers goes in here, and SquadTrip works out who owes who at the end so nobody has to do the math.")}</div>`;
     $("#exAdd").addEventListener("click", addExpense);
     s.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
       state.expenses = state.expenses.filter((e) => String(e.id) !== String(b.dataset.del));
@@ -1459,7 +1514,7 @@
           </div>
           ${c.author === state.me ? `<button class="btn danger" data-confdel="${c.id}">✕</button>` : ""}
         </div>
-      </div>`).join("") : `<div class="empty">Nothing saved yet.</div>`}`;
+      </div>`).join("") : emptyState("🔐", "The vault is empty", "Stash confirmation numbers, booking PDFs, and reservation links here so nobody is digging through email at the airport.")}`;
     const fi = $("#confFile"), fl = $("#confFileLabel");
     fi.addEventListener("change", () => { fl.textContent = fi.files[0] ? "📎 " + fi.files[0].name : "📎 Attach file (optional)"; });
     $("#confAdd").addEventListener("click", async () => {
@@ -1496,7 +1551,7 @@
           <img src="${esc(p.url)}" alt="${esc(p.caption || "photo")}" loading="lazy" />
           ${p.caption ? `<div class="photo-cap">${esc(p.caption)}</div>` : ""}
           ${p.author === state.me ? `<button class="photo-del" data-photodel="${p.id}">✕</button>` : ""}
-        </div>`).join("") : `<div class="empty" style="grid-column:1/-1">No photos yet.</div>`}
+        </div>`).join("") : `<div style="grid-column:1/-1">${emptyState("📸", "No photos yet", "This is the shared album. Everything anyone adds shows up for the whole group, live.")}</div>`}
       </div>`;
     $("#photoInput").addEventListener("change", async () => {
       const file = $("#photoInput").files[0]; if (!file) return;
@@ -1535,7 +1590,7 @@
               <input type="checkbox" ${n.done ? "checked" : ""} data-notedone="${n.id}" />
               <label style="flex:1">${esc(n.text)}${n.author ? ` <span class="r-sub" style="font-size:11px">· ${esc((byId(n.author) || { name: "" }).name.split(" ")[0])}</span>` : ""}</label>
               <button class="btn danger" data-notedel="${n.id}" style="padding:5px 9px">✕</button>
-            </div>`).join("") : `<div class="empty" style="padding:12px">Nothing yet.</div>`}
+            </div>`).join("") : emptyState("📝", "Nothing on this list yet", "Add the first item above. Everyone sees the same list, so it's a good spot for shared to-dos.")}
           </div>
           <div style="display:flex;gap:8px">
             <input id="note_${L.key}" placeholder="${L.ph}" style="flex:1;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
@@ -1580,7 +1635,7 @@
           </div>
           <div class="vote"><button class="${on ? "voted" : ""}" data-idea="${i.id}">👍</button><span class="vcount">${voters.length || ""}</span></div>
         </div>`;
-      }).join("") : `<div class="empty">No ideas yet. Start the board.</div>`}
+      }).join("") : emptyState("💡", "No ideas yet", "Drop anything the group might want to do, even half-formed. Others thumbs-up what they like, so the good ones rise to the top.")}
       <div class="card">
         <h3>Add an idea</h3>
         <div class="expense-add">
@@ -1610,9 +1665,12 @@
     const guides = state.guides.filter((g) => g.kind === "guide");
     const hoodsByStop = (TRIP.stops || []).map((st) => ({ st, hoods: state.guides.filter((g) => g.kind === "hood" && g.stop === st.id) })).filter((x) => x.hoods.length);
     if (!guides.length && !hoodsByStop.length) {
-      s.innerHTML = `<div class="section-title">Guide</div>
-        <div class="section-sub">Destination intel lives here once it's generated.</div>
-        <div class="card"><h3>📖 Nothing yet</h3><p class="r-sub" style="margin:6px 0 0">Run <b>✨ Set up my trip</b> on the Plan tab and Claude will write a destination guide + neighborhood breakdowns for every stop.</p></div>`;
+      s.innerHTML = `<div class="section-title">${esc(TRIP.destination || "Destination")} guide</div>
+        <div class="section-sub">Local knowledge for this trip, written for your exact dates.</div>
+        ${emptyState("📖", "No guide yet", isHost()
+          ? "Run <b>✨ Set up my trip</b> on the Plan tab and you'll get practical local knowledge here: money, transit, etiquette, what to pack for the season, plus a neighborhood breakdown for every stop."
+          : "Once someone runs the ✨ AI setup, this fills with local know-how for your dates: money, getting around, what to pack, and the lay of each neighborhood.",
+          isHost() ? "Go to the Plan tab" : "", "itinerary")}`;
       return;
     }
     s.innerHTML = `
@@ -1732,7 +1790,7 @@
       <div class="section-sub">Knows this trip: the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
       <div id="chatFeed">
         ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join("")
-          : `<div class="card"><h3>✨ Try asking…</h3><div class="r-sub" style="line-height:2">
+          : `<div class="card"><h3>✨ Ask me anything about this trip</h3><p class="section-sub" style="margin:4px 0 10px">I know your dates, stops, itinerary, votes, and who's coming. Try one of these:</p><div class="r-sub" style="line-height:2">
               “What's our most packed day, and how would you lighten it?”<br>
               “Add a rainy-day backup to the plan for ${esc(fmtDate(TRIP.start_date).mon)} ${fmtDate(TRIP.start_date).day + 2}”<br>
               “Where should we eat near our first stop the night we land?”<br>
@@ -1859,7 +1917,9 @@
       <div class="card">
         <h3>Basics</h3>
         <label class="wiz-label">Trip name</label>${inp("stName", TRIP.name, "Trip name")}
-        <label class="wiz-label">Destination</label>${inp("stDest", TRIP.destination, "Destination")}
+        <label class="wiz-label">Destination</label>
+        <input id="stDest" list="citylist" autocomplete="off" value="${esc(TRIP.destination || "")}" placeholder="Start typing a city" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
+        ${cityListHTML()}
         <div style="display:flex;gap:10px">
           <div style="flex:1"><label class="wiz-label">First day</label>${inp("stStart", TRIP.start_date, "", "date")}</div>
           <div style="flex:1"><label class="wiz-label">Last day</label>${inp("stEnd", TRIP.end_date, "", "date")}</div>
@@ -1868,6 +1928,14 @@
           <div style="flex:1"><label class="wiz-label">Their money</label>${inp("stCur", TRIP.currency, "JPY")}</div>
           <div style="flex:1"><label class="wiz-label">Your money</label>${inp("stHomeCur", TRIP.home_currency, "USD")}</div>
         </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:2"><label class="wiz-label">Where's home?</label>
+            <input id="stHome" list="citylist" autocomplete="off" value="${esc(TRIP.home_city || "")}" placeholder="e.g. Chicago, USA" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" /></div>
+          <div style="flex:1"><label class="wiz-label">Home airport</label>
+            <input id="stHomeAir" maxlength="3" autocomplete="off" value="${esc(TRIP.home_airport || "")}" placeholder="ORD" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;text-transform:uppercase;background:#fffdfa;color:var(--ink)" /></div>
+        </div>
+        <label class="wiz-label">Home timezone</label>
+        <input id="stHomeTz" list="tzlist2" value="${esc(TRIP.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
         <label class="wiz-label">Destination timezone</label>
         <input id="stTz" list="tzlist2" value="${esc(TRIP.tz)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;background:#fffdfa;color:var(--ink)" />
         <datalist id="tzlist2">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
@@ -1897,7 +1965,7 @@
         <p class="section-sub" style="margin:2px 0 10px">The bases you'll sleep in, in order. Removing a stop hides its stay submissions.</p>
         <div id="stStops">
           ${(TRIP.stops || []).map((st, i) => `<div class="trav-row">
-            <input data-ststop="${i}" value="${esc(st.label)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+            <input data-ststop="${i}" list="citylist" autocomplete="off" value="${esc(st.label)}" style="padding:11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
             <button class="rm" data-strmstop="${i}" title="Remove">✕</button>
           </div>`).join("")}
         </div>
@@ -1963,6 +2031,9 @@
         currency: ($("#stCur").value.trim() || "USD").toUpperCase(),
         home_currency: ($("#stHomeCur").value.trim() || "USD").toUpperCase(),
         tz: $("#stTz").value.trim() || TRIP.tz,
+        home_city: $("#stHome").value.trim(),
+        home_airport: $("#stHomeAir").value.trim().toUpperCase(),
+        home_tz: $("#stHomeTz").value.trim() || tzForCity($("#stHome").value) || TRIP.home_tz || "UTC",
       };
       if (patch.end_date < patch.start_date) { $("#stBasicsMsg").textContent = "Last day can't be before the first day."; return; }
       Object.assign(TRIP, patch);

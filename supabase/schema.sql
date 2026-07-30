@@ -230,3 +230,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 alter publication supabase_realtime add table public.announcements;
+
+-- Home base (for the home clock and fare watching). Safe to re-run.
+alter table public.trips add column if not exists home_city    text default '';
+alter table public.trips add column if not exists home_airport text default '';
+alter table public.trips add column if not exists home_tz      text default '';

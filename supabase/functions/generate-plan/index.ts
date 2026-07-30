@@ -170,6 +170,40 @@ This trip is a DESTINATION WEDDING: write guide cards for guests (getting there,
       return json({ ok: true, guides: gRows.length, decisions: dRows.length, ideas: iRows.length });
     }
 
+    /* ---------------- mode: stays - recommended places at 3 price points ---- */
+    if (mode === "stays") {
+      const { count } = await supabase.from("stay_options").select("id", { count: "exact", head: true })
+        .eq("trip", trip.code).eq("author", "ai");
+      if ((count ?? 0) > 0) return json({ error: "Recommended stays already exist for this trip." }, 409);
+
+      const picks = await askClaude(
+`You are a well-traveled hotel scout. For each stop below, recommend exactly three real, well-regarded places to stay: one budget, one mid-range, one splurge. Favor places groups actually like: good location, space to gather, walkable to food and nightlife.
+
+Trip: "${trip.name}" to ${trip.destination || "?"}, ${trip.start_date} to ${trip.end_date}, about ${travelers} people${trip.mode === "wedding" ? " (a destination wedding, so guests want to be near the action)" : ""}.
+Stops: ${stopsTxt}
+
+Respond with ONLY valid JSON, no markdown fences:
+{"stays":[{"stop":"<stop id>","tier":"budget|mid|splurge","name":"the real property name","area":"neighborhood","note":"one honest sentence on why this works for a group"}]}
+Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of each tier; use the given stop ids, not labels; use real properties that exist in that city; keep notes under 20 words.`);
+      if (!picks || !Array.isArray(picks.stays)) return json({ error: LAST_AI_ERROR || "AI returned unreadable stay picks. Try again." }, 502);
+
+      const TIER: Record<string, string> = { budget: "$ Budget", mid: "$$ Mid-range", splurge: "$$$ Splurge" };
+      const rows = (picks.stays as Array<Record<string, unknown>>).slice(0, 24)
+        .filter((r) => r.name && r.stop)
+        .map((r) => ({
+          trip: trip.code, stop: String(r.stop),
+          name: String(r.name).slice(0, 120),
+          tag: `${TIER[String(r.tier)] || "$$ Mid-range"} · ${String(r.area ?? "").slice(0, 40)}`.trim(),
+          note: String(r.note ?? "").slice(0, 200),
+          link: "", author: "ai",
+        }));
+      if (!rows.length) return json({ error: "No usable stay picks came back. Try again." }, 502);
+      const { error } = await supabase.from("stay_options").insert(rows);
+      if (error) { console.error(error); return json({ error: "Couldn't save the stay picks." }, 500); }
+      await bump();
+      return json({ ok: true, stays: rows.length });
+    }
+
     /* ---------------- mode: chat - the trip assistant ----------------------- */
     if (mode === "chat") {
       if ((trip.chat_count ?? 0) >= 150) return json({ error: "This trip has used all its assistant messages." }, 429);

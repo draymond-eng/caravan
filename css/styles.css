@@ -546,3 +546,9 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; box-shadow: var(--shadow); }
 .chat-msg.user { margin-left: auto; background: var(--g-dusk); color: #fff; border-bottom-right-radius: 5px; }
 .chat-msg.assistant { margin-right: auto; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+
+/* ---- Empty states: never show a bare screen ------------------------------- */
+.empty-state { text-align: center; padding: 22px 20px; }
+.empty-state .es-emoji { font-size: 34px; line-height: 1; margin-bottom: 8px; }
+.empty-state h3 { margin: 0; }
+.empty-state .section-sub { margin-left: auto; margin-right: auto; max-width: 34em; }
