@@ -1,6 +1,6 @@
 /* Caravan - service worker. App-shell caching so the app opens offline.
    Bump CACHE when you change core files. */
-const CACHE = "caravan-v35";
+const CACHE = "caravan-v36";
 const CORE = [
   "./",
   "./index.html",

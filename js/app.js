@@ -1418,7 +1418,7 @@
               <input data-itime="${d.id}" type="time" style="flex:1" />
               <select data-itype="${d.id}" style="flex:1.2">${typeOrder().map((k) => `<option value="${k}">${TYPE[k].emoji} ${TYPE[k].label}</option>`).join("")}</select>
             </div>
-            <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : "Add an activity…"}" />
+            <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : (tripType() === "golf" ? "Add a round, e.g. Round 1" : "Add an activity…")}" />
             <input data-iwhere="${d.id}" data-suggest="place" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : (tripType() === "golf" ? "Course, e.g. Grayhawk (Raptor)" : "Where? (optional)")}" />
             ${setsOf().length ? `<select data-igroup="${d.id}">
               <option value="">${tripType() === "golf" ? "Pairings (optional)" : "Groups (optional)"}</option>
@@ -1429,6 +1429,7 @@
               <button class="btn primary" data-iadd="${d.id}" style="flex:2">＋ Add</button>
               <button class="btn danger" data-rmday="${d.id}" style="flex:1">Delete day</button>
             </div>
+            <div class="r-sub" data-imsg="${d.id}" style="color:var(--vermilion)"></div>
           </div>` : ""}
         </div>
       </div>`;
@@ -1458,17 +1459,32 @@
   }
   async function addItem(dayId) {
     const d = state.days.find((x) => x.id === dayId); if (!d) return;
-    const title = $(`[data-ititle="${dayId}"]`).value.trim(); if (!title) return;
+    const say = (msg) => { const el = $(`[data-imsg="${dayId}"]`); if (el) el.textContent = msg; };
+    const titleEl = $(`[data-ititle="${dayId}"]`);
     const whereEl = $(`[data-iwhere="${dayId}"]`), dressEl = $(`[data-idress="${dayId}"]`);
+    const type = $(`[data-itype="${dayId}"]`).value;
+    const where = whereEl ? whereEl.value.trim() : "";
+    let title = titleEl.value.trim();
+    // Filling in only the course, or only a place, is a reasonable thing to do.
+    if (!title) title = where ? (type === "tee" ? "Tee time" : where) : "";
+    if (!title) { say(type === "tee" ? "Add the course, or a name for the round." : "Give it a name first."); titleEl.focus(); return; }
+
     const item = {
-      time: $(`[data-itime="${dayId}"]`).value, type: $(`[data-itype="${dayId}"]`).value, title, note: "",
-      where: whereEl ? whereEl.value.trim() : "",
-      dress: dressEl ? dressEl.value.trim() : "",
+      time: $(`[data-itime="${dayId}"]`).value, type, title, note: "",
+      where, dress: dressEl ? dressEl.value.trim() : "",
       groupSet: ($(`[data-igroup="${dayId}"]`) || {}).value || "",
     };
-    d.items = [...(d.items || []), item];
+    const prev = d.items || [];
+    d.items = [...prev, item];
+    say("");
     renderDayList();
-    await Backend.update("days", dayId, { items: d.items });
+    const ok = await Backend.update("days", dayId, { items: d.items });
+    if (!ok) {
+      d.items = prev;
+      renderDayList();
+      const el = $(`[data-imsg="${dayId}"]`);
+      if (el) el.textContent = "Couldn't save that. Check your connection and try again.";
+    }
   }
   async function removeItem(key) {
     const [dayId, idx] = key.split("#");
