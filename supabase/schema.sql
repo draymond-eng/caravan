@@ -18,7 +18,22 @@ create table if not exists public.trips (
   home_currency text default 'USD',
   travelers     jsonb not null default '[]',  -- [{id,name,color}]
   stops         jsonb not null default '[]',  -- [{id,label,nights}]
+  gen_count     int default 0,                -- AI generations used
   created_at    timestamptz default now()
+);
+
+-- AI-generated destination intel: guide cards + neighborhood cards
+create table if not exists public.guides (
+  id         uuid primary key default gen_random_uuid(),
+  trip       text not null,
+  kind       text not null,                   -- 'guide' | 'hood'
+  stop       text default '',                 -- stop id for hoods
+  emoji      text default '',
+  title      text not null,
+  tags       jsonb default '[]',
+  body       text default '',
+  base       text default '',                 -- hoods: "as a base" verdict
+  created_at timestamptz default now()
 );
 
 create table if not exists public.days (
@@ -140,7 +155,7 @@ create table if not exists public.photos (
 do $$
 declare t text;
 begin
-  foreach t in array array['trips','days','votes','expenses','decisions','stay_options','ideas','flights','notes','confirmations','photos'] loop
+  foreach t in array array['trips','days','votes','expenses','decisions','stay_options','ideas','flights','notes','confirmations','photos','guides'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "anon %s" on public.%I', t, t);
     execute format('create policy "anon %s" on public.%I for all using (true) with check (true)', t, t);
@@ -159,6 +174,7 @@ alter publication supabase_realtime add table public.flights;
 alter publication supabase_realtime add table public.notes;
 alter publication supabase_realtime add table public.confirmations;
 alter publication supabase_realtime add table public.photos;
+alter publication supabase_realtime add table public.guides;
 
 -- ---- Storage bucket for photos + confirmation files -------------------------
 insert into storage.buckets (id, name, public)

@@ -23,6 +23,20 @@ GitHub Pages + Supabase. No build step — plain HTML/CSS/JS.
    the publishable/anon key into [`js/config.js`](js/config.js).
 5. Open your Pages URL → **Create a trip**. Done.
 
+## ✨ AI trip setup (optional, recommended)
+One tap drafts the whole trip: a day-by-day itinerary, a destination guide,
+neighborhood breakdowns per stop, and starter votes + ideas — all editable.
+
+1. Get an API key at [console.anthropic.com](https://console.anthropic.com).
+2. Supabase → **Edge Functions → Deploy new function** → name it
+   `generate-plan`, paste `supabase/functions/generate-plan/index.ts`,
+   and **turn OFF "Verify JWT"**.
+3. Edge Functions → **Secrets** → add `ANTHROPIC_API_KEY`.
+4. In any trip with an empty plan, tap **✨ Set up my trip**.
+
+Costs a few cents per generation (Claude API usage); each trip is capped at
+6 generations.
+
 ## Stack
 - Plain HTML/CSS/JS, [Leaflet-free], no framework, no bundler
 - [Supabase](https://supabase.com) — Postgres + Realtime + Storage (free tier)

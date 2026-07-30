@@ -213,7 +213,7 @@
   const state = {
     me: null, packing: {}, cityFilter: "all",
     days: [], allVotes: [], expenses: [], decisions: [], stayOptions: [],
-    ideas: [], flights: [], notes: [], confirmations: [], photos: [],
+    ideas: [], flights: [], notes: [], confirmations: [], photos: [], guides: [],
     liveRate: null,
   };
 
@@ -277,6 +277,7 @@
     J("notes", Backend.list("notes", TRIP_CODE).then((r) => state.notes = r));
     J("confirmations", Backend.list("confirmations", TRIP_CODE, "created_at", false).then((r) => state.confirmations = r));
     J("photos", Backend.list("photos", TRIP_CODE, "created_at", false).then((r) => state.photos = r));
+    J("guides", Backend.list("guides", TRIP_CODE).then((r) => state.guides = r));
     await Promise.all(jobs);
   }
 
@@ -435,6 +436,12 @@
     s.innerHTML = `
       <div class="section-title">The plan</div>
       <div class="section-sub">Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join.</div>
+      ${state.days.length < 2 ? `<div class="card" style="border-color:var(--ai)">
+        <h3>✨ Set up my trip with AI</h3>
+        <p class="section-sub" style="margin:4px 0 12px">Claude drafts the works for ${esc(TRIP.destination || "your destination")}: a full day-by-day itinerary, destination guide, neighborhood breakdowns for picking where to stay, and starter votes & ideas for the group. Everything stays editable.</p>
+        <button class="btn primary" id="aiBuild" style="width:100%">✨ Set up my trip</button>
+        <div id="aiStatus" class="r-sub" style="margin-top:8px"></div>
+      </div>` : ""}
       <div id="dayList"></div>
       <div class="card">
         <h3>＋ Add a day</h3>
@@ -448,6 +455,36 @@
       </div>`;
     renderDayList();
     $("#dAdd").addEventListener("click", addDay);
+    const ab = $("#aiBuild"); if (ab) ab.addEventListener("click", aiBuildPlan);
+  }
+  async function callAI(mode) {
+    const cfg = window.CARAVAN_CONFIG;
+    const res = await fetch(`${cfg.url}/functions/v1/generate-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
+      body: JSON.stringify({ code: TRIP_CODE, mode }),
+    });
+    return await res.json().catch(() => ({ error: "Bad response from the AI function" }));
+  }
+  async function aiBuildPlan() {
+    const btn = $("#aiBuild"), st = $("#aiStatus");
+    btn.disabled = true; btn.style.opacity = 0.6;
+    try {
+      st.textContent = "✨ Step 1/2 — drafting your day-by-day itinerary… (~30s)";
+      const plan = await callAI("plan");
+      if (!plan.ok) { st.textContent = plan.error || "Generation failed — is the edge function deployed?"; btn.disabled = false; btn.style.opacity = 1; return; }
+      await hydrate("days");
+      st.textContent = `✓ ${plan.days} days drafted. ✨ Step 2/2 — guides, neighborhoods & starter votes… (~30s)`;
+      const intel = await callAI("intel");
+      await hydrate("all");
+      st.textContent = intel.ok
+        ? `Done! ${plan.days} days, ${intel.guides} guide cards, ${intel.decisions} votes, ${intel.ideas} ideas. Explore the Guide tab + Votes.`
+        : `Itinerary done (${plan.days} days). Intel step: ${intel.error || "failed"}.`;
+      renderItinerary();
+    } catch (e) {
+      st.textContent = "Couldn't reach the AI function — check it's deployed (see README).";
+      btn.disabled = false; btn.style.opacity = 1;
+    }
   }
   function renderDayList() {
     const list = $("#dayList"); if (!list) return;
@@ -632,6 +669,12 @@
         const myCount = options.filter((o) => o.author === state.me).length;
         return `<div style="margin-bottom:28px">
           <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="pill any">${esc(st.label)}</span></div>
+          ${(() => { const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id); return hoods.length ? `<div class="hood-scroll">${hoods.map((n) => `<div class="hood-card">
+            <div class="hood-name">${esc(n.emoji || "📍")} ${esc(n.title)}</div>
+            <div class="hood-tags">${(n.tags || []).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
+            <div class="hood-blurb">${esc(n.body)}</div>
+            ${n.base ? `<div class="hood-base">🛏️ ${esc(n.base)}</div>` : ""}
+          </div>`).join("")}</div>` : ""; })()}
           ${options.length ? options.map((o) => {
             const voters = counts[o.id] || [];
             const sel = mine === o.id;
@@ -1038,6 +1081,38 @@
   }
 
   /* =========================================================================
+     GUIDE — AI destination intel (guide cards + neighborhoods)
+     ====================================================================== */
+  function renderGuide() {
+    const s = $("#screen-guide");
+    const guides = state.guides.filter((g) => g.kind === "guide");
+    const hoodsByStop = (TRIP.stops || []).map((st) => ({ st, hoods: state.guides.filter((g) => g.kind === "hood" && g.stop === st.id) })).filter((x) => x.hoods.length);
+    if (!guides.length && !hoodsByStop.length) {
+      s.innerHTML = `<div class="section-title">Guide</div>
+        <div class="section-sub">Destination intel lives here once it's generated.</div>
+        <div class="card"><h3>📖 Nothing yet</h3><p class="r-sub" style="margin:6px 0 0">Run <b>✨ Set up my trip</b> on the Plan tab and Claude will write a destination guide + neighborhood breakdowns for every stop.</p></div>`;
+      return;
+    }
+    s.innerHTML = `
+      <div class="section-title">${esc(TRIP.destination || "Destination")} guide</div>
+      <div class="section-sub">The stuff a well-traveled friend would tell you — written for this trip's dates.</div>
+      ${guides.map((g) => `<div class="guide-card">
+        <div class="g-head"><span>${esc(g.emoji || "📌")}</span> ${esc(g.title)}</div>
+        <div class="g-body">${esc(g.body)}</div>
+      </div>`).join("")}
+      ${hoodsByStop.map(({ st, hoods }) => `
+        <div class="section-title" style="font-size:18px;margin-top:22px">Neighborhoods · ${esc(st.label)}</div>
+        <div class="hood-scroll">
+          ${hoods.map((n) => `<div class="hood-card">
+            <div class="hood-name">${esc(n.emoji || "📍")} ${esc(n.title)}</div>
+            <div class="hood-tags">${(n.tags || []).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
+            <div class="hood-blurb">${esc(n.body)}</div>
+            ${n.base ? `<div class="hood-base">🛏️ ${esc(n.base)}</div>` : ""}
+          </div>`).join("")}
+        </div>`).join("")}`;
+  }
+
+  /* =========================================================================
      PACKING (per-device checks; generic list)
      ====================================================================== */
   const PACKING = [
@@ -1128,7 +1203,7 @@
   const RENDERERS = {
     home: renderHome, itinerary: renderItinerary, crew: renderCrew, decisions: renderDecisions,
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
-    photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate,
+    photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
   };
   function renderCurrent() {
     if (!TRIP) return;
