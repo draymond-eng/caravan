@@ -1,5 +1,5 @@
 /* =============================================================================
-   Caravan backend — Supabase data layer, scoped to one trip (by join code).
+   Caravan backend - Supabase data layer, scoped to one trip (by join code).
    Degrades silently if config is empty. All methods catch + return safe values.
    ========================================================================== */
 (function () {

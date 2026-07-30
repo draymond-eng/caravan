@@ -1,5 +1,5 @@
 -- =============================================================================
--- Caravan — Supabase setup. Run once: Dashboard → SQL Editor → paste → Run.
+-- Caravan - Supabase setup. Run once: Dashboard → SQL Editor → paste → Run.
 --
 -- Model: one row in `trips` per trip, identified by a short join code.
 -- Every other table is scoped by that code (column `trip`).

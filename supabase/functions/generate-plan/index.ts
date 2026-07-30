@@ -1,5 +1,5 @@
 // =============================================================================
-// SquadTrip — "generate-plan" Edge Function.
+// SquadTrip - "generate-plan" Edge Function.
 // Two modes, both scoped to a trip's join code:
 //   mode "plan"  → drafts the full day-by-day itinerary into `days`
 //   mode "intel" → destination guide cards + neighborhood cards per stop
@@ -45,7 +45,7 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
   }
   const ai = await resp.json();
   if (ai?.stop_reason === "max_tokens") {
-    LAST_AI_ERROR = "AI response was cut off (max_tokens) — try again";
+    LAST_AI_ERROR = "AI response was cut off (max_tokens) - try again";
     return null;
   }
   return ai?.content?.find((c: { type?: string }) => c?.type === "text")?.text ?? "";
@@ -77,14 +77,14 @@ Deno.serve(async (req) => {
     const travelers = (trip.travelers || []).length || 2;
     const bump = () => supabase.from("trips").update({ gen_count: (trip.gen_count ?? 0) + 1 }).eq("code", trip.code);
 
-    /* ---------------- mode: plan — the day-by-day itinerary ---------------- */
+    /* ---------------- mode: plan - the day-by-day itinerary ---------------- */
     if (mode === "plan") {
       const { count } = await supabase.from("days").select("id", { count: "exact", head: true }).eq("trip", trip.code);
-      if ((count ?? 0) >= 2) return json({ error: "This trip already has a plan — delete the existing days first for a fresh AI draft." }, 409);
+      if ((count ?? 0) >= 2) return json({ error: "This trip already has a plan - delete the existing days first for a fresh AI draft." }, 409);
 
       const isWedding = trip.mode === "wedding";
       const plan = await askClaude(isWedding
-? `You are an expert destination-wedding planner. Draft the guest-facing schedule for a wedding weekend — a STARTING POINT the hosts will edit. Typical shape: arrival/settle-in day, welcome event, the ceremony + reception day, a recovery brunch / beach day, departures. Keep guest logistics realistic (travel time, downtime before the ceremony).
+? `You are an expert destination-wedding planner. Draft the guest-facing schedule for a wedding weekend - a STARTING POINT the hosts will edit. Typical shape: arrival/settle-in day, welcome event, the ceremony + reception day, a recovery brunch / beach day, departures. Keep guest logistics realistic (travel time, downtime before the ceremony).
 
 Wedding: "${trip.name}" in ${trip.destination || "?"}
 Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVERY date)
@@ -92,8 +92,8 @@ Roughly ${travelers}+ guests expected. Location(s): ${stopsTxt}
 
 Respond with ONLY valid JSON, no markdown fences:
 {"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"dress code / key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence for guests"}]}]}
-Rules: 2-4 items/day; put dress codes in the meetup field (e.g. "Dress code: beach formal"); use the given stop ids, not labels; leave exact venues generic (e.g. "Ceremony — venue TBA") since the hosts will fill them in.`
-: `You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on — favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
+Rules: never use an em dash ("\u2014") in any text; 2-4 items/day; put dress codes in the meetup field (e.g. "Dress code: beach formal"); use the given stop ids, not labels; leave exact venues generic (e.g. "Ceremony - venue TBA") since the hosts will fill them in.`
+: `You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on - favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
 
 Trip: "${trip.name}" to ${trip.destination || "?"}
 Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVERY date)
@@ -102,8 +102,8 @@ Stops in order (allocate dates sensibly; travel between stops on changeover days
 
 Respond with ONLY valid JSON, no markdown fences:
 {"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one practical sentence (booking tips, timing tricks)"}]}]}
-Rules: 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.`);
-      if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan — try again." }, 502);
+Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.`);
+      if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan - try again." }, 502);
 
       const rows = (plan.days as Array<Record<string, unknown>>)
         .filter((d) => typeof d.date === "string" && typeof d.title === "string")
@@ -126,13 +126,13 @@ Rules: 3-5 items/day; arrival + departure days paced lightly; use the given stop
       return json({ ok: true, days: rows.length });
     }
 
-    /* ---------------- mode: intel — guides, hoods, votes, ideas ------------- */
+    /* ---------------- mode: intel - guides, hoods, votes, ideas ------------- */
     if (mode === "intel") {
       const { count } = await supabase.from("guides").select("id", { count: "exact", head: true }).eq("trip", trip.code);
       if ((count ?? 0) > 0) return json({ error: "Destination intel already exists for this trip." }, 409);
 
       const intel = await askClaude(
-`You are an expert travel guide writer helping a group plan a trip. Produce compact, opinionated destination intel — the stuff a well-traveled friend would tell them.
+`You are an expert travel guide writer helping a group plan a trip. Produce compact, opinionated destination intel - the stuff a well-traveled friend would tell them.
 
 Trip: "${trip.name}" to ${trip.destination || "?"}, ${trip.start_date}–${trip.end_date}, ${travelers} travelers.
 Stops: ${stopsTxt}
@@ -144,9 +144,9 @@ Respond with ONLY valid JSON, no markdown fences:
  "decisions":[{"title":"a real either/or choice this group will face on this trip","note":"one line of context","options":["option 1","option 2","option 3 (optional)"]}],
  "ideas":[{"title":"a fun optional add-on","tag":"where/when","note":"one line"}]
 }
-Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic.${trip.mode === "wedding" ? `
+Rules: 8-10 guide cards; 4-6 hoods per stop (use the given stop ids); 4-6 decisions; 5-8 ideas. Be specific to the destination and season, never generic. Never use an em dash ("\u2014") in any text.${trip.mode === "wedding" ? `
 This trip is a DESTINATION WEDDING: write guide cards for guests (getting there, weather for the dates, money, what to pack for the events); make hoods guest-lodging areas near the venue town; make decisions host-facing planning choices (e.g. welcome-dinner style, group excursion); make ideas optional guest activities around the wedding.` : ""}`);
-      if (!intel) return json({ error: LAST_AI_ERROR || "AI returned unreadable intel — try again." }, 502);
+      if (!intel) return json({ error: LAST_AI_ERROR || "AI returned unreadable intel - try again." }, 502);
 
       const gRows: Array<Record<string, unknown>> = [];
       (Array.isArray(intel.guide) ? intel.guide as Array<Record<string, unknown>> : []).slice(0, 12).forEach((g) =>
@@ -170,7 +170,7 @@ This trip is a DESTINATION WEDDING: write guide cards for guests (getting there,
       return json({ ok: true, guides: gRows.length, decisions: dRows.length, ideas: iRows.length });
     }
 
-    /* ---------------- mode: chat — the trip assistant ----------------------- */
+    /* ---------------- mode: chat - the trip assistant ----------------------- */
     if (mode === "chat") {
       if ((trip.chat_count ?? 0) >= 150) return json({ error: "This trip has used all its assistant messages." }, 429);
       const history = (Array.isArray(messages) ? messages : [])
@@ -194,9 +194,9 @@ This trip is a DESTINATION WEDDING: write guide cards for guests (getting there,
         ideas: (ideas || []).map((i: Record<string, unknown>) => i.title),
       };
 
-      const system = `You are SquadTrip's trip assistant — a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers.
+      const system = `You are SquadTrip's trip assistant - a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers. Never use an em dash ("\u2014"); use commas or periods instead.
 
-If — and ONLY if — the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
+If - and ONLY if - the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
 <<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","note":"one sentence"}]}]}<<<END>>>
 Each day in the block fully REPLACES that date. Never include the block for questions, advice, or suggestions the user hasn't asked you to apply.
 

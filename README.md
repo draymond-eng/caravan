@@ -2,15 +2,15 @@
 
 **Plan group trips together.** Shared itinerary, group votes, stay proposals,
 budget splitting with settle-up, flight boards, a confirmations vault, photos,
-notes, packing, and a translator — synced live across everyone's phones.
+notes, packing, and a translator - synced live across everyone's phones.
 **One link, no accounts**: create a trip, get a code, text it to your crew.
 
 Built as a static PWA (installable, offline-capable, auto-updating) on
-GitHub Pages + Supabase. No build step — plain HTML/CSS/JS.
+GitHub Pages + Supabase. No build step - plain HTML/CSS/JS.
 
 ## How it works
 - **Create a trip** → a short join code (e.g. `X7KQ2P`) identifies it
-- Share `https://<your-pages-url>/?t=X7KQ2P` — friends open it, pick their
+- Share `https://<your-pages-url>/?t=X7KQ2P` - friends open it, pick their
   name, and everything they do syncs live for the group
 - The code is the secret: anyone who has it can read/write that trip
 
@@ -41,7 +41,7 @@ alter table public.trips add column if not exists links jsonb not null default '
 
 ## ✨ AI trip setup (optional, recommended)
 One tap drafts the whole trip: a day-by-day itinerary, a destination guide,
-neighborhood breakdowns per stop, and starter votes + ideas — all editable.
+neighborhood breakdowns per stop, and starter votes + ideas - all editable.
 
 1. Get an API key at [console.anthropic.com](https://console.anthropic.com).
 2. Supabase → **Edge Functions → Deploy new function** → name it
@@ -55,7 +55,7 @@ Costs a few cents per generation (Claude API usage); each trip is capped at
 
 ## Stack
 - Plain HTML/CSS/JS, [Leaflet-free], no framework, no bundler
-- [Supabase](https://supabase.com) — Postgres + Realtime + Storage (free tier)
+- [Supabase](https://supabase.com) - Postgres + Realtime + Storage (free tier)
 - Live FX via open.er-api.com, translation via MyMemory (both keyless)
 - PWA: add-to-home-screen, offline shell, self-updating service worker
 

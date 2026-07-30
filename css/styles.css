@@ -1,5 +1,5 @@
 /* =============================================================================
-   Caravan — desert-dusk design system.
+   Caravan - desert-dusk design system.
    A caravan at twilight: deep violet dusk sky, sunset coral and amber,
    warm sand paper, a gold hairline. Serif display, glowing gradients.
    ========================================================================== */
@@ -15,7 +15,7 @@
   --line: #e8ddc9;         /* warm hairline */
   --line-2: #f0e8d8;
 
-  /* Accents — dusk sky + sunset */
+  /* Accents - dusk sky + sunset */
   --ai: #372a63;           /* deep dusk violet (primary) */
   --ai-2: #5c4a99;         /* lighter violet */
   --ai-ink: #241b45;       /* near-night */
@@ -76,7 +76,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; gap: 10px;
   padding: calc(13px + env(safe-area-inset-top, 0px)) 18px 13px;
-  /* opaque dusk band — avoids iOS sticky/backdrop-filter paint glitch */
+  /* opaque dusk band - avoids iOS sticky/backdrop-filter paint glitch */
   background:
     radial-gradient(120% 160% at 92% -40%, rgba(226,89,58,.55), rgba(226,89,58,0) 55%),
     var(--g-dusk);
@@ -102,7 +102,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .screen.active { display: block; animation: rise .4s cubic-bezier(.2,.7,.2,1); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform:none;} }
 
-/* Section headers — editorial: kicker rule + serif */
+/* Section headers - editorial: kicker rule + serif */
 .section-title {
   font-family: var(--serif); font-size: 23px; font-weight: 600; letter-spacing: .2px;
   margin: 8px 2px 14px; position: relative; padding-left: 14px;
@@ -125,7 +125,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   padding: 3px 9px; border-radius: 999px; vertical-align: middle; }
 .pill.any    { background: #ece5d8; color: var(--ink-2); }
 .pill.draft  { background: var(--sakura); color: #a4462a; }
-/* Per-stop colors — assigned by stop order (s0..s5), cycling */
+/* Per-stop colors - assigned by stop order (s0..s5), cycling */
 .pill.s0 { background: #ebe6f6; color: #4a3a78; }
 .pill.s1 { background: #fbe7dd; color: #b44526; }
 .pill.s2 { background: #faeeda; color: #a06018; }
@@ -413,7 +413,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
   width: 100%; max-width: var(--maxw); z-index: 50;
   display: flex; justify-content: space-around; align-items: stretch;
-  background: #fffdf8; /* opaque — avoids iOS backdrop-filter detach glitch on scroll */
+  background: #fffdf8; /* opaque - avoids iOS backdrop-filter detach glitch on scroll */
   box-shadow: 0 -1px 0 var(--line), 0 -6px 20px -12px rgba(25,26,30,.2);
   border-top: 1px solid var(--line); padding-bottom: var(--safe-b);
 }
@@ -462,7 +462,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 }
 
 /* =============================================================================
-   Caravan additions — landing, wizard, trip chips
+   Caravan additions - landing, wizard, trip chips
    ========================================================================== */
 .wiz-step-dots { display: flex; gap: 6px; justify-content: center; margin-bottom: 16px; }
 .wiz-step-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }

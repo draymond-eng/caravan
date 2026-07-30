@@ -1,8 +1,8 @@
 /* =============================================================================
-   SquadTrip — app logic. Vanilla JS, no build step.
+   SquadTrip - app logic. Vanilla JS, no build step.
    Two modes:
      • Landing  (no ?t= code): create a trip / join by code
-     • Trip app (?t=CODE): the full shared trip — everything scoped to the code
+     • Trip app (?t=CODE): the full shared trip - everything scoped to the code
    Shared data lives in Supabase; per-device prefs in localStorage.
    ========================================================================== */
 (function () {
@@ -45,7 +45,7 @@
   if (!TRIP_CODE) { bootLanding(); } else { bootTrip(); }
 
   /* =========================================================================
-     LANDING — create / join
+     LANDING - create / join
      ====================================================================== */
   function bootLanding() {
     $("#landing").style.display = "block";
@@ -84,7 +84,7 @@
     if (!HAS_BACKEND || !Backend.isReady()) { $("#joinErr").textContent = "Backend isn't configured yet."; return; }
     $("#joinErr").textContent = "Checking…";
     const trip = await Backend.getTrip(code);
-    if (!trip) { $("#joinErr").textContent = "No trip found with that code — double-check it."; return; }
+    if (!trip) { $("#joinErr").textContent = "No trip found with that code. Double-check it."; return; }
     location.search = "?t=" + code;
   }
 
@@ -111,7 +111,7 @@
           <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Destination wedding</button>
         </div>
         <label class="wiz-label">${w ? "Wedding name" : "Trip name"}</label>
-        <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan — Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
+        <input id="wName" class="wiz-in" placeholder="${w ? "e.g. Maya & Jordan in Tulum" : "e.g. Japan 2027"}" value="${esc(wiz.name)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <label class="wiz-label">Destination</label>
         <input id="wDest" placeholder="${w ? "e.g. Tulum, Mexico" : "e.g. Japan"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         <div style="display:flex;gap:10px">
@@ -137,7 +137,7 @@
     } else if (wiz.step === 1) {
       if (!wiz.stops.length) wiz.stops = [""];
       B.innerHTML = `${dots}
-        <label class="wiz-label">${wiz.mode === "wedding" ? "Where is it happening? (venue town — add more stops if events span places)" : "Stops / bases (in order) — where you'll sleep"}</label>
+        <label class="wiz-label">${wiz.mode === "wedding" ? "Where is it happening? (venue town; add more stops if events span places)" : "Stops / bases (in order): where you'll sleep"}</label>
         ${wiz.stops.map((s, i) => `<div class="trav-row">
           <input data-stop="${i}" placeholder="e.g. Tokyo" value="${esc(s)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.stops.length > 1 ? `<button class="rm" data-rmstop="${i}">✕</button>` : ""}
@@ -159,7 +159,7 @@
       });
     } else {
       B.innerHTML = `${dots}
-        <label class="wiz-label">${wiz.mode === "wedding" ? "The hosts — the couple + anyone helping plan. Guests add themselves when they join." : "Who's coming? (everyone, including you)"}</label>
+        <label class="wiz-label">${wiz.mode === "wedding" ? "The hosts: the couple + anyone helping plan. Guests add themselves when they join." : "Who's coming? (everyone, including you)"}</label>
         ${wiz.travelers.map((t, i) => `<div class="trav-row">
           <input data-trav="${i}" placeholder="Name" value="${esc(t)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
           ${wiz.travelers.length > 1 ? `<button class="rm" data-rmtrav="${i}">✕</button>` : ""}
@@ -206,8 +206,8 @@
     if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
     const created = await Backend.createTrip(row);
     if (!created) { $("#wErr").textContent = wiz.mode === "wedding"
-      ? "Couldn't create it — wedding mode needs the latest database migration (see README) run in Supabase."
-      : "Couldn't create the trip — check the backend setup and try again."; return; }
+      ? "Couldn't create it. Wedding mode needs the latest database migration (see README) run in Supabase."
+      : "Couldn't create the trip. Check the backend setup and try again."; return; }
     const mine = LSG.get("mytrips", []);
     mine.unshift({ code: created.code, name: created.name, dates: fmtRange(created.start_date, created.end_date) });
     LSG.set("mytrips", mine.slice(0, 8));
@@ -350,10 +350,10 @@
     { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, and ask the <b>\u2728 Assistant</b> anything about your trip. Have a great one.` },
   ];
   const WEDDING_WELCOME = [
-    { emoji: "\u{1F48D}", title: "You're invited", body: () => `Welcome to <b>${esc(TRIP.name)}</b> — everything about the wedding weekend lives here. Schedule, RSVP, where to stay, travel plans. No accounts, no downloads.` },
-    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `Pick your name from the guest list — or add yourself if you're not on it yet. Your RSVP gets tagged to you — that's the whole login.` },
+    { emoji: "\u{1F48D}", title: "You're invited", body: () => `Welcome to <b>${esc(TRIP.name)}</b>. Everything about the wedding weekend lives here. Schedule, RSVP, where to stay, travel plans. No accounts, no downloads.` },
+    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `Pick your name from the guest list, or add yourself if you're not on it yet. Your RSVP gets tagged to you. That's the whole login.` },
     { emoji: "\u{1F48C}", title: "RSVP on the Home screen", body: () => `Tap <b>Joyfully accept</b> (and how many are in your party) so the hosts can plan headcounts. You can change it any time.` },
-    { emoji: "\u{1F5D3}️", title: "The weekend, in one place", body: () => `The <b>Plan</b> tab has every event — times, dress codes, locations. Tap <b>＋ I'm in</b> on the optional stuff so the hosts know who's joining.` },
+    { emoji: "\u{1F5D3}️", title: "The weekend, in one place", body: () => `The <b>Plan</b> tab has every event: times, dress codes, locations. Tap <b>＋ I'm in</b> on the optional stuff so the hosts know who's joining.` },
     { emoji: "✈️", title: "Travel, handled", body: () => `Drop your flight into <b>Flights</b> so shuttle groups can be organized, check <b>Stays</b> for the room block, and put your pics in <b>Photos</b> all weekend. See you there!` },
   ];
   let welcomeStep = 0;
@@ -398,7 +398,7 @@
   function openWho() {
     $("#whoOptions").innerHTML = (TRIP.travelers || []).map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">
       ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
-      + (isWedding() ? `<div class="who-opt" id="whoAddMe" style="justify-content:center;font-weight:800;color:var(--ai-2)">＋ I'm not on the list — add me</div>` : "");
+      + (isWedding() ? `<div class="who-opt" id="whoAddMe" style="justify-content:center;font-weight:800;color:var(--ai-2)">＋ I'm not on the list. Add me</div>` : "");
     $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
       state.me = o.dataset.me; LS.set("me", state.me); renderWhoami();
       $$("#whoOptions .who-opt").forEach((x) => x.classList.toggle("sel", x === o));
@@ -407,7 +407,7 @@
     const am = $("#whoAddMe"); if (am) am.addEventListener("click", () => {
       $("#whoOptions").innerHTML = `
         <input id="whoNewName" placeholder="Your full name" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;margin-bottom:10px" />
-        <button class="btn primary" id="whoNewSave" style="width:100%">That's me — add me to the guest list</button>
+        <button class="btn primary" id="whoNewSave" style="width:100%">That's me, add me to the guest list</button>
         <div id="whoNewMsg" class="r-sub" style="margin-top:6px"></div>`;
       $("#whoNewName").focus();
       $("#whoNewSave").addEventListener("click", async () => {
@@ -422,7 +422,7 @@
         const me = { id: slug(name) + "-" + travs.length, name, color: PALETTE[travs.length % PALETTE.length] };
         const next = [...travs, me];
         const ok = await Backend.updateTrip(TRIP_CODE, { travelers: next });
-        if (!ok) { $("#whoNewMsg").textContent = "Couldn't save — try again."; return; }
+        if (!ok) { $("#whoNewMsg").textContent = "Couldn't save. Try again."; return; }
         TRIP.travelers = next;
         state.me = me.id; LS.set("me", state.me);
         renderWhoami(); renderCurrent(); openWho();
@@ -492,7 +492,7 @@
       state.allVotes = state.allVotes.filter((v) => !(v.kind === "wrsvp" && v.topic === "details" && v.voter === state.me));
       state.allVotes.push({ kind: "wrsvp", topic: "details", choice, voter: state.me });
       const ok = await Backend.castVote(TRIP_CODE, "wrsvp", "details", choice, state.me);
-      $("#wrDetMsg").textContent = ok ? "Saved ✓ — the hosts can see this" : "Couldn't save — try again.";
+      $("#wrDetMsg").textContent = ok ? "Saved ✓ (the hosts can see this)" : "Couldn't save. Try again.";
     });
     $("#copyLink").addEventListener("click", () => {
       const url = location.origin + location.pathname + "?t=" + TRIP.code;
@@ -513,7 +513,7 @@
     const ghost = "background:rgba(255,255,255,.12);color:#f6f1e8;border-color:rgba(246,241,232,.35)";
     return `<div class="card ai-card" style="margin-top:14px">
       <h3>💌 Will you be there?</h3>
-      <p class="section-sub" style="margin:4px 0 12px">${deadline ? `Please RSVP by <b>${esc(deadline)}</b> — the hosts need headcounts.` : "RSVP so the hosts can plan headcounts."} You can change it any time.</p>
+      <p class="section-sub" style="margin:4px 0 12px">${deadline ? `Please RSVP by <b>${esc(deadline)}</b>. The hosts need headcounts.` : "RSVP so the hosts can plan headcounts."} You can change it any time.</p>
       <div class="btn-row">
         <button class="btn ${accepted ? "primary" : "ghost"}" data-wrsvp="yes:${party}" style="flex:1;${accepted ? "" : ghost}">Joyfully accept</button>
         <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-wrsvp="no" style="flex:1;${mine === "no" ? "" : ghost}">Can't make it</button>
@@ -548,7 +548,7 @@
     });
     return `${parties.length ? `<div class="crew-strip">${voterChips(parties)}</div>` : ""}
       <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
-        ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet — be the first."}
+        ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet. Be the first."}
       </p>`;
   }
   function weddingCostCard() {
@@ -618,7 +618,7 @@
   function renderClocks() {
     const box = $("#clocks"); if (!box) return;
     const homeTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const fmt = (tz) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()); } catch { return "—"; } };
+    const fmt = (tz) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()); } catch { return "–"; } };
     box.innerHTML = `
       <div class="clock"><div class="place">Home</div><div class="time">${fmt(homeTz)}</div></div>
       <div class="clock"><div class="place">${esc(TRIP.destination || "There")}</div><div class="time">${fmt(TRIP.tz)}</div></div>`;
@@ -626,7 +626,7 @@
   setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active")) renderClocks(); }, 15000);
 
   /* =========================================================================
-     ITINERARY — editable, with RSVP
+     ITINERARY - editable, with RSVP
      ====================================================================== */
   const openDays = new Set();
   function renderItinerary() {
@@ -670,11 +670,11 @@
     const btn = $("#aiBuild"), st = $("#aiStatus");
     btn.disabled = true; btn.style.opacity = 0.6;
     try {
-      st.textContent = "✨ Step 1/2 — drafting your day-by-day itinerary… (~30s)";
+      st.textContent = "✨ Step 1/2: drafting your day-by-day itinerary… (~30s)";
       const plan = await callAI("plan");
-      if (!plan.ok) { st.textContent = plan.error || "Generation failed — is the edge function deployed?"; btn.disabled = false; btn.style.opacity = 1; return; }
+      if (!plan.ok) { st.textContent = plan.error || "Generation failed. Is the edge function deployed?"; btn.disabled = false; btn.style.opacity = 1; return; }
       await hydrate("days");
-      st.textContent = `✓ ${plan.days} days drafted. ✨ Step 2/2 — guides, neighborhoods & starter votes… (~30s)`;
+      st.textContent = `✓ ${plan.days} days drafted. ✨ Step 2/2: guides, neighborhoods & starter votes… (~30s)`;
       const intel = await callAI("intel");
       await hydrate("all");
       st.textContent = intel.ok
@@ -682,13 +682,13 @@
         : `Itinerary done (${plan.days} days). Intel step: ${intel.error || "failed"}.`;
       renderItinerary();
     } catch (e) {
-      st.textContent = "Couldn't reach the AI function — check it's deployed (see README).";
+      st.textContent = "Couldn't reach the AI function. Check it's deployed (see README).";
       btn.disabled = false; btn.style.opacity = 1;
     }
   }
   function renderDayList() {
     const list = $("#dayList"); if (!list) return;
-    if (!state.days.length) { list.innerHTML = `<div class="empty">No days yet — add the first one below.</div>`; return; }
+    if (!state.days.length) { list.innerHTML = `<div class="empty">No days yet. Add the first one below.</div>`; return; }
     list.innerHTML = state.days.map((d) => {
       const f = fmtDate(d.date);
       const items = (d.items || []).map((it, ii) => {
@@ -830,8 +830,8 @@
     const s = $("#screen-decisions");
     s.innerHTML = `
       <div class="section-title">Votes</div>
-      <div class="section-sub">${isWedding() ? "Questions from the hosts — tap your pick, tallies update live." : "Open questions for the group — tap your pick, tallies update live. Anyone can add one."}</div>
-      ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b> — tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
+      <div class="section-sub">${isWedding() ? "Questions from the hosts. Tap your pick, tallies update live." : "Open questions for the group. Tap your pick, tallies update live. Anyone can add one."}</div>
+      ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b>. Tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
       ${state.decisions.length ? state.decisions.map((d) => {
         const mine = myVote("decision", d.id);
         const counts = tally("decision", d.id);
@@ -856,7 +856,7 @@
             ${d.author === state.me ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
           </div>
         </div>`;
-      }).join("") : `<div class="empty">No questions yet — pose the first one.</div>`}
+      }).join("") : `<div class="empty">No questions yet. Pose the first one.</div>`}
       ${isHost() ? `<div class="card">
         <h3>Ask the group</h3>
         <div class="expense-add">
@@ -888,7 +888,7 @@
   }
 
   /* =========================================================================
-     STAYS — submit up to 2 per stop, vote
+     STAYS - submit up to 2 per stop, vote
      ====================================================================== */
   const MAX_STAY = 2;
   function renderStays() {
@@ -900,9 +900,9 @@
         <div class="section-sub">The hosts' picks for where guests should base themselves.</div>
         ${L.roomblock ? `<div class="card ai-card">
           <h3>🏨 Room block</h3>
-          <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` — <b>book by ${esc(L.deadline)}</b>` : ""}.</p>
+          <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` (<b>book by ${esc(L.deadline)}</b>)` : ""}.</p>
           <a class="btn primary" href="${esc(L.roomblock)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Book a room</a>
-        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : `<div class="empty">No room block posted yet — check back soon.</div>`)}
+        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : `<div class="empty">No room block posted yet. Check back soon.</div>`)}
         ${(TRIP.stops || []).map((st) => {
           const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id);
           return hoods.length ? `<div style="margin-bottom:20px">
@@ -1000,7 +1000,7 @@
       const when = [f.date ? `${fmtDate(f.date).wd} ${fmtDate(f.date).mon} ${fmtDate(f.date).day}` : "", f.time].filter(Boolean).join(" · ");
       return `<div class="row">${avatarHTML(t, 34, 11)}
         <div class="r-main"><div class="r-title">${esc(t.name.split(" ")[0])}${f.airport ? " · " + esc(f.airport) : ""}</div>
-          <div class="r-sub">${esc([line, when].filter(Boolean).join(" · ") || "—")}${f.note ? " · " + esc(f.note) : ""}</div></div>
+          <div class="r-sub">${esc([line, when].filter(Boolean).join(" · ") || "–")}${f.note ? " · " + esc(f.note) : ""}</div></div>
       </div>`;
     };
     const sortK = (f) => (f.date || "") + (f.time || "");
@@ -1021,24 +1021,24 @@
     </div>`;
     s.innerHTML = `
       <div class="section-title">Flights</div>
-      <div class="section-sub">Everyone adds their own — the whole group sees the boards.</div>
+      <div class="section-sub">Everyone adds their own. The whole group sees the boards.</div>
       ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b> so flights save to you. <button class="btn primary" id="flWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : `
       <div class="card">
         <h3>✈️ Your flights</h3>
         <div class="check-cat" style="margin:8px 0 8px">🛬 Arrival</div>${fields("fa", "arrive")}
         <div class="check-cat" style="margin:18px 0 8px">🛫 Departure</div>${fields("fd", "depart")}
       </div>`}
-      <div class="section-title" style="font-size:16px">🛬 Arrivals${isWedding() ? " — shuttle windows" : ""}</div>
+      <div class="section-title" style="font-size:16px">🛬 Arrivals${isWedding() ? " · shuttle windows" : ""}</div>
       ${isWedding() ? shuttleBoard(arr, flightRow) : `<div class="card">${arr.length ? arr.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}
-      <div class="section-title" style="font-size:16px">🛫 Departures${isWedding() ? " — shuttle windows" : ""}</div>
+      <div class="section-title" style="font-size:16px">🛫 Departures${isWedding() ? " · shuttle windows" : ""}</div>
       ${isWedding() ? shuttleBoard(dep, flightRow) : `<div class="card">${dep.length ? dep.map(flightRow).join("") : `<div class="empty">None yet.</div>`}</div>`}`;
     const w = $("#flWho"); if (w) w.addEventListener("click", openWho);
     const fa = $("#faSave"); if (fa) fa.addEventListener("click", () => saveFlight("arrive"));
     const fd = $("#fdSave"); if (fd) fd.addEventListener("click", () => saveFlight("depart"));
   }
-  // Wedding: group flights by date, then 3-hour windows — shuttle groups assemble themselves.
+  // Wedding: group flights by date, then 3-hour windows - shuttle groups assemble themselves.
   function shuttleBoard(list, flightRow) {
-    if (!list.length) return `<div class="card"><div class="empty">None yet — everyone adds their own above.</div></div>`;
+    if (!list.length) return `<div class="card"><div class="empty">None yet. Everyone adds their own above.</div></div>`;
     const byDate = {};
     list.forEach((f) => { const d = f.date || "TBD"; (byDate[d] = byDate[d] || []).push(f); });
     return Object.keys(byDate).sort().map((d) => {
@@ -1077,7 +1077,7 @@
   }
 
   /* =========================================================================
-     BUDGET — expenses, settle-up, converter
+     BUDGET - expenses, settle-up, converter
      ====================================================================== */
   const effectiveRate = () => Number(state.liveRate) || 1;
   async function loadRate() {
@@ -1107,7 +1107,7 @@
     const S = homeSym();
     s.innerHTML = `
       <div class="section-title">Budget & settle-up</div>
-      <div class="section-sub">Log who paid for what — balances and the settle-up update live for everyone.</div>
+      <div class="section-sub">Log who paid for what - balances and the settle-up update live for everyone.</div>
 
       ${TRIP.currency !== TRIP.home_currency ? `<div class="card">
         <h3>💱 Converter</h3>
@@ -1196,7 +1196,7 @@
     const s = $("#screen-vault");
     s.innerHTML = `
       <div class="section-title">Vault</div>
-      <div class="section-sub">Every confirmation in one shared place — no inbox digging at the airport.</div>
+      <div class="section-sub">Every confirmation in one shared place. No inbox digging at the airport.</div>
       <div class="card">
         <h3>Add a confirmation</h3>
         <div class="expense-add">
@@ -1231,7 +1231,7 @@
       let fileMeta = { path: "", url: "" };
       if (fi.files[0]) { const up = await Backend.uploadFile(TRIP_CODE, fi.files[0]); if (up) fileMeta = up; }
       const row = await Backend.insert("confirmations", { trip: TRIP_CODE, category: $("#confCat").value, label, confirmation_no: $("#confNo").value.trim(), ...fileMeta, author: state.me || "" });
-      if (row) { state.confirmations.unshift(row); renderVault(); } else $("#confStatus").textContent = "Failed — try again.";
+      if (row) { state.confirmations.unshift(row); renderVault(); } else $("#confStatus").textContent = "Failed. Try again.";
     });
     s.querySelectorAll("[data-confdel]").forEach((b) => b.addEventListener("click", async () => {
       const c = state.confirmations.find((x) => String(x.id) === String(b.dataset.confdel));
@@ -1247,7 +1247,7 @@
     const s = $("#screen-photos");
     s.innerHTML = `
       <div class="section-title">Photos</div>
-      <div class="section-sub">The group's shared album — everyone sees new shots live.</div>
+      <div class="section-sub">The group's shared album. Everyone sees new shots live.</div>
       <div class="card">
         <label class="btn primary" for="photoInput" style="display:block;text-align:center">📷 Add a photo</label>
         <input id="photoInput" type="file" accept="image/*" style="display:none" />
@@ -1343,7 +1343,7 @@
           </div>
           <div class="vote"><button class="${on ? "voted" : ""}" data-idea="${i.id}">👍</button><span class="vcount">${voters.length || ""}</span></div>
         </div>`;
-      }).join("") : `<div class="empty">No ideas yet — start the board.</div>`}
+      }).join("") : `<div class="empty">No ideas yet. Start the board.</div>`}
       <div class="card">
         <h3>Add an idea</h3>
         <div class="expense-add">
@@ -1366,7 +1366,7 @@
   }
 
   /* =========================================================================
-     GUIDE — AI destination intel (guide cards + neighborhoods)
+     GUIDE - AI destination intel (guide cards + neighborhoods)
      ====================================================================== */
   function renderGuide() {
     const s = $("#screen-guide");
@@ -1380,7 +1380,7 @@
     }
     s.innerHTML = `
       <div class="section-title">${esc(TRIP.destination || "Destination")} guide</div>
-      <div class="section-sub">The stuff a well-traveled friend would tell you — written for this trip's dates.</div>
+      <div class="section-sub">The stuff a well-traveled friend would tell you, written for this trip's dates.</div>
       ${guides.map((g) => `<div class="guide-card">
         <div class="g-head"><span>${esc(g.emoji || "📌")}</span> ${esc(g.title)}</div>
         <div class="g-body">${esc(g.body)}</div>
@@ -1478,12 +1478,12 @@
       $("#trSpeak").addEventListener("click", () => speak(out, to === "en" ? "en-US" : to));
       $("#trCopy").addEventListener("click", () => { navigator.clipboard?.writeText(out); $("#trCopy").textContent = "Copied ✓"; setTimeout(() => { const c = $("#trCopy"); if (c) c.textContent = "Copy"; }, 1400); });
     } catch (e) {
-      R.innerHTML = `<div class="r-sub" style="margin-top:12px;color:var(--vermilion)">Couldn't translate — check your connection.</div>`;
+      R.innerHTML = `<div class="r-sub" style="margin-top:12px;color:var(--vermilion)">Couldn't translate. Check your connection.</div>`;
     }
   }
 
   /* =========================================================================
-     ASSISTANT — trip-aware AI chat with apply-able itinerary edits
+     ASSISTANT - trip-aware AI chat with apply-able itinerary edits
      ====================================================================== */
   let chatLog = null;      // [{role, content}]
   let pendingDays = null;  // days block awaiting Apply
@@ -1492,7 +1492,7 @@
     if (chatLog == null) chatLog = LS.get("chat", []);
     s.innerHTML = `
       <div class="section-title">Assistant</div>
-      <div class="section-sub">Knows this trip — the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
+      <div class="section-sub">Knows this trip: the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
       <div id="chatFeed">
         ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${esc(m.content)}</div>`).join("")
           : `<div class="card"><h3>✨ Try asking…</h3><div class="r-sub" style="line-height:2">
@@ -1503,7 +1503,7 @@
       </div>
       ${pendingDays ? `<div class="card" style="border-color:var(--matcha)">
         <h3>🪄 Proposed itinerary change</h3>
-        <div class="r-sub" style="margin:6px 0 10px">${pendingDays.map((d) => `<b>${esc(d.date)}</b> — ${esc(d.title)}`).join("<br>")}</div>
+        <div class="r-sub" style="margin:6px 0 10px">${pendingDays.map((d) => `<b>${esc(d.date)}</b> · ${esc(d.title)}`).join("<br>")}</div>
         <div class="btn-row">
           <button class="btn primary" id="chatApply" style="flex:2">Apply to the plan</button>
           <button class="btn ghost" id="chatDismiss" style="flex:1">Dismiss</button>
@@ -1539,7 +1539,7 @@
         body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: chatLog.slice(-12) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!data.ok) { chatLog.push({ role: "assistant", content: "⚠️ " + (data.error || "Something went wrong — try again.") }); }
+      if (!data.ok) { chatLog.push({ role: "assistant", content: "⚠️ " + (data.error || "Something went wrong. Try again.") }); }
       else {
         chatLog.push({ role: "assistant", content: data.reply || "…" });
         pendingDays = Array.isArray(data.days) && data.days.length ? data.days : null;
@@ -1547,7 +1547,7 @@
       LS.set("chat", chatLog.slice(-30));
       renderAssistant();
     } catch (e) {
-      chatLog.push({ role: "assistant", content: "⚠️ Couldn't reach the assistant — check the edge function." });
+      chatLog.push({ role: "assistant", content: "⚠️ Couldn't reach the assistant. Check the edge function." });
       renderAssistant();
     }
   }
@@ -1565,13 +1565,13 @@
         if (row) { state.days.push(row); state.days.sort((a, b) => a.date.localeCompare(b.date)); }
       }
     }
-    chatLog.push({ role: "assistant", content: `✓ Applied — ${days.length} day${days.length === 1 ? "" : "s"} updated in the plan.` });
+    chatLog.push({ role: "assistant", content: `✓ Applied: ${days.length} day${days.length === 1 ? "" : "s"} updated in the plan.` });
     LS.set("chat", chatLog.slice(-30));
     renderAssistant();
   }
 
   /* =========================================================================
-     SETTINGS — edit the trip after creation
+     SETTINGS - edit the trip after creation
      ====================================================================== */
   function renderSettings() {
     const s = $("#screen-settings");
@@ -1597,8 +1597,8 @@
         <label class="wiz-label">Wedding website</label>${inp("wlSite", (TRIP.links || {}).site, "https://…")}
         <label class="wiz-label">RSVP deadline (shown on the RSVP card)</label>${inp("wlRsvpBy", (TRIP.links || {}).rsvp_deadline, "e.g. March 1")}
         <label class="wiz-label">What it roughly costs guests (shown on Home)</label>${inp("wlCost", (TRIP.links || {}).cost, "e.g. Flights ~$450 · rooms $180/night · plan on ~$1,200")}
-        <label class="wiz-label">FAQ — one per line, format: Question? = Answer</label>
-        <textarea id="wlFaq" rows="5" placeholder="Are kids welcome? = We love your kids, but this one's adults-only.&#10;Is there a shuttle? = Yes — from the room-block hotel, times posted here." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;font-family:inherit;background:#fffdfa;color:var(--ink)">${esc(((TRIP.links || {}).faq || []).map((f) => `${f.q} = ${f.a}`).join("\n"))}</textarea>
+        <label class="wiz-label">FAQ: one per line, format Question? = Answer</label>
+        <textarea id="wlFaq" rows="5" placeholder="Are kids welcome? = We love your kids, but this one's adults-only.&#10;Is there a shuttle? = Yes, from the room-block hotel, times posted here." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;font-family:inherit;background:#fffdfa;color:var(--ink)">${esc(((TRIP.links || {}).faq || []).map((f) => `${f.q} = ${f.a}`).join("\n"))}</textarea>
         <button class="btn primary" id="wlSave" style="width:100%;margin-top:14px">Save wedding info</button>
         <div id="wlMsg" class="r-sub" style="margin-top:6px"></div>
       </div>
@@ -1694,14 +1694,14 @@
       }).filter((f) => f && f.q && f.a).slice(0, 20);
       if (faq.length) links.faq = faq;
       const ok = await Backend.updateTrip(TRIP_CODE, { links });
-      $("#wlMsg").textContent = ok ? "Saved ✓" : "Couldn't save — try again.";
+      $("#wlMsg").textContent = ok ? "Saved ✓" : "Couldn't save. Try again.";
       if (ok) TRIP.links = links;
     });
     const hs = $("#hostSave"); if (hs) hs.addEventListener("click", async () => {
       const hosts = $$("#hostChips [data-host]").filter((c) => c.checked).map((c) => c.dataset.host);
       if (!hosts.length) { $("#hostMsg").textContent = "Keep at least one host."; return; }
       const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
-      $("#hostMsg").textContent = ok ? "Saved ✓" : "Couldn't save — try again.";
+      $("#hostMsg").textContent = ok ? "Saved ✓" : "Couldn't save. Try again.";
       if (ok) TRIP.hosts = hosts;
     });
     $("#stSaveBasics").addEventListener("click", async () => {
@@ -1771,7 +1771,7 @@
       $("#stAiMsg").textContent = "Clearing…";
       await Backend.clearTable("days", TRIP.code);
       state.days = [];
-      $("#stAiMsg").textContent = "Itinerary cleared — the ✨ AI card is back on the Plan tab.";
+      $("#stAiMsg").textContent = "Itinerary cleared. The ✨ AI card is back on the Plan tab.";
     });
     $("#stClearGuide").addEventListener("click", async () => {
       if (!confirm("Clear the destination guide + neighborhoods?")) return;
@@ -1783,7 +1783,7 @@
 
     $("#stDelete").addEventListener("click", async () => {
       const typed = prompt(`This deletes "${TRIP.name}" for EVERYONE, permanently.\nType the trip code (${TRIP.code}) to confirm:`);
-      if ((typed || "").trim().toUpperCase() !== TRIP.code) { alert("Code didn't match — nothing deleted."); return; }
+      if ((typed || "").trim().toUpperCase() !== TRIP.code) { alert("Code didn't match. Nothing deleted."); return; }
       await Backend.deleteTrip(TRIP.code);
       LSG.set("mytrips", LSG.get("mytrips", []).filter((t) => t.code !== TRIP.code));
       location.href = location.pathname; // back to the landing page
