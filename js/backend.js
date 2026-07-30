@@ -52,9 +52,17 @@
   }
   async function updateTrip(code, patch) {
     try { await client.from("trips").update(patch).eq("code", code); return true; }
-    catch (e) { console.warn("updateTrip", e); return false; }
+    catch (e) { writeFailed("updateTrip", e); return false; }
   }
 
+
+  /* Every write that fails calls this. The app shows one banner rather than
+     relying on sixteen call sites each remembering to check a return value. */
+  let onWriteFail = null;
+  function writeFailed(what, e) {
+    console.warn(what, e);
+    try { if (onWriteFail) onWriteFail(what, e); } catch (err) { /* never break a write path */ }
+  }
   /* ---- Generic helpers (every table is scoped by `trip`) -------------------- */
   async function list(table, trip, order = "created_at", asc = true) {
     try { const { data, error } = await client.from(table).select("*").eq("trip", trip).order(order, { ascending: asc }); if (error) throw error; return data || []; }
@@ -62,15 +70,15 @@
   }
   async function insert(table, row) {
     try { const { data, error } = await client.from(table).insert(row).select().single(); if (error) throw error; return data; }
-    catch (e) { console.warn("insert " + table, e); return null; }
+    catch (e) { writeFailed("insert " + table, e); return null; }
   }
   async function update(table, id, patch) {
     try { await client.from(table).update(patch).eq("id", id); return true; }
-    catch (e) { console.warn("update " + table, e); return false; }
+    catch (e) { writeFailed("update " + table, e); return false; }
   }
   async function remove(table, id) {
     try { await client.from(table).delete().eq("id", id); return true; }
-    catch (e) { console.warn("remove " + table, e); return false; }
+    catch (e) { writeFailed("remove " + table, e); return false; }
   }
 
   /* ---- Votes (upsert one per person/topic) ---------------------------------- */
@@ -79,7 +87,7 @@
       if (choice == null) await client.from("votes").delete().match({ trip, kind, topic, voter });
       else await client.from("votes").upsert({ trip, kind, topic, choice, voter }, { onConflict: "trip,kind,topic,voter" });
       return true;
-    } catch (e) { console.warn("castVote", e); return false; }
+    } catch (e) { writeFailed("castVote", e); return false; }
   }
 
   /* ---- Bulk helpers --------------------------------------------------------- */
@@ -99,7 +107,7 @@
   /* ---- Flights (upsert per traveler+dir) ------------------------------------ */
   async function upsertFlight(row) {
     try { const { data, error } = await client.from("flights").upsert(row, { onConflict: "trip,traveler,dir" }).select().single(); if (error) throw error; return data; }
-    catch (e) { console.warn("upsertFlight", e); return null; }
+    catch (e) { writeFailed("upsertFlight", e); return null; }
   }
 
   /* ---- Files (photos + confirmations) --------------------------------------- */
@@ -111,7 +119,7 @@
       if (up.error) throw up.error;
       const { data: pub } = client.storage.from(BUCKET).getPublicUrl(path);
       return { path, url: pub.publicUrl };
-    } catch (e) { console.warn("uploadFile", e); return null; }
+    } catch (e) { writeFailed("uploadFile", e); return null; }
   }
   async function removeFile(path) {
     try { if (path) await client.storage.from(BUCKET).remove([path]); return true; }
@@ -144,6 +152,7 @@
 
   window.Backend = {
     init, isReady: () => ready, configured, lastError: () => lastError,
+    onWriteError: (cb) => { onWriteFail = cb; },
     createTrip, getTrip, updateTrip, deleteTrip,
     list, insert, update, remove, clearTable,
     castVote, upsertFlight, savePushSub, removePushSub,

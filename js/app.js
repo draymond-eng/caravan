@@ -588,8 +588,34 @@
       show(go.dataset.go);
     });
   }
+  /* A host must never think something saved when it did not. Any failed write
+     raises one banner that stays until the change goes through. */
+  let saveTrouble = 0;
+  function watchSaves() {
+    if (!window.Backend || !Backend.onWriteError) return;
+    Backend.onWriteError(() => {
+      saveTrouble++;
+      let bar = $("#saveBar");
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "saveBar";
+        bar.className = "save-bar";
+        document.body.appendChild(bar);
+      }
+      bar.innerHTML = `<span>⚠️ ${saveTrouble} change${saveTrouble === 1 ? "" : "s"} did not save. You may be offline.</span>
+        <button class="btn" id="saveRetry">Retry</button>`;
+      bar.classList.add("open");
+      $("#saveRetry").addEventListener("click", async () => {
+        $("#saveRetry").textContent = "Checking…";
+        const fresh = await Backend.getTrip(TRIP_CODE).catch(() => null);
+        if (fresh) { saveTrouble = 0; bar.classList.remove("open"); await hydrate("all"); renderCurrent(); }
+        else $("#saveRetry").textContent = "Still offline";
+      });
+    });
+  }
   function bindShell() {
     bindGoDelegate();
+    watchSaves();
     $$(".tab[data-screen]").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $$(".sheet-item").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     // Tapping More again puts the sheet away, the same as tapping it opened it.
@@ -3236,13 +3262,27 @@
     }));
     s.querySelectorAll("[data-farerte]").forEach((b) => b.addEventListener("click", () => removeFareRoute(b.dataset.farerte)));
   }
-  async function saveFareLinks(next) {
-    const links = { ...(TRIP.links || {}), ...next };
-    TRIP.links = links;
-    renderFares();
+  /* trips.links is one JSON blob several screens write to, so writing your own
+     idea of it deletes whatever you did not know about. Always merge onto a
+     fresh copy from the server, and only drop the keys this form owns. */
+  const blank = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
+  async function saveLinks(patch, owned) {
+    let base = TRIP.links || {};
+    try { const fresh = await Backend.getTrip(TRIP_CODE); if (fresh && fresh.links) base = fresh.links; }
+    catch (e) { /* offline: merging onto what we have still beats overwriting */ }
+    const links = { ...base, ...patch };
+    (owned || []).forEach((k) => { if (blank(links[k])) delete links[k]; });
     const ok = await Backend.updateTrip(TRIP_CODE, { links });
+    if (ok) TRIP.links = links;
+    return ok;
+  }
+  async function saveFareLinks(next) {
+    TRIP.links = { ...(TRIP.links || {}), ...next };
+    renderFares();
+    const ok = await saveLinks(next, []);
     const msg = $("#frMsg");
     if (!ok && msg) msg.textContent = "Saved on this phone but the group didn't get it. Check your connection.";
+    else renderFares();
   }
   async function addFareRoute() {
     const from = $("#frFrom").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -4193,17 +4233,15 @@
         venue_link: $("#wlVenueLink").value.trim(),
         allowance: parseInt($("#wlAllow").value, 10) || 2,
       };
-      const mealsRaw = $("#wlMeals").value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 6);
-      if (mealsRaw.length) links.meals = mealsRaw;
-      Object.keys(links).forEach((k) => { if (!links[k]) delete links[k]; });
-      const faq = $("#wlFaq").value.split("\n").map((l) => {
+      links.meals = $("#wlMeals").value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 6);
+      links.faq = $("#wlFaq").value.split("\n").map((l) => {
         const i = l.indexOf("=");
         return i > 0 ? { q: l.slice(0, i).trim(), a: l.slice(i + 1).trim() } : null;
       }).filter((f) => f && f.q && f.a).slice(0, 20);
-      if (faq.length) links.faq = faq;
-      const ok = await Backend.updateTrip(TRIP_CODE, { links });
+      // This form owns exactly these keys. Everything else in links is someone
+      // else's and must survive, which a wholesale write would not allow.
+      const ok = await saveLinks(links, Object.keys(links));
       $("#wlMsg").textContent = ok ? "Saved ✓" : "Couldn't save. Try again.";
-      if (ok) TRIP.links = links;
     });
     const hs = $("#hostSave"); if (hs) hs.addEventListener("click", async () => {
       const hosts = $$("#hostChips [data-host]").filter((c) => c.checked).map((c) => c.dataset.host);

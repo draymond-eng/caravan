@@ -743,3 +743,16 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   height: 52px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 52' preserveAspectRatio='none'%3E%3Cpath d='M0 52 L0 34 Q120 12 260 28 Q400 42 540 20 Q660 4 760 22 L760 52 Z' fill='%231b3b3a' opacity='0.6'/%3E%3Cg fill='%230e2222' opacity='0.94'%3E%3Cpath d='M0 52 L0 44 L22 44 L34 22 L46 44 L74 44 L88 18 L102 44 L134 44 L146 26 L158 44 L196 44 L210 16 L224 44 L262 44 L274 28 L286 44 L326 44 L340 20 L354 44 L392 44 L404 26 L416 44 L456 44 L470 14 L484 44 L522 44 L534 28 L546 44 L586 44 L600 20 L614 44 L652 44 L664 26 L676 44 L712 44 L724 22 L736 44 L760 44 L760 52 Z'/%3E%3C/g%3E%3C/svg%3E");
 }
+
+/* ---- Unsaved-work warning -------------------------------------------------
+   A host must never believe something saved when it did not. This sits above
+   everything until the write goes through.
+   -------------------------------------------------------------------------- */
+.save-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; display: none;
+  align-items: center; gap: 12px; padding: 13px 16px calc(13px + var(--safe-b));
+  background: #b3402a; color: #fff; font-size: 13.5px; font-weight: 600;
+  box-shadow: 0 -8px 24px -12px rgba(0,0,0,.5); }
+.save-bar.open { display: flex; }
+.save-bar span { flex: 1; line-height: 1.4; }
+.save-bar .btn { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.45);
+  color: #fff; padding: 9px 14px; font-size: 13px; flex: none; }
