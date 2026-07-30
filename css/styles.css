@@ -583,3 +583,6 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .seat { display: grid; gap: 6px; padding: 8px; border-radius: var(--r-sm);
   background: rgba(255,255,255,.10); border: 1px solid rgba(246,241,232,.18); margin-bottom: 8px; }
 .seat input, .seat select { background: rgba(255,255,255,.94) !important; }
+
+/* The wedding path on the landing page, present without taking over */
+#wedCard { border-color: var(--sakura-deep); background: linear-gradient(180deg, #fdf6f4, var(--card)); }

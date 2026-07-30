@@ -107,8 +107,8 @@
       B.innerHTML = `${dots}
         <label class="wiz-label">What are we planning?</label>
         <div style="display:flex;gap:8px;margin-bottom:4px">
-          <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Wedding</button>
           <button class="who-opt ${!w ? "sel" : ""}" id="wModeTrip" style="flex:1;justify-content:center;margin:0">🌍 Group trip</button>
+          <button class="who-opt ${w ? "sel" : ""}" id="wModeWed" style="flex:1;justify-content:center;margin:0">💍 Wedding</button>
         </div>
         ${w ? "" : `<label class="wiz-label">What kind of trip?</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
