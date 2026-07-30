@@ -33,7 +33,7 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model: "claude-sonnet-5", ...body }),
+    body: JSON.stringify({ model: "claude-sonnet-5", thinking: { type: "disabled" }, ...body }),
   });
   if (!resp.ok) {
     const detail = await resp.text();
@@ -44,6 +44,10 @@ async function callAnthropic(body: Record<string, unknown>): Promise<string | nu
     return null;
   }
   const ai = await resp.json();
+  if (ai?.stop_reason === "max_tokens") {
+    LAST_AI_ERROR = "AI response was cut off (max_tokens) — try again";
+    return null;
+  }
   return ai?.content?.find((c: { type?: string }) => c?.type === "text")?.text ?? "";
 }
 async function askClaude(prompt: string): Promise<Record<string, unknown> | null> {
