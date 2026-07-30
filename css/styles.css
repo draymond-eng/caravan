@@ -586,3 +586,9 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 
 /* The wedding path on the landing page, present without taking over */
 #wedCard { border-color: var(--sakura-deep); background: linear-gradient(180deg, #fdf6f4, var(--card)); }
+
+/* Pairings shown under a tee time or any event linked to a group set */
+.pairings { margin-top: 8px; padding: 9px 11px; border-radius: var(--r-sm);
+  background: #f2f7f3; border: 1px solid #dceadf; }
+.pair-row { font-size: 12.5px; line-height: 1.7; color: var(--ink-2); }
+.pair-row b { color: var(--ink); margin-right: 6px; }

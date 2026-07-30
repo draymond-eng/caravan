@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     const stopsTxt = (trip.stops || []).map((s: { id: string; label: string }) => `${s.label} (id: ${s.id})`).join(", ") || trip.destination || "the destination";
     const travelers = (trip.travelers || []).length || 2;
     const KIND: Record<string, string> = {
-      golf: "This is a GOLF trip: build days around tee times (early), give the group a real course each round, and leave room for the 19th hole. Mention booking tee times well ahead.",
+      golf: "This is a GOLF trip: build days around tee times. Use type \"tee\" for each round, put the real course name in where, and put the tee time in time. Start early, one round a day unless they clearly want 36, and leave room for the 19th hole.",
       ski: "This is a SKI trip: days start on the mountain, account for lift tickets and rentals booked ahead, and include apres and a rest day option.",
       beach: "This is a BEACH trip: keep days loose, one anchor activity a day, sunset and seafood matter more than sightseeing.",
       city: "This is a CITY trip: dense walkable days by neighborhood, strong food picks, one night out.",
@@ -101,7 +101,7 @@ Dates: ${trip.start_date} through ${trip.end_date} (inclusive; one entry for EVE
 Roughly ${travelers}+ guests expected. Location(s): ${stopsTxt}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"the kind of place this happens, e.g. Beach club, Ceremony venue, Hotel terrace","dress":"dress code for this event, e.g. Beach formal","note":"one practical sentence for guests"}]}]}
+{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"key detail for the day, or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet|tee","title":"...","where":"the kind of place this happens, e.g. Beach club, Ceremony venue, Hotel terrace","dress":"dress code for this event, e.g. Beach formal","note":"one practical sentence for guests"}]}]}
 Rules: never use an em dash ("\u2014") in any text; 2-4 items/day; give EVERY event a where and a dress, since wedding events move between places; use the given stop ids, not labels; keep exact venue names generic (e.g. "Ceremony venue, TBA") since the hosts will fill them in.`
 : `You are an expert travel planner. Build a realistic, well-paced draft itinerary for a group trip. It is a STARTING POINT the group will edit and vote on - favor famous-for-a-reason highlights, sensible geography (no backtracking), and realistic transit days.
 
@@ -111,7 +111,7 @@ Group: ${travelers} travelers
 Stops in order (allocate dates sensibly; travel between stops on changeover days): ${stopsTxt}
 
 Respond with ONLY valid JSON, no markdown fences:
-{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"neighborhood or landmark, if useful","note":"one practical sentence (booking tips, timing tricks)"}]}]}
+{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"suggested meetup spot + time or empty","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet|tee","title":"...","where":"neighborhood or landmark, if useful","note":"one practical sentence (booking tips, timing tricks)"}]}]}
 Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + departure days paced lightly; use the given stop ids, not labels.${kindNote ? "\n" + kindNote : ""}`);
       if (!plan || !Array.isArray(plan.days) || !(plan.days as unknown[]).length) return json({ error: LAST_AI_ERROR || "AI returned an unreadable plan - try again." }, 502);
 
@@ -125,7 +125,7 @@ Rules: never use an em dash ("\u2014") in any text; 3-5 items/day; arrival + dep
           meetup: String(d.meetup ?? "").slice(0, 200),
           items: Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>).slice(0, 6).map((it) => ({
             time: String(it.time ?? "").slice(0, 5),
-            type: ["travel", "sight", "food", "activity", "rest", "meet"].includes(String(it.type)) ? String(it.type) : "activity",
+            type: ["travel", "sight", "food", "activity", "rest", "meet", "tee"].includes(String(it.type)) ? String(it.type) : "activity",
             title: String(it.title ?? "").slice(0, 140),
             where: String(it.where ?? "").slice(0, 120),
             dress: String(it.dress ?? "").slice(0, 80),
@@ -243,7 +243,7 @@ Rules: never use an em dash ("\u2014") in any text; exactly 3 per stop, one of e
       const system = `You are SquadTrip's trip assistant - a sharp, warm, well-traveled friend helping a group plan and run their trip. Be concise and concrete; give opinions, not lists of hedges. Ground every answer in the trip context below (their real dates, stops, itinerary, votes). Plain text only, no markdown headers. Never use an em dash ("\u2014"); use commas or periods instead.
 
 If - and ONLY if - the user asks you to change or add itinerary days, end your reply with a machine-readable block in EXACTLY this format (one line, valid JSON):
-<<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet","title":"...","where":"location or empty","dress":"dress code or empty","note":"one sentence"}]}]}<<<END>>>
+<<<DAYS>>>{"days":[{"date":"YYYY-MM-DD","stop":"<stop id or empty>","title":"...","summary":"one line","meetup":"","items":[{"time":"HH:MM or empty","type":"travel|sight|food|activity|rest|meet|tee","title":"...","where":"location or empty","dress":"dress code or empty","note":"one sentence"}]}]}<<<END>>>
 Each day in the block fully REPLACES that date. Never include the block for questions, advice, or suggestions the user hasn't asked you to apply.
 
 TRIP CONTEXT:
@@ -267,7 +267,7 @@ ${JSON.stringify(ctx)}`;
               meetup: String(d.meetup ?? "").slice(0, 200),
               items: Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>).slice(0, 6).map((it) => ({
                 time: String(it.time ?? "").slice(0, 5),
-                type: ["travel", "sight", "food", "activity", "rest", "meet"].includes(String(it.type)) ? String(it.type) : "activity",
+                type: ["travel", "sight", "food", "activity", "rest", "meet", "tee"].includes(String(it.type)) ? String(it.type) : "activity",
                 title: String(it.title ?? "").slice(0, 140),
                 where: String(it.where ?? "").slice(0, 120),
                 dress: String(it.dress ?? "").slice(0, 80),

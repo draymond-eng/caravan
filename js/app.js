@@ -322,7 +322,12 @@
     travel: { emoji: "🚆", label: "Travel" }, sight: { emoji: "🏛️", label: "Sight" },
     food: { emoji: "🍽️", label: "Food" }, activity: { emoji: "🎟️", label: "Activity" },
     rest: { emoji: "🛌", label: "Rest" }, meet: { emoji: "📍", label: "Meetup" },
+    tee: { emoji: "⛳️", label: "Tee time" },
   };
+  /* Golf trips lead with tee times; everyone else keeps the usual order. */
+  const typeOrder = () => tripType() === "golf"
+    ? ["tee", "food", "activity", "travel", "rest", "meet", "sight"]
+    : ["travel", "sight", "food", "activity", "rest", "meet", "tee"];
 
   async function bootTrip() {
     $("#tripApp").style.display = "block";
@@ -1280,6 +1285,19 @@
       btn.disabled = false; btn.style.opacity = 1;
     }
   }
+  /* Show a linked set of groups right under the event, so a tee time reads
+     like a tee sheet instead of pointing somewhere else. */
+  function groupsInline(setName) {
+    const rows = state.groups.filter((g) => g.set_name === setName);
+    if (!rows.length) return "";
+    return `<div class="pairings">
+      ${rows.map((g) => {
+        const names = (g.members || []).map((id) => (byId(id) || {}).name).filter(Boolean).map((n) => n.split(" ")[0]);
+        return `<div class="pair-row"><b>${esc(g.label)}</b> ${names.length ? esc(names.join(", ")) : "<span class=\"r-sub\">nobody yet</span>"}</div>`;
+      }).join("")}
+      <div class="tl-map" data-go="groups" style="cursor:pointer;margin-top:4px">Edit ${esc(setName)} ›</div>
+    </div>`;
+  }
   function renderDayList() {
     const list = $("#dayList"); if (!list) return;
     if (!state.days.length) { list.innerHTML = emptyState("🗓️", "The plan is empty", isHost() ? "Add your first day below, or let ✨ AI draft the whole thing in about a minute. Everything stays editable." : "The " + (isWedding() ? "hosts haven't" : "group hasn't") + " added days yet. Check back soon."); return; }
@@ -1293,8 +1311,9 @@
         return `<div class="tl-item ${it.type || "activity"}">
           ${it.time ? `<div class="tl-time">${esc(it.time)}</div>` : ""}
           <div class="tl-title"><span class="type-emoji">${tm.emoji}</span>${esc(it.title)}</div>
-          ${it.where ? `<div class="tl-where">📍 ${esc(it.where)}</div>` : ""}
+          ${it.where ? `<div class="tl-where">${it.type === "tee" ? "⛳️" : "📍"} ${esc(it.where)}</div>` : ""}
           ${it.dress ? `<div class="tl-dress">👔 ${esc(it.dress)}</div>` : ""}
+          ${it.groupSet ? groupsInline(it.groupSet) : ""}
           ${it.note ? `<div class="tl-note">${esc(it.note)}</div>` : ""}
           <div class="rsvp">
             <button class="rsvp-btn ${meIn ? "on" : ""}" data-rsvp="${iid}">${meIn ? "✓ You're in" : "＋ I'm in"}</button>
@@ -1318,10 +1337,14 @@
           ${isHost() ? `<div class="expense-add" style="margin:10px 0 8px">
             <div style="display:flex;gap:8px">
               <input data-itime="${d.id}" type="time" style="flex:1" />
-              <select data-itype="${d.id}" style="flex:1.2">${Object.entries(TYPE).map(([k, v]) => `<option value="${k}">${v.emoji} ${v.label}</option>`).join("")}</select>
+              <select data-itype="${d.id}" style="flex:1.2">${typeOrder().map((k) => `<option value="${k}">${TYPE[k].emoji} ${TYPE[k].label}</option>`).join("")}</select>
             </div>
             <input data-ititle="${d.id}" placeholder="${isWedding() ? "Add an event…" : "Add an activity…"}" />
-            <input data-iwhere="${d.id}" list="placelist" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : "Where? (optional)"}" />
+            <input data-iwhere="${d.id}" list="placelist" autocomplete="off" placeholder="${isWedding() ? "Where? e.g. Hacienda del Mar, beach club" : (tripType() === "golf" ? "Course, e.g. Grayhawk (Raptor)" : "Where? (optional)")}" />
+            ${setsOf().length ? `<select data-igroup="${d.id}">
+              <option value="">${tripType() === "golf" ? "Pairings (optional)" : "Groups (optional)"}</option>
+              ${setsOf().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
+            </select>` : ""}
             ${isWedding() ? `<input data-idress="${d.id}" placeholder="Dress code for this event (optional)" />` : ""}
             <div class="btn-row">
               <button class="btn primary" data-iadd="${d.id}" style="flex:2">＋ Add</button>
@@ -1332,6 +1355,7 @@
       </div>`;
     }).join("");
     bindComments(list);
+    list.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); show(b.dataset.go); }));
     list.querySelectorAll(".day-head").forEach((h) => h.addEventListener("click", () => {
       const id = h.parentElement.dataset.date;
       if (openDays.has(id)) openDays.delete(id); else openDays.add(id);
@@ -1361,6 +1385,7 @@
       time: $(`[data-itime="${dayId}"]`).value, type: $(`[data-itype="${dayId}"]`).value, title, note: "",
       where: whereEl ? whereEl.value.trim() : "",
       dress: dressEl ? dressEl.value.trim() : "",
+      groupSet: ($(`[data-igroup="${dayId}"]`) || {}).value || "",
     };
     d.items = [...(d.items || []), item];
     renderDayList();
