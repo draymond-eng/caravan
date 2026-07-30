@@ -42,24 +42,6 @@
     set(k, v) { try { localStorage.setItem("cv_" + k, JSON.stringify(v)); } catch {} },
   };
 
-  if (!TRIP_CODE) { bootLanding(); } else {
-    // Never leave a blank screen: if boot fails, say so and offer a clean reload.
-    bootTrip().catch((e) => {
-      console.error("boot failed", e);
-      const h = document.getElementById("screen-home");
-      if (h) h.innerHTML = `<div class="card" style="margin-top:20px"><h3>😕 Something went wrong loading this trip</h3>
-        <p class="r-sub" style="margin:6px 0 12px">${String(e && e.message ? e.message : e)}</p>
-        <button class="btn primary" id="bootRetry" style="width:100%">Reload the app</button></div>`;
-      const b = document.getElementById("bootRetry");
-      if (b) b.addEventListener("click", async () => {
-        try {
-          if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); }
-          if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map((r) => r.unregister())); }
-        } catch (err) { console.warn(err); }
-        location.reload(true);
-      });
-    });
-  }
 
   /* =========================================================================
      LANDING - create / join
@@ -2429,6 +2411,26 @@
         setInterval(() => reg.update(), 30 * 1000);
         document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update(); });
       } catch (e) {}
+    });
+  }
+
+  /* ---- start ------------------------------------------------------------- */
+  if (!TRIP_CODE) { bootLanding(); } else {
+    // Never leave a blank screen: if boot fails, say so and offer a clean reload.
+    bootTrip().catch((e) => {
+      console.error("boot failed", e);
+      const h = document.getElementById("screen-home");
+      if (h) h.innerHTML = `<div class="card" style="margin-top:20px"><h3>😕 Something went wrong loading this trip</h3>
+        <p class="r-sub" style="margin:6px 0 12px">${String(e && e.message ? e.message : e)}</p>
+        <button class="btn primary" id="bootRetry" style="width:100%">Reload the app</button></div>`;
+      const b = document.getElementById("bootRetry");
+      if (b) b.addEventListener("click", async () => {
+        try {
+          if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); }
+          if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map((r) => r.unregister())); }
+        } catch (err) { console.warn(err); }
+        location.reload(true);
+      });
     });
   }
 })();
