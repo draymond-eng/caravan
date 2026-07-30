@@ -1,21 +1,15 @@
 /* Caravan — service worker. App-shell caching so the app opens offline.
    Bump CACHE when you change core files. */
-const CACHE = "caravan-v6";
+const CACHE = "caravan-v7";
 const CORE = [
   "./",
   "./index.html",
   "./css/styles.css",
-  "./js/data.js",
   "./js/app.js",
   "./js/config.js",
   "./js/backend.js",
   "./manifest.webmanifest",
   "./assets/icon.svg",
-  
-  
-  
-  
-  
 ];
 
 self.addEventListener("install", (e) => {

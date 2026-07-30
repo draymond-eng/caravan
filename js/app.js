@@ -221,6 +221,7 @@
 
   const byId = (id) => (TRIP.travelers || []).find((t) => t.id === id);
   const stopById = (id) => (TRIP.stops || []).find((s) => s.id === id) || { label: id };
+  const stopPillClass = (id) => { const i = (TRIP.stops || []).findIndex((s) => s.id === id); return "pill " + (i >= 0 ? "s" + (i % 6) : "any"); };
   const voterChips = (ids) => (ids || []).map((id) => { const t = byId(id); return t ? `<span class="avatar vchip" style="background:${t.color}" title="${esc(t.name)}">${initials(t.name)}</span>` : ""; }).join("");
 
   const TYPE = {
@@ -478,7 +479,7 @@
     s.innerHTML = `
       <div class="section-title">The plan</div>
       <div class="section-sub">Anyone can add days and activities. Hit <b>＋ I'm in</b> on anything you'd join.</div>
-      ${state.days.length < 2 ? `<div class="card" style="border-color:var(--ai)">
+      ${state.days.length < 2 ? `<div class="card ai-card">
         <h3>✨ Set up my trip with AI</h3>
         <p class="section-sub" style="margin:4px 0 12px">Claude drafts the works for ${esc(TRIP.destination || "your destination")}: a full day-by-day itinerary, destination guide, neighborhood breakdowns for picking where to stay, and starter votes & ideas for the group. Everything stays editable.</p>
         <button class="btn primary" id="aiBuild" style="width:100%">✨ Set up my trip</button>
@@ -553,7 +554,7 @@
       return `<div class="day ${openDays.has(d.id) ? "open" : ""}" data-date="${d.id}">
         <div class="day-head">
           <div class="day-date"><div class="d">${f.day}</div><div class="m">${f.wd} ${f.mon}</div></div>
-          <div class="info"><div class="t">${esc(d.title)}${d.stop ? ` <span class="pill any">${esc(stopById(d.stop).label)}</span>` : ""}</div>
+          <div class="info"><div class="t">${esc(d.title)}${d.stop ? ` <span class="${stopPillClass(d.stop)}">${esc(stopById(d.stop).label)}</span>` : ""}</div>
             <div class="s">${esc(d.summary || "")}</div></div>
           <div class="caret">▶</div>
         </div>
@@ -744,7 +745,7 @@
         const options = state.stayOptions.filter((p) => p.stop === st.id);
         const myCount = options.filter((o) => o.author === state.me).length;
         return `<div style="margin-bottom:28px">
-          <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="pill any">${esc(st.label)}</span></div>
+          <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="${stopPillClass(st.id)}">${esc(st.label)}</span></div>
           ${(() => { const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id); return hoods.length ? `<div class="hood-scroll">${hoods.map((n) => `<div class="hood-card">
             <div class="hood-name">${esc(n.emoji || "📍")} ${esc(n.title)}</div>
             <div class="hood-tags">${(n.tags || []).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
