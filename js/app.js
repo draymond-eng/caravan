@@ -703,9 +703,9 @@
     $("#whoamiAvatar").innerHTML = t ? avatarHTML(t, 26, 10) : "👤";
   }
   function openWho() {
+    if (isWedding()) { openWhoWedding(); return; }
     $("#whoOptions").innerHTML = (TRIP.travelers || []).map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">
-      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
-      + (isWedding() ? `<div class="who-opt" id="whoAddMe" style="justify-content:center;font-weight:800;color:var(--ai-2)">＋ I'm not on the list. Add me</div>` : "");
+      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("");
     $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
       const first = !state.me;
       state.me = o.dataset.me; LS.set("me", state.me); renderWhoami();
@@ -739,6 +739,66 @@
         setTimeout(maybeOfferInstall, 450);
       });
     });
+    $("#whoModal").classList.add("open");
+  }
+
+  /* A wedding has two audiences. Guests say their own name and never see the
+     rest of the list. Hosts pick themselves from the short host list. */
+  function openWhoWedding(step) {
+    const box = $("#whoOptions");
+    const hosts = (TRIP.travelers || []).filter((t) => (TRIP.hosts || []).includes(t.id));
+    if (!step) {
+      box.innerHTML = `
+        <p class="section-sub" style="margin:-4px 0 12px">So we know who is who.</p>
+        <div class="who-opt" id="whoGuest" style="justify-content:center;font-weight:800">I'm a guest</div>
+        <div class="who-opt" id="whoHost" style="justify-content:center;font-weight:800">I'm hosting</div>`;
+      $("#whoGuest").addEventListener("click", () => openWhoWedding("guest"));
+      $("#whoHost").addEventListener("click", () => openWhoWedding("host"));
+    } else if (step === "host") {
+      box.innerHTML = (hosts.length
+        ? hosts.map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
+        : `<p class="section-sub">No hosts are set up yet.</p>`)
+        + `<div class="who-opt" id="whoBack" style="justify-content:center;color:var(--ink-2)">← Back</div>`;
+      $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
+        const first = !state.me;
+        state.me = o.dataset.me; LS.set("me", state.me); renderWhoami(); renderCurrent();
+        $("#whoModal").classList.remove("open");
+        if (first) setTimeout(maybeOfferInstall, 450);
+      }));
+      $("#whoBack").addEventListener("click", () => openWhoWedding());
+    } else {
+      const mine = byId(state.me);
+      box.innerHTML = `
+        <p class="section-sub" style="margin:-4px 0 10px">Your name, so your RSVP is tagged to you. Only the hosts see the full list.</p>
+        <input id="whoName" placeholder="First and last name" value="${esc(mine ? mine.name : "")}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;margin-bottom:10px" />
+        <button class="btn primary" id="whoSave" style="width:100%">That's me</button>
+        <div id="whoMsg" class="r-sub" style="margin-top:6px"></div>
+        <div class="who-opt" id="whoBack" style="justify-content:center;color:var(--ink-2);margin-top:10px">← Back</div>`;
+      $("#whoName").focus();
+      $("#whoBack").addEventListener("click", () => openWhoWedding());
+      $("#whoSave").addEventListener("click", async () => {
+        const name = $("#whoName").value.trim();
+        if (!name) { $("#whoMsg").textContent = "Type your name first."; return; }
+        $("#whoMsg").textContent = "One moment…";
+        const fresh = await Backend.getTrip(TRIP_CODE); // never clobber other guests
+        if (fresh) TRIP = fresh;
+        const travs = TRIP.travelers || [];
+        const hit = travs.find((t) => t.name.trim().toLowerCase() === name.toLowerCase());
+        if (hit) {
+          state.me = hit.id; LS.set("me", state.me);
+        } else {
+          const me = { id: slug(name) + "-" + travs.length, name, color: PALETTE[travs.length % PALETTE.length] };
+          const ok = await Backend.updateTrip(TRIP_CODE, { travelers: [...travs, me] });
+          if (!ok) { $("#whoMsg").textContent = "Couldn't save. Try again."; return; }
+          TRIP.travelers = [...travs, me];
+          state.me = me.id; LS.set("me", state.me);
+        }
+        const first = true;
+        renderWhoami(); renderCurrent();
+        $("#whoModal").classList.remove("open");
+        if (first) setTimeout(maybeOfferInstall, 450);
+      });
+    }
     $("#whoModal").classList.add("open");
   }
 
@@ -866,6 +926,11 @@
     Object.entries(t).forEach(([choice, voters]) => {
       if (choice.startsWith("yes")) { parties.push(...voters); people += voters.length * (parseInt(choice.split(":")[1], 10) || 1); }
     });
+    if (!isHost()) {
+      return `<p style="margin:0;font-size:13px;color:var(--ink-2)">${people
+        ? `<b>${people}</b> people are coming so far. The guest list stays with the hosts.`
+        : "No RSVPs yet. Be the first."}</p>`;
+    }
     return `${parties.length ? `<div class="crew-strip">${voterChips(parties)}</div>` : ""}
       <p style="margin:${parties.length ? "12px" : "0"} 0 0;font-size:13px;color:var(--ink-2)">
         ${parties.length ? `<b>${people}</b> attending across ${parties.length} ${parties.length === 1 ? "party" : "parties"}${declined ? ` · ${declined} can't make it` : ""}` : "No RSVPs yet. Be the first."}
@@ -1134,22 +1199,73 @@
      ====================================================================== */
   function renderCrew() {
     const s = $("#screen-crew");
+    const me = byId(state.me);
+    const photoRow = `<input id="crewPhoto" type="file" accept="image/*" style="display:none" />
+      <div id="crewPhotoStatus" class="r-sub" style="margin:0 4px 12px"></div>`;
+
+    // A wedding guest sees the hosts and a headcount, never the full list.
+    if (isWedding() && !isHost()) {
+      const t = tally("wrsvp", "attend");
+      let people = 0;
+      Object.entries(t).forEach(([choice, voters]) => {
+        if (choice.startsWith("yes")) people += voters.length * (parseInt(choice.split(":")[1], 10) || 1);
+      });
+      const hosts = (TRIP.travelers || []).filter((x) => (TRIP.hosts || []).includes(x.id));
+      s.innerHTML = `
+        <div class="section-title">Who's who</div>
+        <div class="section-sub">The people putting this on, and how the headcount is shaping up.</div>
+        ${hosts.length ? `<div class="pair-card">
+          <div class="pair-name">Your hosts</div>
+          ${hosts.map((h) => `<div class="person">${avatarHTML(h, 52, 17)}
+            <div class="p-info"><div class="p-name">${esc(h.name)}</div></div></div>`).join("")}
+        </div>` : ""}
+        <div class="card">
+          <h3>🥂 ${people ? people + " coming so far" : "No RSVPs yet"}</h3>
+          <p class="section-sub" style="margin:4px 0 0">The full guest list stays with the hosts.</p>
+        </div>
+        ${me ? `<div class="card">
+          <h3>You</h3>
+          <div class="person" style="border:none;padding-top:6px">${avatarHTML(me, 52, 17)}
+            <div class="p-info"><div class="p-name">${esc(me.name)}<span class="badge-you">YOU</span></div>
+              <div class="p-sub"><label class="tl-map" for="crewPhoto" style="cursor:pointer">📷 ${me.photo ? "Change photo" : "Add your photo"}</label></div></div>
+          </div>
+        </div>` : `<div class="card"><h3>Tell us who you are</h3>
+          <p class="section-sub" style="margin:4px 0 12px">So your RSVP is tagged to you.</p>
+          <button class="btn primary" id="crewWho" style="width:100%">That's me</button></div>`}
+        ${photoRow}`;
+      const cw = $("#crewWho"); if (cw) cw.addEventListener("click", openWho);
+      bindCrewPhoto();
+      return;
+    }
+
+    const wed = isWedding();
+    const rsvp = tally("wrsvp", "attend");
+    const rsvpFor = (id) => {
+      const hit = Object.entries(rsvp).find(([, voters]) => voters.includes(id));
+      if (!hit) return "";
+      if (hit[0] === "no") return "Can't make it";
+      const n = parseInt(hit[0].split(":")[1], 10) || 1;
+      return `Coming, party of ${n}`;
+    };
     s.innerHTML = `
-      <div class="section-title">The crew</div>
-      <div class="section-sub">${(TRIP.travelers || []).length} travelers. Tap "Who are you?" up top to tag yourself, then add a photo.</div>
+      <div class="section-title">${wed ? "Guest list" : "The crew"}</div>
+      <div class="section-sub">${(TRIP.travelers || []).length} ${wed ? "on the list. Only hosts see this." : 'travelers. Tap "Who are you?" up top to tag yourself, then add a photo.'}</div>
       <div class="pair-card">
         ${(TRIP.travelers || []).map((t) => `<div class="person">
           ${avatarHTML(t, 52, 17)}
-          <div class="p-info"><div class="p-name">${esc(t.name)}${state.me === t.id ? '<span class="badge-you">YOU</span>' : ""}</div>
+          <div class="p-info"><div class="p-name">${esc(t.name)}${state.me === t.id ? '<span class="badge-you">YOU</span>' : ""}${wed && (TRIP.hosts || []).includes(t.id) ? ' <span class="pill any">Host</span>' : ""}</div>
+            ${wed && rsvpFor(t.id) ? `<div class="p-sub">${esc(rsvpFor(t.id))}</div>` : ""}
             ${state.me === t.id ? `<div class="p-sub"><label class="tl-map" for="crewPhoto" style="cursor:pointer">📷 ${t.photo ? "Change photo" : "Add your photo"}</label></div>` : ""}</div>
         </div>`).join("")}
       </div>
-      <input id="crewPhoto" type="file" accept="image/*" style="display:none" />
-      <div id="crewPhotoStatus" class="r-sub" style="margin:0 4px 12px"></div>
+      ${photoRow}
       <div class="card">
         <h3>📍 Invite someone</h3>
-        <p class="section-sub" style="margin:4px 0 0">Share the code <b>${esc(TRIP.code)}</b> or copy the link from Home. New joiners pick their name from this list.</p>
+        <p class="section-sub" style="margin:4px 0 0">Share the code <b>${esc(TRIP.code)}</b> or copy the link from Home.${wed ? " Guests just type their name when they open it." : " New joiners pick their name from this list."}</p>
       </div>`;
+    bindCrewPhoto();
+  }
+  function bindCrewPhoto() {
     const cp = $("#crewPhoto");
     if (cp) cp.addEventListener("change", async () => {
       const file = cp.files[0]; if (!file || !state.me) return;
@@ -2213,6 +2329,25 @@
   /* =========================================================================
      SETTINGS - edit the trip after creation
      ====================================================================== */
+  /* Accepts a pasted list or CSV text. Takes the first column, skips a header
+     row, strips quotes and stray numbering, and ignores blanks. */
+  function parseGuestList(text) {
+    const lines = String(text || "").split(/\r?\n/);
+    const out = [];
+    lines.forEach((line, i) => {
+      let v = line.trim();
+      if (!v) return;
+      // first CSV column, respecting simple quoting
+      const m = v.match(/^\s*"([^"]*)"\s*(?:,|$)/);
+      v = m ? m[1] : v.split(",")[0];
+      v = v.replace(/^\s*\d+[.)]\s*/, "").replace(/\s+/g, " ").trim();
+      if (!v) return;
+      if (i === 0 && /^(name|guest|guests?|full name|first|attendee)$/i.test(v)) return; // header
+      if (v.length > 80) v = v.slice(0, 80);
+      out.push(v);
+    });
+    return out;
+  }
   function renderSettings() {
     const s = $("#screen-settings");
     const inp = (id, val, ph, type = "text") =>
@@ -2294,8 +2429,23 @@
         <div id="stBasicsMsg" class="r-sub" style="margin-top:6px"></div>
       </div>
 
+      ${isWedding() ? `<div class="card">
+        <h3>👥 Guest list</h3>
+        <p class="section-sub" style="margin:2px 0 10px">Paste your list or upload the spreadsheet. One guest per line, or a CSV where the first column is the name. Guests then pick themselves from this list instead of typing their own name.</p>
+        <div class="expense-add">
+          <textarea id="glPaste" rows="5" placeholder="Maya Chen&#10;Jordan Blake&#10;Sam Ortiz&#10;..." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;font-family:inherit;background:#fffdfa;color:var(--ink)"></textarea>
+          <div class="btn-row">
+            <label class="btn ghost" style="flex:1;text-align:center;cursor:pointer">Upload .csv
+              <input id="glFile" type="file" accept=".csv,.txt,text/csv,text/plain" style="display:none" /></label>
+            <button class="btn primary" id="glAdd" style="flex:2">Add to the guest list</button>
+          </div>
+        </div>
+        <div id="glMsg" class="r-sub" style="margin-top:8px"></div>
+        <p class="section-sub" style="margin:10px 0 0;font-size:11.5px">${(TRIP.travelers || []).length} on the list now. Adding again only brings in names that are not already there.</p>
+      </div>` : ""}
+
       <div class="card">
-        <h3>Travelers</h3>
+        <h3>${isWedding() ? "Everyone on the list" : "Travelers"}</h3>
         <p class="section-sub" style="margin:2px 0 10px">Rename anyone, add newcomers, or remove someone.</p>
         <div id="stTravs">
           ${(TRIP.travelers || []).map((t, i) => `<div class="trav-row">
@@ -2350,6 +2500,41 @@
       </div>`;
 
     const sti = $("#stInstall"); if (sti) sti.addEventListener("click", () => maybeOfferInstall(true));
+
+    /* ---- guest list import ------------------------------------------------ */
+    const glFile = $("#glFile"); if (glFile) glFile.addEventListener("change", () => {
+      const f = glFile.files && glFile.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        const cur = $("#glPaste").value.trim();
+        $("#glPaste").value = (cur ? cur + "\n" : "") + String(r.result || "");
+        $("#glMsg").textContent = `Loaded ${esc(f.name)}. Review the names, then add them.`;
+      };
+      r.readAsText(f);
+    });
+    const glAdd = $("#glAdd"); if (glAdd) glAdd.addEventListener("click", async () => {
+      const names = parseGuestList($("#glPaste").value);
+      if (!names.length) { $("#glMsg").textContent = "No names found. One per line, or a CSV with names in the first column."; return; }
+      $("#glMsg").textContent = "Adding…";
+      const fresh = await Backend.getTrip(TRIP_CODE); // don't clobber guests who added themselves
+      if (fresh) TRIP = fresh;
+      const existing = (TRIP.travelers || []);
+      const seen = new Set(existing.map((t) => t.name.trim().toLowerCase()));
+      const added = [];
+      names.forEach((n) => {
+        const key = n.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        added.push({ id: slug(n) + "-" + (existing.length + added.length), name: n, color: PALETTE[(existing.length + added.length) % PALETTE.length] });
+      });
+      if (!added.length) { $("#glMsg").textContent = "Everyone on that list is already here."; return; }
+      const ok = await Backend.updateTrip(TRIP_CODE, { travelers: [...existing, ...added] });
+      if (!ok) { $("#glMsg").textContent = "Couldn't save. Try again."; return; }
+      TRIP.travelers = [...existing, ...added];
+      $("#glPaste").value = "";
+      $("#glMsg").textContent = `Added ${added.length} guest${added.length === 1 ? "" : "s"}. ${names.length - added.length ? (names.length - added.length) + " were already on the list." : ""}`;
+      renderSettings();
+    });
     const stDest = $("#stDest"); if (stDest) stDest.addEventListener("change", () => {
       const tz = tzForCity(stDest.value); if (tz) $("#stTz").value = tz;
     });
