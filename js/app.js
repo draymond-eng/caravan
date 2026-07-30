@@ -1260,30 +1260,100 @@
       if (row) { state.stayOptions.push(row); renderStays(); }
     });
   }
+  function openBlockForm(container) {
+    if (!state.me) { openWho(); return; }
+    $(container).innerHTML = `<div class="card" style="border-color:var(--ai)">
+      <h3>🏨 Add a room block</h3>
+      <p class="section-sub" style="margin:4px 0 10px">Add each hotel you've reserved rooms at. Guests book from here.</p>
+      <div class="expense-add">
+        <input id="blName" placeholder="Hotel name" />
+        <input id="blRate" placeholder="Rate, e.g. $189/night" />
+        <input id="blDeadline" placeholder="Book-by date, e.g. Sep 1" />
+        <input id="blAddr" placeholder="Address or distance from the venue (optional)" />
+        <input id="blNote" placeholder="Anything else guests should know (optional)" />
+        <input id="blLink" placeholder="Booking link" />
+        <div class="btn-row">
+          <button class="btn ghost" id="blCancel" style="flex:1">Cancel</button>
+          <button class="btn primary" id="blSave" style="flex:2">Add block</button>
+        </div>
+      </div>
+    </div>`;
+    $("#blCancel").addEventListener("click", () => { $(container).innerHTML = ""; });
+    $("#blSave").addEventListener("click", async () => {
+      const name = $("#blName").value.trim();
+      if (!name) { alert("Add the hotel name."); return; }
+      const row = await Backend.insert("stay_options", {
+        trip: TRIP_CODE, stop: (TRIP.stops || [{ id: "" }])[0].id, kind: "block",
+        name, rate: $("#blRate").value.trim(), deadline: $("#blDeadline").value.trim(),
+        address: $("#blAddr").value.trim(), note: $("#blNote").value.trim(),
+        link: $("#blLink").value.trim(), tag: "Room block", booked: false, author: state.me,
+      });
+      if (row) { state.stayOptions.push(row); renderStays(); }
+    });
+  }
   function renderStays() {
     const s = $("#screen-stays");
     if (isWedding()) {
       const L = TRIP.links || {};
+      const blocks = state.stayOptions.filter((o) => o.kind === "block");
+      const myBlock = myVote("block", "staying");
+      const booked = state.stayOptions.filter((o) => o.booked);
       s.innerHTML = `
-        <div class="section-title">Where to stay</div>
-        <div class="section-sub">The hosts' picks for where guests should base themselves.</div>
-        ${(() => {
-          const bookedAll = state.stayOptions.filter((o) => o.booked);
-          if (!bookedAll.length) return "";
-          return `<div class="check-cat" style="margin:4px 0 8px">Where the group is staying</div>` +
-            bookedAll.map((o) => bookedCard(o, stopById(o.stop).label)).join("");
-        })()}
-        ${isHost() ? `<div id="wedBookedForm"></div>
-          <button class="btn ghost" id="wedAddBooked" style="width:100%;margin-bottom:14px">✓ Add a place that's already booked</button>` : ""}
-        ${L.roomblock ? `<div class="card ai-card">
+        <div class="section-title">Venue and rooms</div>
+        <div class="section-sub">Where it all happens, and where to sleep.</div>
+
+        ${L.venue_name ? `<div class="card ai-card">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="pill" style="background:rgba(255,255,255,.16);color:#f6f1e8">💒 The venue</span></div>
+          <h3 style="margin:0 0 4px">${esc(L.venue_name)}</h3>
+          ${L.venue_address ? `<div class="section-sub" style="margin:0 0 10px">${esc(L.venue_address)}</div>` : ""}
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <a class="tl-map" style="color:var(--gold-soft)" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(L.venue_name + " " + (L.venue_address || TRIP.destination || ""))}" target="_blank" rel="noopener">📍 Map</a>
+            ${L.venue_link ? `<a class="tl-map" style="color:var(--gold-soft)" href="${esc(L.venue_link)}" target="_blank" rel="noopener">🔗 Venue site</a>` : ""}
+          </div>
+        </div>` : (isHost() ? emptyState("💒", "No venue posted yet", "Add the venue in <b>More → Settings</b> and guests will see it here with a map.") : "")}
+
+        <div class="section-title" style="font-size:17px;margin-top:22px">Room blocks</div>
+        <div class="section-sub">${blocks.length ? "Reserved at group rates. Book whichever suits you, then tap <b>I'm staying here</b> so the hosts can plan shuttles." : ""}</div>
+        ${blocks.length ? blocks.map((b) => {
+          const staying = myBlock === b.id;
+          const others = (tally("block", "staying")[b.id] || []);
+          return `<div class="card" style="${staying ? "border-color:var(--matcha)" : ""}">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <div style="flex:1;min-width:0">
+                <h3 style="margin:0 0 2px">${esc(b.name)}</h3>
+                <div class="stay-opt-tag">${esc(b.rate || "Group rate")}${b.deadline ? ` · book by ${esc(b.deadline)}` : ""}</div>
+                ${b.address ? `<div class="r-sub" style="margin-top:4px">${esc(b.address)}</div>` : ""}
+                ${b.note ? `<div class="stay-opt-note">${esc(b.note)}</div>` : ""}
+              </div>
+            </div>
+            ${others.length ? `<div class="tally" style="margin-top:8px">${voterChips(others)}<span class="tally-n">${others.length} staying here</span></div>` : ""}
+            <div class="btn-row" style="margin-top:12px">
+              ${b.link ? `<a class="btn primary" href="${esc(b.link)}" target="_blank" rel="noopener" style="flex:2;text-align:center;text-decoration:none">Book a room</a>` : ""}
+              <button class="btn ${staying ? "primary" : "ghost"}" data-block="${b.id}" style="flex:1">${staying ? "✓ You're here" : "I'm staying here"}</button>
+            </div>
+            ${isHost() ? `<div style="text-align:right;margin-top:8px"><span class="tl-map" style="color:var(--vermilion);cursor:pointer" data-blockdel="${b.id}">Remove</span></div>` : ""}
+          </div>`;
+        }).join("") : (L.roomblock ? `<div class="card">
           <h3>🏨 Room block</h3>
-          <p class="section-sub" style="margin:4px 0 12px">The hosts reserved rooms at group rates${L.deadline ? ` (<b>book by ${esc(L.deadline)}</b>)` : ""}.</p>
+          <p class="section-sub" style="margin:4px 0 12px">Reserved at group rates${L.deadline ? `, <b>book by ${esc(L.deadline)}</b>` : ""}.</p>
           <a class="btn primary" href="${esc(L.roomblock)}" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Book a room</a>
-        </div>` : (isHost() ? `<div class="card"><h3>🏨 Room block</h3><p class="section-sub" style="margin:4px 0 0">Add the room-block link in <b>More → Settings</b> and guests will see a big Book button here.</p></div>` : emptyState("🏨", "No room block yet", "The hosts haven't posted where to stay. Once they do, you'll get a booking link and the deadline right here."))}
+        </div>` : emptyState("🏨", "No room blocks yet", isHost()
+            ? "Add each hotel you've blocked rooms at, with the rate and booking deadline. Guests book from here and tell you where they're staying."
+            : "The hosts haven't posted where to stay yet. Once they do, you'll get booking links and deadlines right here."))}
+
+        ${isHost() ? `<div id="blockForm"></div>
+          <button class="btn ghost" id="addBlock" style="width:100%;margin-bottom:18px">＋ Add a room block</button>` : ""}
+
+        ${booked.length ? `<div class="section-title" style="font-size:17px;margin-top:22px">Already booked</div>` +
+          booked.map((o) => bookedCard(o, stopById(o.stop).label)).join("") : ""}
+        ${isHost() ? `<div id="wedBookedForm"></div>
+          <button class="btn ghost" id="wedAddBooked" style="width:100%">✓ Add a place that's already booked</button>` : ""}
+
         ${(TRIP.stops || []).map((st) => {
           const hoods = state.guides.filter((g) => g.kind === "hood" && g.stop === st.id);
-          return hoods.length ? `<div style="margin-bottom:20px">
-            <div style="display:flex;align-items:center;gap:9px;margin:0 2px 10px"><span class="${stopPillClass(st.id)}">${esc(st.label)}</span><span class="r-sub" style="font-size:12px">neighborhoods, if you're booking your own</span></div>
+          return hoods.length ? `<div style="margin-top:24px">
+            <div class="section-title" style="font-size:17px">Booking your own?</div>
+            <div class="section-sub">Neighborhoods around ${esc(st.label)}.</div>
             <div class="hood-scroll">${hoods.map((n) => `<div class="hood-card">
               <div class="hood-name">${esc(n.emoji || "📍")} ${esc(n.title)}</div>
               <div class="hood-tags">${(n.tags || []).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
@@ -1292,6 +1362,14 @@
             </div>`).join("")}</div>
           </div>` : "";
         }).join("")}`;
+
+      s.querySelectorAll("[data-block]").forEach((b) => b.addEventListener("click", () => setVote("block", "staying", b.dataset.block)));
+      s.querySelectorAll("[data-blockdel]").forEach((b) => b.addEventListener("click", async () => {
+        const id = b.dataset.blockdel;
+        state.stayOptions = state.stayOptions.filter((x) => x.id !== id); renderStays();
+        await Backend.remove("stay_options", id);
+      }));
+      const ab = $("#addBlock"); if (ab) ab.addEventListener("click", () => openBlockForm("#blockForm"));
       const wab = $("#wedAddBooked");
       if (wab) wab.addEventListener("click", () => openBookedForm((TRIP.stops || [{ id: "" }])[0].id, "#wedBookedForm"));
       s.querySelectorAll("[data-unbook]").forEach((b) => b.addEventListener("click", async () => {
@@ -1307,7 +1385,7 @@
       ${(TRIP.stops || []).map((st) => {
         const mine = myVote("stay", st.id);
         const counts = tally("stay", st.id);
-        const options = state.stayOptions.filter((p) => p.stop === st.id);
+        const options = state.stayOptions.filter((p) => p.stop === st.id && p.kind !== "block");
         const booked = options.find((o) => o.booked);
         const myCount = options.filter((o) => o.author === state.me && !o.booked).length;
         if (booked) return `<div style="margin-bottom:28px">
@@ -2018,7 +2096,11 @@
       ${isWedding() ? `<div class="card">
         <h3>💍 Wedding links</h3>
         <p class="section-sub" style="margin:2px 0 10px">Shown to every guest on Home and in Stays.</p>
-        <label class="wiz-label">Room block link (hotel booking)</label>${inp("wlRoom", (TRIP.links || {}).roomblock, "https://…")}
+        <label class="wiz-label">Venue name</label>${inp("wlVenue", (TRIP.links || {}).venue_name, "e.g. Hacienda del Mar")}
+        <label class="wiz-label">Venue address</label>${inp("wlVenueAddr", (TRIP.links || {}).venue_address, "Street, city")}
+        <label class="wiz-label">Venue website</label>${inp("wlVenueLink", (TRIP.links || {}).venue_link, "https://…")}
+        <div class="r-sub" style="margin:10px 2px 0;font-size:11.5px">Room blocks are added on the <b>Stays</b> screen, one per hotel, so guests can pick.</div>
+        <label class="wiz-label">Fallback room block link (if you only have one)</label>${inp("wlRoom", (TRIP.links || {}).roomblock, "https://…")}
         <label class="wiz-label">Room block deadline</label>${inp("wlDeadline", (TRIP.links || {}).deadline, "e.g. March 1")}
         <label class="wiz-label">Registry link</label>${inp("wlReg", (TRIP.links || {}).registry, "https://…")}
         <label class="wiz-label">Wedding website</label>${inp("wlSite", (TRIP.links || {}).site, "https://…")}
@@ -2142,6 +2224,8 @@
         roomblock: $("#wlRoom").value.trim(), deadline: $("#wlDeadline").value.trim(),
         registry: $("#wlReg").value.trim(), site: $("#wlSite").value.trim(),
         rsvp_deadline: $("#wlRsvpBy").value.trim(), cost: $("#wlCost").value.trim(),
+        venue_name: $("#wlVenue").value.trim(), venue_address: $("#wlVenueAddr").value.trim(),
+        venue_link: $("#wlVenueLink").value.trim(),
       };
       Object.keys(links).forEach((k) => { if (!links[k]) delete links[k]; });
       const faq = $("#wlFaq").value.split("\n").map((l) => {

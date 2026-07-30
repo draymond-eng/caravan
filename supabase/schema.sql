@@ -240,3 +240,8 @@ alter table public.trips add column if not exists home_tz      text default '';
 alter table public.stay_options add column if not exists booked  boolean default false;
 alter table public.stay_options add column if not exists address text default '';
 alter table public.stay_options add column if not exists conf    text default '';
+
+-- Wedding lodging: room blocks are their own kind of stay row. Safe to re-run.
+alter table public.stay_options add column if not exists kind     text default 'option'; -- option | block
+alter table public.stay_options add column if not exists rate     text default '';
+alter table public.stay_options add column if not exists deadline text default '';
