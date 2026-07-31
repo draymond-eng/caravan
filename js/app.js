@@ -1318,7 +1318,7 @@
         "Coordinator, photographer, catering. The ones you would need to call in a hurry.",
         "📇 Add your vendors", "dayof"));
     }
-    if (TRIP.start_date) {
+    if (TRIP.start_date && !["live", "eve", "after"].includes(tripPhase())) {
       const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
       if (due.length) {
         cards.push(actCard("amber", "Worth doing now", `${due.length} thing${due.length === 1 ? "" : "s"} on the timeline`,
@@ -1345,7 +1345,7 @@
         "🗳️ Cast your votes", "decisions"));
     }
     // things due on the booking timeline
-    if (TRIP.start_date) {
+    if (TRIP.start_date && !["live", "eve", "after"].includes(tripPhase())) {
       const due = bookingItems().filter((i) => i.bucket === "now" && !(tally("booking", i.id).done || []).length);
       if (due.length) {
         cards.push(actCard("amber", "Worth doing now", `${due.length} thing${due.length === 1 ? "" : "s"} to book`,
@@ -1380,6 +1380,7 @@
   function renderHome() {
     const s = $("#screen-home");
     const openCount = state.decisions.filter((d) => d.status !== "decided").length;
+    const phase = tripPhase();
     s.innerHTML = `
       <div class="hero compact" data-scene="${heroScene()}">
         <div class="sun"></div>
@@ -1391,15 +1392,23 @@
 
       ${tzWarningCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
-      ${todayCard()}
       ${latestAnnouncementCard()}
-      ${needsYou()}
 
-      <div class="countdown" id="countdown"></div>
-      <div class="clocks" id="clocks"></div>
-
-      ${bookedAskCard()}
-      ${bookedHostCard()}
+      ${phase === "live" || phase === "eve" ? `
+        ${liveCard()}
+        ${needsYou()}
+        <div class="clocks" id="clocks"></div>`
+      : phase === "after" ? `
+        ${afterCard()}
+        ${needsYou()}`
+      : `
+        ${todayCard()}
+        ${needsYou()}
+        <div class="countdown" id="countdown"></div>
+        <div class="clocks" id="clocks"></div>
+        ${bookedAskCard()}
+        ${bookedHostCard()}
+        ${askedCard()}`}
       ${isWedding() ? weddingYouCard() + weddingLinksCard() : ""}
 
       <div class="section-title" style="margin-top:20px">${isWedding() ? "Who's coming" : "The crew"}</div>
@@ -1429,6 +1438,7 @@
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
     bindBookedCards(s);
+    bindAsked(s);
     const hc = $("#hostCopy"); if (hc) hc.addEventListener("click", () => {
       navigator.clipboard?.writeText(cateringList())
         .then(() => { $("#hostMsg2").textContent = "Copied. Paste it straight into an email."; })
@@ -1864,6 +1874,101 @@
     if (waiting.length) { lines.push("", "No reply yet:", ...waiting.map((n) => "   " + n)); }
     return lines.join("\n");
   }
+  /* ---- Phases ---------------------------------------------------------------
+     A trip is used for a year and needs different things in each stretch of it.
+     The same screen, weighted differently, rather than a tool that does not
+     know what week it is.
+     -------------------------------------------------------------------------- */
+  function tripPhase() {
+    if (!TRIP.start_date) return "planning";
+    const out = daysUntilTrip();
+    if (out > 0 && out <= 1) return "eve";
+    if (out <= 0) {
+      const end = new Date(TRIP.end_date + "T23:59:59");
+      return new Date() <= end ? "live" : "after";
+    }
+    if (out > 180) return "early";
+    if (out > 45) return "planning";
+    return "final";
+  }
+  /* The next thing happening, and the one after it. */
+  function upcoming() {
+    const now = new Date();
+    const iso = now.toISOString().slice(0, 10);
+    const hhmm = now.toTimeString().slice(0, 5);
+    const out = [];
+    (state.days || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach((d) => {
+      if (d.date < iso) return;
+      (d.items || []).forEach((i) => {
+        if (d.date === iso && i.time && i.time < hhmm) return;
+        out.push({ ...i, date: d.date, dayTitle: d.title, meetup: d.meetup });
+      });
+      if (!(d.items || []).length) out.push({ title: d.title, date: d.date, dayTitle: d.title, meetup: d.meetup, time: "" });
+    });
+    return out;
+  }
+  /* Live mode: during the trip nobody wants a planning tool. One thing, where
+     it is, when it starts, what to wear. Everything else waits. */
+  function liveCard() {
+    const next = upcoming();
+    if (!next.length) return `<div class="card" style="border-color:var(--ai)">
+      <span class="pill any">Right now</span>
+      <h3 style="margin:8px 0 4px">Nothing scheduled</h3>
+      <div class="r-sub">Enjoy it. Anything anyone adds to the Plan shows up here.</div>
+    </div>`;
+    const n = next[0], rest = next.slice(1, 4);
+    const f = fmtDate(n.date);
+    const today = n.date === new Date().toISOString().slice(0, 10);
+    const when = today ? (n.time ? `Today at ${esc(n.time)}` : "Today") : `${f.wd} ${f.mon} ${f.day}${n.time ? " at " + esc(n.time) : ""}`;
+    const mapQ = n.where ? encodeURIComponent(`${n.where}, ${TRIP.destination || ""}`) : "";
+    return `<div class="card live-now">
+      <span class="pill any">Up next</span>
+      <h3 style="margin:9px 0 2px;font-size:22px">${esc(n.title)}</h3>
+      <div class="live-when" id="liveWhen" data-at="${esc(n.date)}T${esc(n.time || "00:00")}">${when}</div>
+      ${n.where ? `<div class="live-row">📍 <span>${esc(n.where)}</span>
+        <a class="tl-map" href="https://www.google.com/maps/search/?api=1&query=${mapQ}" target="_blank" rel="noopener">Directions ›</a></div>` : ""}
+      ${n.dress ? `<div class="live-row">👗 <span>${esc(n.dress)}</span></div>` : ""}
+      ${n.meetup ? `<div class="live-row">🤝 <span>${esc(n.meetup)}</span></div>` : ""}
+      ${n.note ? `<div class="r-sub" style="margin-top:10px">${esc(n.note)}</div>` : ""}
+      ${rest.length ? `<div class="live-rest">
+        <div class="check-cat" style="margin:16px 0 8px">Then</div>
+        ${rest.map((r) => {
+          const rf = fmtDate(r.date);
+          const sameDay = r.date === n.date;
+          return `<div class="row" style="padding:6px 0">
+            <span class="when-chip" style="min-width:64px;text-align:center">${esc(r.time || (sameDay ? "later" : `${rf.mon} ${rf.day}`))}</span>
+            <div class="r-main"><div class="r-title" style="font-size:14px">${esc(r.title)}</div>
+              ${r.where ? `<div class="r-sub">${esc(r.where)}</div>` : ""}</div>
+          </div>`;
+        }).join("")}` : ""}
+      </div>
+      <button class="btn ghost" data-go="itinerary" style="width:100%;margin-top:14px">See the whole plan</button>
+    </div>`;
+  }
+  function tickLive() {
+    const el = $("#liveWhen"); if (!el) return;
+    const at = el.dataset.at; if (!at) return;
+    const t = new Date(at.replace(" ", "T"));
+    if (isNaN(t)) return;
+    const diff = t - new Date();
+    if (diff <= 0 || diff > 86400000) return;                 // only count the last day down
+    const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000);
+    el.textContent = h ? `Starts in ${h}h ${m}m` : `Starts in ${m} min`;
+  }
+  setInterval(() => { if (TRIP && $("#screen-home") && $("#screen-home").classList.contains("active")) tickLive(); }, 30000);
+  /* After it is over, the app should say something rather than count upward. */
+  function afterCard() {
+    const days = nightsBetween(TRIP.start_date, TRIP.end_date);
+    const shots = (state.photos || []).length;
+    return `<div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fdfaf3,#fffdf8)">
+      <h3>🎉 That's a wrap</h3>
+      <p class="section-sub" style="margin:6px 0 12px">${esc(TRIP.name)} is done. ${days} night${days === 1 ? "" : "s"}${shots ? `, ${shots} photo${shots === 1 ? "" : "s"} in the album` : ""}.</p>
+      <div class="btn-row">
+        ${shots ? `<button class="btn primary" data-go="photos" style="flex:1">📸 The album</button>` : ""}
+        <button class="btn ghost" data-go="budget" style="flex:1">💰 Settle up</button>
+      </div>
+    </div>`;
+  }
   function todayCard() {
     const now = new Date();
     if (now < new Date(TRIP.start_date + "T00:00:00") || now > new Date(TRIP.end_date + "T23:59:59")) return "";
@@ -1890,7 +1995,7 @@
       ? `<div class="count-box" style="grid-column:1/-1"><div class="num">🎉 It's trip time!</div></div>`
       : [[day, "Days"], [hr, "Hours"], [mn, "Min"], [sc, "Sec"]].map(([n, l]) => `<div class="count-box"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join("");
   }
-  setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active")) tickCountdown(); }, 1000);
+  setInterval(() => { if (TRIP && $("#screen-home").classList.contains("active") && $("#countdown")) tickCountdown(); }, 1000);
   function renderClocks() {
     const box = $("#clocks"); if (!box) return;
     const homeTz = TRIP.home_tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -4287,12 +4392,69 @@
     const dm = $("#chatDismiss"); if (dm) dm.addEventListener("click", () => { pendingDays = null; renderAssistant(); });
     const feed = $("#chatFeed"); if (feed && chatLog.length) window.scrollTo(0, document.body.scrollHeight);
   }
+  /* ---- What guests are asking ------------------------------------------------
+     Answering a guest is table stakes. The valuable part is that the hosts see
+     what keeps being asked and can answer it once, for everyone, instead of
+     guessing in advance what people will want to know. Rides on the comments
+     table under a reserved topic, so no migration.
+     -------------------------------------------------------------------------- */
+  const ASK_TOPIC = "askedq";
+  const askedQuestions = () => (state.comments || []).filter((c) => c.topic === ASK_TOPIC);
+  async function logQuestion(text) {
+    const body = String(text || "").trim();
+    if (!body || body.length > 300) return;
+    // only real questions, not "add this to the plan"
+    if (!/\?\s*$/.test(body) && !/^(what|when|where|who|how|can|is|are|do|does|should|will)\b/i.test(body)) return;
+    const row = await Backend.insert("comments", { trip: TRIP_CODE, topic: ASK_TOPIC, body: body.slice(0, 300), author: state.me || "" });
+    if (row) state.comments.push(row);
+  }
+  function askedCard() {
+    if (!isHost()) return "";
+    const qs = askedQuestions();
+    if (!qs.length) return "";
+    const L = TRIP.links || {};
+    const inFaq = new Set((L.faq || []).map((f) => String(f.q).toLowerCase()));
+    const open = qs.filter((q) => !inFaq.has(String(q.body).toLowerCase()));
+    if (!open.length) return "";
+    return `<div class="card" style="border-color:var(--gold-soft)">
+      <h3>💬 What people are asking</h3>
+      <p class="section-sub" style="margin:4px 0 12px">Questions guests put to the assistant. Answer one here and every guest gets it from then on, without you being asked again.</p>
+      ${open.slice(0, 6).map((q) => {
+        const who = byId(q.author);
+        return `<div style="padding:10px 0;border-top:1px solid var(--line-2)">
+          <div class="r-title" style="font-size:14px">${esc(q.body)}</div>
+          <div class="r-sub" style="margin:2px 0 8px">${who ? esc(who.name.split(" ")[0]) : "A guest"}${q.created_at ? " · " + fmtWhen(q.created_at) : ""}</div>
+          <div style="display:flex;gap:8px">
+            <input data-ansq="${esc(q.id)}" placeholder="Your answer, once, for everyone" style="flex:1;padding:10px 11px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" />
+            <button class="btn primary" data-ansgo="${esc(q.id)}" style="flex:none">Answer</button>
+          </div>
+        </div>`;
+      }).join("")}
+      <div id="askMsg" class="r-sub" style="margin-top:10px"></div>
+    </div>`;
+  }
+  function bindAsked(root) {
+    (root || document).querySelectorAll("[data-ansgo]").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.ansgo;
+      const inp = (root || document).querySelector(`[data-ansq="${id}"]`);
+      const a = inp && inp.value.trim();
+      if (!a) { const m = $("#askMsg"); if (m) m.textContent = "Type the answer first."; return; }
+      const q = askedQuestions().find((x) => String(x.id) === String(id));
+      if (!q) return;
+      const faq = [...((TRIP.links || {}).faq || []), { q: q.body, a }].slice(-20);
+      const ok = await saveLinks({ faq }, []);
+      const m = $("#askMsg");
+      if (m) m.textContent = ok ? "Added to the FAQ. Guests see it now, and so does the assistant." : "Saved here, will sync when you're back online.";
+      renderCurrent();
+    }));
+  }
   async function sendChat() {
     const inp = $("#chatInput"), st = $("#chatStatus");
     const text = inp.value.trim();
     const img = pendingImage;
     if (!text && !img) return;
     chatLog.push({ role: "user", content: text || "Here is our schedule. Please read it and add it to the plan.", photo: !!img });
+    if (isWedding() && !isHost() && text) logQuestion(text);
     // The base64 never goes into storage; it would fill the quota in a few sends.
     LS.set("chat", chatLog.slice(-30));
     inp.value = "";

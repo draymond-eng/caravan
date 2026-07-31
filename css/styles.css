@@ -804,3 +804,15 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 /* Search takes the whole screen, not a centred card like the other modals. */
 #searchModal { padding: 0; }
 #searchModal.open { display: block; }
+
+/* ---- Live mode -------------------------------------------------------------
+   During the trip, planning is over. One thing, where it is, when it starts.
+   -------------------------------------------------------------------------- */
+.live-now { border-color: var(--ai); background: linear-gradient(180deg, #f6f4fb, #fffdf8); }
+.live-now h3 { line-height: 1.15; }
+.live-when { font-size: 14px; font-weight: 800; color: var(--ai-2); letter-spacing: .2px; margin-bottom: 12px; }
+.live-row { display: flex; align-items: baseline; gap: 9px; font-size: 14px; padding: 5px 0;
+  border-top: 1px solid var(--line-2); }
+.live-row span { flex: 1; }
+.live-row .tl-map { flex: none; }
+.live-rest { border-top: 1px solid var(--line); margin-top: 12px; }
