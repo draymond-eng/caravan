@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-  <title>SquadTrip · plan trips together</title>
-  <meta name="description" content="SquadTrip: plan group trips together. Shared itinerary, votes, stays, budget splitting, photos and more, in one link with no accounts. Destination weddings too." />
+  <title>SquadTrip for golf trips - tee times, rooms and who owes who</title>
+  <meta name="description" content="Put the tee sheet in once and everyone has their pairing, their room and their bar tab in the same place." />
   <meta name="theme-color" content="#241b45" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="assets/icon-512.png" />
-  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="../assets/icon-512.png" />
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SquadTrip" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="../css/styles.css" />
 </head>
-<body>
+<body data-landing="golf">
   <div class="app">
 
     <!-- ============ LANDING (no trip code in URL) ============ -->
@@ -56,31 +56,31 @@
         <section class="lp-shot">
           <div class="lp-strip" id="lpStrip">
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-wedding.jpg" width="585" height="1230" loading="lazy" alt="A guest's home screen showing what is next, where it is, the dress code and their table" /></div>
+              <div class="lp-phone"><img src="../assets/app-wedding.jpg" width="585" height="1230" loading="lazy" alt="A guest's home screen showing what is next, where it is, the dress code and their table" /></div>
               <figcaption><b>Everything a guest needs</b>What is next, where it is, what to wear, their table, their shuttle.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-live.jpg" width="585" height="1230" loading="lazy" alt="The home screen during the trip, showing the next event with directions" /></div>
+              <div class="lp-phone"><img src="../assets/app-live.jpg" width="585" height="1230" loading="lazy" alt="The home screen during the trip, showing the next event with directions" /></div>
               <figcaption><b>During the trip it changes</b>One card: the next thing, when it starts, and how to get there.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-plan.jpg" width="585" height="1230" loading="lazy" alt="The shared itinerary with times, places and who is in" /></div>
+              <div class="lp-phone"><img src="../assets/app-plan.jpg" width="585" height="1230" loading="lazy" alt="The shared itinerary with times, places and who is in" /></div>
               <figcaption><b>One shared plan</b>Times, places and notes. Tap I'm in and everyone knows who is coming.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-votes.jpg" width="585" height="1230" loading="lazy" alt="A group vote with tallies and faces beside each option" /></div>
+              <div class="lp-phone"><img src="../assets/app-votes.jpg" width="585" height="1230" loading="lazy" alt="A group vote with tallies and faces beside each option" /></div>
               <figcaption><b>Decisions that settle</b>Ask the question once. The tally is the answer, and the thread is right there.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-money.jpg" width="585" height="1230" loading="lazy" alt="Settle up showing who owes who and a mark paid button" /></div>
+              <div class="lp-phone"><img src="../assets/app-money.jpg" width="585" height="1230" loading="lazy" alt="Settle up showing who owes who and a mark paid button" /></div>
               <figcaption><b>Money that closes</b>Who owes who, worked out for you. Mark it paid and it disappears.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-seating.jpg" width="585" height="1230" loading="lazy" alt="A wedding seating chart with meal counts per table" /></div>
+              <div class="lp-phone"><img src="../assets/app-seating.jpg" width="585" height="1230" loading="lazy" alt="A wedding seating chart with meal counts per table" /></div>
               <figcaption><b>Seating, from the yeses</b>Tables built from who accepted, plus-ones included, with the meal counts per table.</figcaption>
             </figure>
             <figure class="lp-slide">
-              <div class="lp-phone"><img src="assets/app-dayof.jpg" width="585" height="1230" loading="lazy" alt="A wedding run of show with times, and vendor phone numbers" /></div>
+              <div class="lp-phone"><img src="../assets/app-dayof.jpg" width="585" height="1230" loading="lazy" alt="A wedding run of show with times, and vendor phone numbers" /></div>
               <figcaption><b>The day itself</b>A run of show and every vendor's number. Hosts only, guests never see it.</figcaption>
             </figure>
           </div>
@@ -256,9 +256,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/cities.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/backend.js"></script>
-  <script src="js/app.js"></script>
+  <script src="../js/cities.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="../js/backend.js"></script>
+  <script src="../js/app.js"></script>
 </body>
 </html>

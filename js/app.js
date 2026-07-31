@@ -46,8 +46,124 @@
   /* =========================================================================
      LANDING - create / join
      ====================================================================== */
+  /* ---- Landing flavors -------------------------------------------------------
+     Someone planning a wedding and someone planning a golf trip want different
+     pages. Same product, same code: only the words and which screens we lead
+     with change. Picked from the path (/weddings) or ?for=, so a link can be
+     sent to the right person.
+     -------------------------------------------------------------------------- */
+  const SHOTS = {
+    guest:   ["app-wedding.jpg", "Everything a guest needs", "What is next, where it is, what to wear, their table, their shuttle."],
+    live:    ["app-live.jpg",    "During the trip it changes", "One card: the next thing, when it starts, and how to get there."],
+    plan:    ["app-plan.jpg",    "One shared plan", "Times, places and notes. Tap I'm in and everyone knows who is coming."],
+    votes:   ["app-votes.jpg",   "Decisions that settle", "Ask the question once. The tally is the answer, and the thread is right there."],
+    money:   ["app-money.jpg",   "Money that closes", "Who owes who, worked out for you. Mark it paid and it disappears."],
+    seating: ["app-seating.jpg", "Seating, from the yeses", "Tables built from who accepted, plus-ones included, with the meal counts per table."],
+    dayof:   ["app-dayof.jpg",   "The day itself", "A run of show and every vendor's number. Hosts only, guests never see it."],
+  };
+  const LANDINGS = {
+    general: {
+      eyebrow: "SquadTrip",
+      h1: "Ten people.<br>One plan.<br><em>No group chat.</em>",
+      lede: "Every trip has one person holding it together. This is for them. Share one link and the plan, the votes, the money and the flights live in the same place for everybody.",
+      shots: ["plan", "votes", "money", "live", "guest"],
+      caption: "Swipe. Nobody in any of these downloaded anything.",
+      what: [
+        ["One shared plan", "Every day and event, with locations, that anyone can add to."],
+        ["Decisions that settle", "Vote on anything, argue in the same place, see where the group landed."],
+        ["Money that closes", "Log who paid, see who owes who, mark it settled and it disappears."],
+        ["Everyone's flights", "Who lands when, so rides and arrivals plan themselves."],
+        ["An assistant that knows the trip", "Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it."],
+        ["Nothing gets lost", "Works on a plane. Anything you change offline syncs the moment you land."],
+      ],
+      asideTitle: "Destination weddings",
+      aside: "There is a whole mode for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
+      asideLink: ["See the wedding version", "?for=weddings"],
+      createLabel: "Create a trip",
+    },
+    wedding: {
+      eyebrow: "SquadTrip for weddings",
+      h1: "Everyone knows<br>where to be.<br><em>Without asking you.</em>",
+      lede: "One link for your guests. The schedule, the dress codes, the room block, the shuttles and their table, all in the place they already have open. And a planning side they never see.",
+      shots: ["guest", "seating", "dayof", "live", "votes"],
+      caption: "Your guests see the first one. The rest is yours.",
+      what: [
+        ["RSVPs that actually count", "Party sizes capped by the invitation, meal choices and dietary notes per seat. Your caterer's numbers, ready to copy."],
+        ["Who has really booked", "Saying yes is not booking. See who has a room, who has not, and who never answered, before the block releases."],
+        ["A seating chart from the yeses", "Tables built from who accepted, plus-ones included, with the meal counts and allergies per table."],
+        ["The run of show", "Hair at nine, first look at three, and every vendor's number a tap away. Hosts only."],
+        ["Guests stop texting you", "Dress codes on every event, shuttle windows from their real flights, and an assistant that answers from what you filled in."],
+        ["Nothing gets lost", "Works with one bar at the venue. Anything you change offline syncs when you have signal."],
+      ],
+      asideTitle: "Not a wedding?",
+      aside: "The same app runs group trips: golf weekends, ski houses, bachelor parties, family reunions. The plan, the votes and the money work the same way.",
+      asideLink: ["See the group trip version", "?for=trips"],
+      createLabel: "Start your wedding",
+    },
+    golf: {
+      eyebrow: "SquadTrip for golf",
+      h1: "Tee times, rooms,<br>and who owes who.<br><em>Sorted.</em>",
+      lede: "Twelve guys, four days, three courses. Put the tee sheet in once and everyone has their pairing, their room and their bar tab in the same place.",
+      shots: ["plan", "money", "votes", "live", "guest"],
+      caption: "Swipe. Nobody in any of these downloaded anything.",
+      what: [
+        ["Tee times and pairings", "Every round with the course and the time, and the foursomes underneath it."],
+        ["Send it the tee sheet", "Paste the confirmation email or photograph it. The assistant reads it and builds the days."],
+        ["Money that closes", "Green fees, the house, the bar. Who owes who, worked out for you, and it disappears when it is paid."],
+        ["Rooms and cars", "Split the house and the drive however you like. Everyone can see where they are."],
+        ["Book it in the right order", "A timeline counted back from the trip that knows prime tee times go months out."],
+        ["Nothing gets lost", "Works with no signal at the turn. Anything you change syncs later."],
+      ],
+      asideTitle: "Any kind of trip",
+      aside: "Ski houses, beach weeks, bachelor parties, family reunions and destination weddings all run on the same app. Pick the kind when you set it up and it adapts.",
+      asideLink: ["See the group trip version", "?for=trips"],
+      createLabel: "Start a golf trip",
+    },
+  };
+  function whichLanding() {
+    const stamped = document.body.getAttribute("data-landing");
+    if (stamped && LANDINGS[stamped]) return stamped;
+    const q = (new URLSearchParams(location.search).get("for") || "").toLowerCase();
+    if (q === "weddings" || q === "wedding") return "wedding";
+    if (q === "golf") return "golf";
+    return "general";
+  }
+  /* /weddings/ and /golf/ sit one level down, so anything this file builds by
+     hand has to climb out. The markup is rewritten at build time; this is not. */
+  function assetBase() {
+    return /\/(weddings|golf)\/[^/]*$/.test(location.pathname) ? "../" : "";
+  }
+  function renderLanding() {
+    const L = LANDINGS[whichLanding()] || LANDINGS.general;
+    const base = assetBase();
+    const set = (sel, html) => { const el = $(sel); if (el) el.innerHTML = html; };
+    set(".lp-eyebrow", esc(L.eyebrow));
+    set(".lp-h1", L.h1);
+    set(".lp-lede", esc(L.lede));
+    set("#lpStrip", L.shots.map((k) => {
+      const [file, title, body] = SHOTS[k];
+      return `<figure class="lp-slide">
+        <div class="lp-phone"><img src="${base}assets/${file}" width="585" height="1230" loading="lazy" alt="${esc(title)}" /></div>
+        <figcaption><b>${esc(title)}</b>${esc(body)}</figcaption>
+      </figure>`;
+    }).join(""));
+    set(".lp-caption", esc(L.caption));
+    set(".lp-list", L.what.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join(""));
+    set("#asideTitle", esc(L.asideTitle));
+    set("#asideBody", esc(L.aside));
+    const al = $("#asideLink");
+    if (al) { al.textContent = L.asideLink[0] + " \u203a"; al.setAttribute("href", L.asideLink[1]); }
+    $$("#createBtn, #createBtn2").forEach((b) => { b.textContent = L.createLabel; });
+    // a generated page already carries a proper title and description, so only
+    // the query-string route needs one written for it
+    if (!document.body.getAttribute("data-landing")) {
+      document.title = L.eyebrow === "SquadTrip" ? "SquadTrip - plan trips together"
+        : L.eyebrow + " - SquadTrip";
+    }
+  }
   function bootLanding() {
     $("#landing").style.display = "block";
+    renderLanding();
     if (!HAS_BACKEND) {
       $("#landingSetup").innerHTML = `<div class="card" style="border-color:#e2ad55;background:#fdf6ea">
         <h3>⚙️ One-time setup needed</h3>
@@ -4912,7 +5028,12 @@
     });
     window.addEventListener("load", async () => {
       try {
-        const reg = await navigator.serviceWorker.register("sw.js");
+        // The landing lives at /weddings/ and /golf/ too, so the worker has to
+        // be registered from the root or those pages ask for a file that is
+        // not there and get a 404.
+        const dir = location.pathname.replace(/[^/]*$/, "");        // drop the filename
+        const root = dir.replace(/(weddings|golf)\/$/, "");          // then climb out
+        const reg = await navigator.serviceWorker.register(root + "sw.js", { scope: root });
         reg.update();
         if (reg.waiting) reg.waiting.postMessage("skip-waiting");
         reg.addEventListener("updatefound", () => {

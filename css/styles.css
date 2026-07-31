@@ -919,3 +919,12 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   .lp-strip { padding-left: calc(50% - 144px); padding-right: calc(50% - 144px); gap: 28px; }
   .lp-slide { flex-basis: 288px; }
 }
+.lp-aside-link { display: inline-block; margin-top: 6px; font-weight: 700; font-size: 14.5px;
+  color: var(--ai-2); text-decoration: none; border-bottom: 1px solid rgba(92,74,153,.3); padding-bottom: 2px; }
+/* A longer eyebrow ("SquadTrip for weddings") has to clear the sun. */
+.lp-eyebrow { letter-spacing: 3.4px; max-width: 74%; }
+.lp-sun { top: 7%; right: 9%; width: 72px; height: 72px; }
+@media (min-width: 720px) {
+  .lp-eyebrow { max-width: none; letter-spacing: 4.5px; }
+  .lp-sun { top: 14%; right: 16%; width: 108px; height: 108px; }
+}
