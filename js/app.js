@@ -76,8 +76,18 @@
         ["An assistant that knows the trip", "Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it."],
         ["Nothing gets lost", "Works on a plane. Anything you change offline syncs the moment you land."],
       ],
-      asideTitle: "Destination weddings",
-      aside: "There is a whole mode for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
+      kindsTitle: "It knows what kind of trip it is",
+      kindsLede: "Pick the kind when you set it up and the plan, the groups and the booking timeline change to suit it.",
+      kinds: [
+        ["Golf", "Rounds with the course and the tee time, foursomes underneath, and a timeline that knows prime slots go months out."],
+        ["Ski", "Days that start on the mountain, lift tickets and rentals booked ahead, and a rest day nobody has to argue for."],
+        ["Beach", "Loose days, one anchor a thing, and sunset mattering more than sightseeing."],
+        ["Bachelor and bachelorette", "One big night, one daytime thing, a recovery morning, and a dinner worth booking."],
+        ["Family", "Mixed ages and paces, shorter days, and one meal everybody actually sits down for."],
+        ["Outdoors", "Trails rated by effort, early starts, weather backups and gear notes."],
+      ],
+      asideTitle: "Planning a wedding?",
+      aside: "There is a whole function for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
       asideLink: ["See the wedding version", "?for=weddings"],
       createLabel: "Create a trip",
     },
@@ -96,28 +106,9 @@
         ["Nothing gets lost", "Works with one bar at the venue. Anything you change offline syncs when you have signal."],
       ],
       asideTitle: "Not a wedding?",
-      aside: "The same app runs group trips: golf weekends, ski houses, bachelor parties, family reunions. The plan, the votes and the money work the same way.",
-      asideLink: ["See the group trip version", "?for=trips"],
+      aside: "The same app runs group trips: golf weekends, ski houses, beach weeks, bachelor parties and family reunions. The plan, the votes and the money work the same way.",
+      asideLink: ["See the group trip version", "/"],
       createLabel: "Start your wedding",
-    },
-    golf: {
-      eyebrow: "SquadTrip for golf",
-      h1: "Tee times, rooms,<br>and who owes who.<br><em>Sorted.</em>",
-      lede: "Twelve guys, four days, three courses. Put the tee sheet in once and everyone has their pairing, their room and their bar tab in the same place.",
-      shots: ["plan", "money", "votes", "live", "guest"],
-      caption: "Swipe. Nobody in any of these downloaded anything.",
-      what: [
-        ["Tee times and pairings", "Every round with the course and the time, and the foursomes underneath it."],
-        ["Send it the tee sheet", "Paste the confirmation email or photograph it. The assistant reads it and builds the days."],
-        ["Money that closes", "Green fees, the house, the bar. Who owes who, worked out for you, and it disappears when it is paid."],
-        ["Rooms and cars", "Split the house and the drive however you like. Everyone can see where they are."],
-        ["Book it in the right order", "A timeline counted back from the trip that knows prime tee times go months out."],
-        ["Nothing gets lost", "Works with no signal at the turn. Anything you change syncs later."],
-      ],
-      asideTitle: "Any kind of trip",
-      aside: "Ski houses, beach weeks, bachelor parties, family reunions and destination weddings all run on the same app. Pick the kind when you set it up and it adapts.",
-      asideLink: ["See the group trip version", "?for=trips"],
-      createLabel: "Start a golf trip",
     },
   };
   function whichLanding() {
@@ -125,7 +116,6 @@
     if (stamped && LANDINGS[stamped]) return stamped;
     const q = (new URLSearchParams(location.search).get("for") || "").toLowerCase();
     if (q === "weddings" || q === "wedding") return "wedding";
-    if (q === "golf") return "golf";
     return "general";
   }
   /* /weddings/ and /golf/ sit one level down, so anything this file builds by
@@ -149,10 +139,20 @@
     }).join(""));
     set(".lp-caption", esc(L.caption));
     set(".lp-list", L.what.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join(""));
+    const kinds = $("#lpKinds");
+    if (kinds) {
+      kinds.hidden = !L.kinds;
+      if (L.kinds) {
+        kinds.innerHTML = `<div class="lp-rule" aria-hidden="true"></div>
+          <h2 class="lp-h2">${esc(L.kindsTitle)}</h2>
+          <p class="lp-body">${esc(L.kindsLede)}</p>
+          <dl class="lp-list lp-kinds">${L.kinds.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join("")}</dl>`;
+      }
+    }
     set("#asideTitle", esc(L.asideTitle));
     set("#asideBody", esc(L.aside));
     const al = $("#asideLink");
-    if (al) { al.textContent = L.asideLink[0] + " \u203a"; al.setAttribute("href", L.asideLink[1]); }
+    if (al) { al.textContent = L.asideLink[0] + " \u203a"; al.setAttribute("href", L.asideLink[1] === "/" ? (base || "./") : L.asideLink[1]); }
     $$("#createBtn, #createBtn2").forEach((b) => { b.textContent = L.createLabel; });
     // a generated page already carries a proper title and description, so only
     // the query-string route needs one written for it

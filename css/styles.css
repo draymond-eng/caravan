@@ -928,3 +928,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   .lp-eyebrow { max-width: none; letter-spacing: 4.5px; }
   .lp-sun { top: 14%; right: 16%; width: 108px; height: 108px; }
 }
+/* The kinds of trip read as a list of facts, tighter than the main features. */
+.lp-kinds > div { padding: 14px 0; }
+.lp-kinds dt { font-size: 16.5px; }
+.lp-kinds dd { font-size: 14px; }

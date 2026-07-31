@@ -11,9 +11,6 @@ const PAGES = [
   { dir: "weddings", flavor: "wedding",
     title: "SquadTrip for weddings - one link for your guests",
     desc: "The schedule, dress codes, room block, shuttles and their table, in one link your guests already have open. RSVPs, seating and a run of show for you." },
-  { dir: "golf", flavor: "golf",
-    title: "SquadTrip for golf trips - tee times, rooms and who owes who",
-    desc: "Put the tee sheet in once and everyone has their pairing, their room and their bar tab in the same place." },
 ];
 
 const CHECK = process.argv.includes("--check");
