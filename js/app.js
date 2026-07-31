@@ -78,6 +78,16 @@
       setTimeout(() => $("#joinCode") && $("#joinCode").focus(), 420);
     }));
 
+    // dots follow the gallery, so it reads as something to swipe
+    const strip = $("#lpStrip"), dots = $("#lpDots");
+    if (strip && dots) {
+      const slides = strip.children.length;
+      dots.innerHTML = Array.from({ length: slides }, (_, n) => `<i class="${n === 0 ? "on" : ""}"></i>`).join("");
+      strip.addEventListener("scroll", () => {
+        const at = Math.min(slides - 1, Math.round(strip.scrollLeft / (strip.scrollWidth / slides)));
+        Array.from(dots.children).forEach((d, n) => { d.className = n === at ? "on" : ""; });
+      }, { passive: true });
+    }
     registerSW();
   }
 

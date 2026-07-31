@@ -52,12 +52,40 @@
 
         <div id="landingSetup"></div>
 
-        <!-- The product, not a description of it. -->
+        <!-- The product, not a description of it. Swipe through what it does. -->
         <section class="lp-shot">
-          <div class="lp-phone">
-            <img src="assets/app-wedding.jpg" width="585" height="1230" alt="A guest's home screen, showing what is next, where it is, the dress code and their table" loading="lazy" />
+          <div class="lp-strip" id="lpStrip">
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-wedding.jpg" width="585" height="1230" loading="lazy" alt="A guest's home screen showing what is next, where it is, the dress code and their table" /></div>
+              <figcaption><b>Everything a guest needs</b>What is next, where it is, what to wear, their table, their shuttle.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-live.jpg" width="585" height="1230" loading="lazy" alt="The home screen during the trip, showing the next event with directions" /></div>
+              <figcaption><b>During the trip it changes</b>One card: the next thing, when it starts, and how to get there.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-plan.jpg" width="585" height="1230" loading="lazy" alt="The shared itinerary with times, places and who is in" /></div>
+              <figcaption><b>One shared plan</b>Times, places and notes. Tap I'm in and everyone knows who is coming.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-votes.jpg" width="585" height="1230" loading="lazy" alt="A group vote with tallies and faces beside each option" /></div>
+              <figcaption><b>Decisions that settle</b>Ask the question once. The tally is the answer, and the thread is right there.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-money.jpg" width="585" height="1230" loading="lazy" alt="Settle up showing who owes who and a mark paid button" /></div>
+              <figcaption><b>Money that closes</b>Who owes who, worked out for you. Mark it paid and it disappears.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-seating.jpg" width="585" height="1230" loading="lazy" alt="A wedding seating chart with meal counts per table" /></div>
+              <figcaption><b>Seating, from the yeses</b>Tables built from who accepted, plus-ones included, with the meal counts per table.</figcaption>
+            </figure>
+            <figure class="lp-slide">
+              <div class="lp-phone"><img src="assets/app-dayof.jpg" width="585" height="1230" loading="lazy" alt="A wedding run of show with times, and vendor phone numbers" /></div>
+              <figcaption><b>The day itself</b>A run of show and every vendor's number. Hosts only, guests never see it.</figcaption>
+            </figure>
           </div>
-          <p class="lp-caption">What a guest opens to. Nobody had to download anything.</p>
+          <div class="lp-dots" id="lpDots" aria-hidden="true"></div>
+          <p class="lp-caption">Swipe. Nobody in any of these downloaded anything.</p>
         </section>
 
         <!-- Editorial rows, no icon grid. -->

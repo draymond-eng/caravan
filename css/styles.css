@@ -902,3 +902,20 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   .lp-h1 { font-size: 64px; }
   .lp-sun { width: 108px; height: 108px; top: 16%; right: 16%; }
 }
+
+/* ---- Landing gallery: swipe through what it actually does ---- */
+.lp-strip { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding: 4px calc(50% - 134px) 10px; }
+.lp-strip::-webkit-scrollbar { display: none; }
+.lp-slide { flex: 0 0 268px; margin: 0; scroll-snap-align: center; }
+.lp-slide figcaption { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin-top: 16px; text-align: left; }
+.lp-slide figcaption b { display: block; font-family: var(--serif); font-size: 16px; font-weight: 600;
+  color: var(--ink); margin-bottom: 4px; letter-spacing: .1px; }
+.lp-dots { display: flex; justify-content: center; gap: 7px; margin-top: 18px; }
+.lp-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .2s, width .2s; }
+.lp-dots i.on { background: var(--gold); width: 18px; border-radius: 999px; }
+@media (min-width: 720px) {
+  .lp-strip { padding-left: calc(50% - 144px); padding-right: calc(50% - 144px); gap: 28px; }
+  .lp-slide { flex-basis: 288px; }
+}
