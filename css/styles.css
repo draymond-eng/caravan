@@ -769,3 +769,38 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .undo-bar span { flex: 1; }
 .undo-bar .btn { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.4);
   color: #fff; padding: 8px 15px; font-size: 13px; flex: none; }
+
+/* ---- Search ----------------------------------------------------------------
+   One field over everything already in memory, so it answers instantly and
+   works with no signal at all.
+   -------------------------------------------------------------------------- */
+.topbar .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  border: 1px solid rgba(246,241,232,.28); background: rgba(255,255,255,.12);
+  border-radius: 50%; color: #f6f1e8; }
+.topbar .icon-btn:active { background: rgba(255,255,255,.22); }
+
+.search-panel { position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+  background: var(--paper); display: flex; flex-direction: column; }
+.search-bar { display: flex; gap: 8px; align-items: center; flex: none;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 12px;
+  background: var(--card); border-bottom: 1px solid var(--line); }
+.search-bar input { flex: 1; padding: 13px 14px; font-size: 16px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: #fffdfa; color: var(--ink); }
+.search-bar .btn { flex: none; padding: 13px 15px; }
+.search-results { flex: 1; overflow-y: auto; padding: 12px 14px calc(30px + var(--safe-b));
+  max-width: var(--maxw); width: 100%; margin: 0 auto; }
+.search-hit { display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 12px 13px; margin-bottom: 8px; }
+.search-hit:active { transform: scale(.99); }
+.search-hit .sh-icon { font-size: 17px; line-height: 1.3; flex: none; }
+.search-hit .sh-main { flex: 1; min-width: 0; display: block; }
+.search-hit .sh-title { display: block; font-weight: 700; font-size: 14.5px; line-height: 1.35; }
+.search-hit .sh-sub { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 3px;
+  line-height: 1.45; overflow: hidden; }
+.search-hit .sh-where { flex: none; font-size: 10px; font-weight: 800; letter-spacing: .7px;
+  text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+.search-results mark { background: var(--sakura); color: var(--ink); border-radius: 3px; padding: 0 2px; }
+/* Search takes the whole screen, not a centred card like the other modals. */
+#searchModal { padding: 0; }
+#searchModal.open { display: block; }

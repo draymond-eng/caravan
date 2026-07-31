@@ -152,6 +152,9 @@
           </div>
         </div>
         <div class="spacer"></div>
+        <button class="icon-btn" id="searchBtn" aria-label="Search this trip">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        </button>
         <button class="whoami" id="whoamiBtn" aria-label="Set who you are">
           <span id="whoamiAvatar">👤</span>
           <span id="whoamiName">Who are you?</span>
@@ -191,6 +194,16 @@
         <button class="tab" data-screen="crew"><span class="ti"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/><path d="M16 6.2a3 3 0 0 1 0 5.6M17 14.8c2.3.5 4 2.4 4 5.2"/></svg></span>Crew</button>
         <button class="tab" id="moreTab"><span class="ti"><svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></span>More</button>
       </nav>
+
+      <div class="modal-backdrop" id="searchModal" role="dialog" aria-label="Search this trip">
+        <div class="search-panel">
+          <div class="search-bar">
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search everything…" aria-label="Search" />
+            <button class="btn ghost" id="searchClose">Done</button>
+          </div>
+          <div id="searchResults" class="search-results"></div>
+        </div>
+      </div>
 
       <div class="sheet-backdrop" id="sheetBackdrop"></div>
       <div class="sheet" id="moreSheet" role="dialog" aria-label="More sections">

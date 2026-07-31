@@ -666,9 +666,111 @@
     });
   }
 
+  /* ---- Search ---------------------------------------------------------------
+     Seventeen screens and a confirmation number you need at a check-in desk.
+     Everything is already in memory, so this is instant and works offline.
+     -------------------------------------------------------------------------- */
+  const SEARCH_IN = [
+    { screen: "itinerary", icon: "🗓️", label: "Plan", rows: () => (state.days || []).flatMap((d) => {
+        const when = `${fmtDate(d.date).wd} ${fmtDate(d.date).mon} ${fmtDate(d.date).day}`;
+        return [{ title: d.title, sub: [when, d.summary, d.meetup].filter(Boolean).join(" · "), open: d.id }]
+          .concat((d.items || []).map((i) => ({
+            title: i.title, sub: [when, i.time, i.where, i.dress, i.note].filter(Boolean).join(" · "), open: d.id })));
+      }) },
+    { screen: "decisions", icon: "🗳️", label: "Votes", rows: () => (state.decisions || []).map((d) => ({
+        title: d.title, sub: [d.note, (d.options || []).map((o) => o.label).join(", ")].filter(Boolean).join(" · ") })) },
+    { screen: "stays", icon: "🏨", label: "Stays", rows: () => (state.stayOptions || []).map((o) => ({
+        title: o.name, sub: [o.tag, o.note, o.booked ? "Booked" : ""].filter(Boolean).join(" · ") })) },
+    { screen: "vault", icon: "🔐", label: "Vault", rows: () => (state.confirmations || []).map((c) => ({
+        title: c.label, sub: [c.category, c.confirmation_no && "#" + c.confirmation_no].filter(Boolean).join(" · ") })) },
+    { screen: "notes", icon: "📝", label: "Notes", rows: () => (state.notes || []).map((n) => ({ title: n.text, sub: n.list || "" })) },
+    { screen: "ideas", icon: "💡", label: "Ideas", rows: () => (state.ideas || []).map((i) => ({ title: i.title, sub: [i.tag, i.note].filter(Boolean).join(" · ") })) },
+    { screen: "guide", icon: "📖", label: "Guide", rows: () => (state.guides || []).map((g) => ({
+        title: g.title, sub: [(g.tags || []).join(", "), g.body, g.base].filter(Boolean).join(" · ") })) },
+    { screen: "announce", icon: "📣", label: "Updates", rows: () => (state.announcements || []).map((a) => ({ title: a.title || "Update", sub: a.body || "" })) },
+    { screen: "flights", icon: "✈️", label: "Flights", rows: () => (state.flights || []).map((f) => {
+        const t = byId(f.traveler) || { name: "Someone" };
+        return { title: [f.airline, f.flight_no].filter(Boolean).join(" ") || t.name,
+                 sub: [t.name, f.dir === "arrive" ? "Arrival" : "Departure", f.airport, f.date, f.time, f.note].filter(Boolean).join(" · ") }; }) },
+    { screen: "budget", icon: "💰", label: "Budget", rows: () => (state.expenses || []).map((e) => ({
+        title: e.label, sub: [e.amount && `${e.currency || ""} ${e.amount}`, (byId(e.paid_by) || {}).name].filter(Boolean).join(" · ") })) },
+    { screen: "dayof", icon: "⏱️", label: "Day of", rows: () => (isWedding() && isHost() ? (state.ops || []) : []).map((o) => ({
+        title: o.label || o.who, sub: [o.time, o.who, o.phone, o.note].filter(Boolean).join(" · ") })) },
+    { screen: "booking", icon: "📋", label: "Booking", rows: () => (TRIP.start_date ? bookingItems() : []).map((i) => ({ title: i.label, sub: [i.due, i.note].filter(Boolean).join(" · ") })) },
+    { screen: "crew", icon: "👥", label: "Crew", rows: () => (TRIP.travelers || []).map((t) => ({ title: t.name, sub: "" })) },
+  ];
+  function searchAll(q) {
+    const needle = q.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    const out = [];
+    SEARCH_IN.forEach((src) => {
+      let rows = [];
+      try { rows = src.rows() || []; } catch (e) { rows = []; }
+      rows.forEach((r) => {
+        const hay = `${r.title || ""} ${r.sub || ""}`.toLowerCase();
+        const at = hay.indexOf(needle);
+        if (at === -1) return;
+        // an exact hit in the title beats a mention buried in the details
+        const score = String(r.title || "").toLowerCase().indexOf(needle) === 0 ? 0
+          : String(r.title || "").toLowerCase().includes(needle) ? 1 : 2;
+        out.push({ ...r, screen: src.screen, icon: src.icon, label: src.label, score });
+      });
+    });
+    return out.sort((a, b) => a.score - b.score).slice(0, 40);
+  }
+  const mark = (text, q) => {
+    const t = String(text || "");
+    const i = t.toLowerCase().indexOf(q.toLowerCase());
+    if (i === -1 || !q) return esc(t);
+    return esc(t.slice(0, i)) + "<mark>" + esc(t.slice(i, i + q.length)) + "</mark>" + esc(t.slice(i + q.length));
+  };
+  function runSearch() {
+    const q = $("#searchInput").value;
+    const box = $("#searchResults");
+    if (q.trim().length < 2) {
+      box.innerHTML = `<p class="section-sub" style="padding:18px 4px;text-align:center">Type at least two letters. This searches your whole trip: the plan, votes, stays, the vault, notes, ideas, flights, updates and more.</p>`;
+      return;
+    }
+    const hits = searchAll(q);
+    if (!hits.length) {
+      box.innerHTML = `<p class="section-sub" style="padding:18px 4px;text-align:center">Nothing matches “${esc(q)}”.</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="r-sub" style="padding:4px 4px 10px">${hits.length} result${hits.length === 1 ? "" : "s"}</div>` +
+      hits.map((h, n) => `<button class="search-hit" data-hit="${n}">
+        <span class="sh-icon">${h.icon}</span>
+        <span class="sh-main"><span class="sh-title">${mark(h.title, q)}</span>
+        ${h.sub ? `<span class="sh-sub">${mark(String(h.sub).slice(0, 120), q)}</span>` : ""}</span>
+        <span class="sh-where">${esc(h.label)}</span>
+      </button>`).join("");
+    box.querySelectorAll("[data-hit]").forEach((b) => b.addEventListener("click", () => {
+      const h = hits[Number(b.dataset.hit)];
+      closeSearch();
+      if (h.open) openDays.add(h.open);   // land with the right day already open
+      show(h.screen);
+    }));
+  }
+  function openSearch() {
+    $("#searchModal").classList.add("open");
+    const i = $("#searchInput");
+    i.value = "";
+    runSearch();
+    setTimeout(() => i.focus(), 60);
+  }
+  function closeSearch() { $("#searchModal").classList.remove("open"); }
+  function bindSearch() {
+    const btn = $("#searchBtn"); if (!btn) return;
+    btn.addEventListener("click", openSearch);
+    $("#searchClose").addEventListener("click", closeSearch);
+    $("#searchModal").addEventListener("click", (e) => { if (e.target.id === "searchModal") closeSearch(); });
+    $("#searchInput").addEventListener("input", runSearch);
+    $("#searchInput").addEventListener("keydown", (e) => { if (e.key === "Escape") closeSearch(); });
+  }
+
   function bindShell() {
     bindGoDelegate();
     watchSaves();
+    bindSearch();
     $$(".tab[data-screen]").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     $$(".sheet-item").forEach((t) => t.addEventListener("click", () => show(t.dataset.screen)));
     // Tapping More again puts the sheet away, the same as tapping it opened it.
