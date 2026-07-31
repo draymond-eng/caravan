@@ -1287,6 +1287,13 @@
         "💌 Nudge them", "booking"));
     }
     if (heads) {
+      const rooms = bookedStats("room");
+      if (rooms.total && rooms.done.length < rooms.total) {
+        const behind = rooms.total - rooms.done.length;
+        cards.push(actCard("rose", "Room block", `${behind} of ${rooms.total} ${rooms.total === 1 ? "guest" : "guests"} still ${behind === 1 ? "needs" : "need"} to book a room`,
+          rooms.quiet.length ? `${rooms.quiet.length} never answered. That is the group to call.` : "They said not yet. A nudge usually does it.",
+          "✅ See who has booked", "home"));
+      }
       const seats = allSeats();
       const noMeal = seats.filter((x) => !x.meal).length;
       if (noMeal && mealOptions().length) {
@@ -1391,6 +1398,8 @@
       <div class="countdown" id="countdown"></div>
       <div class="clocks" id="clocks"></div>
 
+      ${bookedAskCard()}
+      ${bookedHostCard()}
       ${isWedding() ? weddingYouCard() + weddingLinksCard() : ""}
 
       <div class="section-title" style="margin-top:20px">${isWedding() ? "Who's coming" : "The crew"}</div>
@@ -1419,6 +1428,7 @@
       </div>
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
+    bindBookedCards(s);
     const hc = $("#hostCopy"); if (hc) hc.addEventListener("click", () => {
       navigator.clipboard?.writeText(cateringList())
         .then(() => { $("#hostMsg2").textContent = "Copied. Paste it straight into an email."; })
@@ -1488,6 +1498,128 @@
 
   function myRsvpDetails() {
     try { return JSON.parse(myVote("wrsvp", "details") || "{}") || {}; } catch { return {}; }
+  }
+  /* ---- Booked yet? -----------------------------------------------------------
+     The gap between "yes I am coming" and "I have actually booked" is where a
+     trip quietly falls apart, and for a wedding it costs the couple real money
+     when a room block releases unsold. Three states, not two: booked, not yet,
+     and never answered. The last one is the group that needs a phone call.
+     -------------------------------------------------------------------------- */
+  function bookables() {
+    const L = TRIP.links || {};
+    if (isWedding()) return [
+      { id: "room", emoji: "🛏️", label: "Your room",
+        note: L.deadline ? `The block releases ${esc(L.deadline)}.` : "Group rates are held for a limited time.",
+        link: L.roomblock || "" },
+      { id: "flight", emoji: "✈️", label: "Your flights",
+        note: `Fares to ${esc(TRIP.destination || "there")} climb as the date gets close.`, link: "" },
+    ];
+    return [
+      { id: "flight", emoji: "✈️", label: "Your flights", note: "So the group knows who is locked in.", link: "" },
+      { id: "stay", emoji: "🏨", label: "Where you sleep", note: "Whatever the group settled on.", link: "" },
+    ];
+  }
+  const bookedByMe = (id) => myVote("booked", id);
+  /* Who is expected to answer: the yeses at a wedding, everyone on a trip. */
+  function expectedToBook() {
+    const people = (TRIP.travelers || []).filter((t) => !(isWedding() && (TRIP.hosts || []).includes(t.id)));
+    if (!isWedding()) return people;
+    const t = tally("wrsvp", "attend");
+    const yes = new Set();
+    Object.entries(t).forEach(([choice, voters]) => { if (String(choice).startsWith("yes")) voters.forEach((v) => yes.add(v)); });
+    return people.filter((p) => yes.has(p.id));
+  }
+  function bookedStats(id) {
+    const t = tally("booked", id);
+    const done = new Set(t.yes || []), soon = new Set(t.no || []);
+    const expected = expectedToBook();
+    return {
+      done: expected.filter((p) => done.has(p.id)),
+      soon: expected.filter((p) => soon.has(p.id)),
+      quiet: expected.filter((p) => !done.has(p.id) && !soon.has(p.id)),
+      total: expected.length,
+    };
+  }
+  /* Asked of you at the moment it is relevant, not buried in a checklist. */
+  function bookedAskCard() {
+    if (!state.me || isHost() && isWedding()) return "";
+    if (isWedding()) {
+      const mine = myVote("wrsvp", "attend");
+      if (typeof mine !== "string" || !mine.startsWith("yes")) return "";
+    }
+    const rows = bookables();
+    if (rows.every((r) => bookedByMe(r.id) === "yes")) return "";
+    return `<div class="card" style="border-color:var(--gold-soft)">
+      <h3>✅ Have you booked?</h3>
+      <p class="section-sub" style="margin:4px 0 12px">${isWedding()
+        ? "The hosts are counting on these. It takes one tap and you can change it any time."
+        : "So nobody is guessing who is actually locked in."}</p>
+      ${rows.map((r) => {
+        const mine = bookedByMe(r.id);
+        return `<div style="margin-bottom:14px">
+          <div class="r-title" style="font-size:14.5px">${r.emoji} ${r.label}</div>
+          <div class="r-sub" style="margin:2px 0 8px">${r.note}</div>
+          <div class="btn-row">
+            <button class="btn ${mine === "yes" ? "primary" : "ghost"}" data-bkd="${r.id}:yes" style="flex:1">${mine === "yes" ? "✓ Booked" : "Booked it"}</button>
+            <button class="btn ${mine === "no" ? "primary" : "ghost"}" data-bkd="${r.id}:no" style="flex:1">${mine === "no" ? "✓ Not yet" : "Not yet"}</button>
+          </div>
+          ${r.link && mine !== "yes" ? `<a class="tl-map" href="${esc(r.link)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px">Open the booking link ›</a>` : ""}
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+  /* What the host actually needs: the number, and the names to chase. */
+  function bookedHostCard() {
+    if (isWedding() && !isHost()) return "";
+    const rows = bookables().map((r) => ({ ...r, st: bookedStats(r.id) }));
+    if (!rows.some((r) => r.st.total)) return "";
+    return `<div class="card" style="border-color:var(--gold-soft)">
+      <h3>✅ Who has actually booked</h3>
+      <p class="section-sub" style="margin:4px 0 12px">Saying yes is not the same as booking. ${isWedding()
+        ? "This is the number that decides whether the room block releases unsold." : "This is who is really locked in."}</p>
+      ${rows.map((r) => {
+        const { done, soon, quiet, total } = r.st;
+        const pct = total ? Math.round((done.length / total) * 100) : 0;
+        return `<div style="margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <div class="r-title" style="font-size:14.5px;flex:1">${r.emoji} ${r.label}</div>
+            <div class="r-sub"><b>${done.length}</b> of ${total}</div>
+          </div>
+          <div class="progress" style="margin:8px 0 8px"><i style="width:${pct}%"></i></div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            ${soon.length ? `<span class="when-chip">Not yet: ${soon.length}</span>` : ""}
+            ${quiet.length ? `<span class="when-chip" style="border-color:var(--sakura-deep);color:var(--vermilion-2)">No answer: ${quiet.length}</span>` : ""}
+            ${!soon.length && !quiet.length ? `<span class="when-chip" style="border-color:var(--matcha);color:var(--matcha)">Everyone is booked</span>` : ""}
+          </div>
+          ${quiet.length ? `<div class="r-sub" style="margin-top:8px">Waiting on ${quiet.slice(0, 8).map((p) => esc(p.name.split(" ")[0])).join(", ")}${quiet.length > 8 ? ` and ${quiet.length - 8} more` : ""}</div>` : ""}
+        </div>`;
+      }).join("")}
+      <button class="btn ghost" id="bkdNudge" style="width:100%">Nudge whoever has not booked</button>
+      <div id="bkdMsg" class="r-sub" style="margin-top:8px"></div>
+    </div>`;
+  }
+  function bindBookedCards(root) {
+    (root || document).querySelectorAll("[data-bkd]").forEach((b) => b.addEventListener("click", () => {
+      const [id, val] = b.dataset.bkd.split(":");
+      setVote("booked", id, val);
+    }));
+    const n = $("#bkdNudge"); if (n) n.addEventListener("click", async () => {
+      const say = (m) => { const el = $("#bkdMsg"); if (el) el.textContent = m; };
+      const missing = [];
+      bookables().forEach((r) => bookedStats(r.id).quiet.concat(bookedStats(r.id).soon)
+        .forEach((p) => { if (!missing.some((x) => x.id === p.id)) missing.push(p); }));
+      if (!missing.length) { say("Everyone is booked."); return; }
+      const link = `${location.origin + location.pathname}?t=${TRIP.code}`;
+      const L = TRIP.links || {};
+      const msg = `Quick one about ${TRIP.name}: have you booked yet? ${isWedding() && L.deadline ? `The room block releases ${L.deadline}. ` : ""}Tap yes or not yet here so we know where we stand: ${link}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: TRIP.name, text: `${msg}\n\nStill waiting on: ${missing.map((m) => m.name).join(", ")}` }); say("Sent."); return; }
+        catch (e) { if (e && e.name === "AbortError") { say("Cancelled."); return; } }
+      }
+      navigator.clipboard?.writeText(`${missing.map((m) => m.name).join(", ")}\n\n${msg}`)
+        .then(() => say(`Copied a nudge for ${missing.length}.`))
+        .catch(() => say("Couldn't copy on this device."));
+    });
   }
   function weddingRsvpCard() {
     if (isHost()) return "";   // you are throwing it, you do not RSVP to it
