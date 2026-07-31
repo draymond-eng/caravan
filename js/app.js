@@ -54,8 +54,7 @@
         <p class="r-sub" style="margin:6px 0 0">SquadTrip needs its Supabase backend connected before trips can be created.
         Create a free project, run <code>supabase/schema.sql</code>, and put the URL + publishable key in <code>js/config.js</code>.</p>
       </div>`;
-      $("#createBtn").disabled = true;
-      $("#createBtn").style.opacity = 0.5;
+      $$("#createBtn, #createBtn2").forEach((b) => { b.disabled = true; b.style.opacity = 0.5; });
     } else { Backend.init(); }
 
     // recent trips on this device
@@ -72,7 +71,12 @@
 
     $("#joinBtn").addEventListener("click", joinTrip);
     $("#joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") joinTrip(); });
-    $("#createBtn").addEventListener("click", () => { openWizard(); });
+    $$("#createBtn, #createBtn2").forEach((b) => b.addEventListener("click", () => { openWizard(); }));
+    $$('.lp-link[href="#join"]').forEach((a) => a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const j = $("#join"); if (j) j.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => $("#joinCode") && $("#joinCode").focus(), 420);
+    }));
 
     registerSW();
   }

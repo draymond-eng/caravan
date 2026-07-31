@@ -21,118 +21,92 @@
 
     <!-- ============ LANDING (no trip code in URL) ============ -->
     <div id="landing" style="display:none">
-      <div class="screen active" style="padding-top:28px">
-        <div class="hero hero-mural" style="margin-bottom:22px">
-          <div class="sun"></div>
-          <svg class="mural" viewBox="0 0 780 170" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
-            <!-- water band -->
-            <rect x="0" y="112" width="780" height="58" fill="#31506b" opacity="0.5"/>
-            <!-- city skyline (far left) -->
-            <g fill="#241b45">
-              <rect x="0" y="60" width="26" height="110" rx="2"/>
-              <rect x="30" y="84" width="20" height="86" rx="2"/>
-              <rect x="54" y="46" width="30" height="124" rx="2"/>
-              <rect x="88" y="92" width="18" height="78" rx="2"/>
-              <rect x="110" y="72" width="22" height="98" rx="2"/>
-            </g>
-            <g fill="#e3c07e" opacity="0.85">
-              <rect x="6" y="70" width="4" height="5"/><rect x="16" y="86" width="4" height="5"/><rect x="6" y="104" width="4" height="5"/>
-              <rect x="62" y="56" width="4" height="5"/><rect x="72" y="72" width="4" height="5"/><rect x="62" y="92" width="4" height="5"/><rect x="74" y="110" width="4" height="5"/>
-              <rect x="116" y="82" width="4" height="5"/><rect x="124" y="100" width="4" height="5"/><rect x="36" y="96" width="4" height="5"/>
-            </g>
-            <!-- sailboat on the water -->
-            <g transform="translate(180,92)">
-              <path d="M0 22 L30 22 L24 30 L5 30 Z" fill="#241b45"/>
-              <path d="M15 0 L15 20 L2 20 Z" fill="#f3d3c4"/>
-              <path d="M18 4 L18 20 L28 20 Z" fill="#e2593a"/>
-            </g>
-            <!-- beach: sand + umbrella -->
-            <path d="M232 170 Q300 128 396 148 L400 170 Z" fill="#c9a76e"/>
-            <g transform="translate(296,104)">
-              <rect x="17" y="10" width="3" height="44" fill="#241b45"/>
-              <path d="M-4 14 Q18 -12 40 14 Q29 8 18.5 12 Q8 8 -4 14 Z" fill="#e2593a"/>
-              <path d="M2 12 Q18 -6 35 12" fill="none" stroke="#f3d3c4" stroke-width="3"/>
-            </g>
-            <!-- wedding arch (center) with glow -->
-            <circle cx="452" cy="120" r="40" fill="#e6c98a" opacity="0.22"/>
-            <g stroke="#e3c07e" stroke-width="4" fill="none" stroke-linecap="round">
-              <path d="M428 170 L428 128 Q428 96 452 96 Q476 96 476 128 L476 170"/>
-            </g>
-            <g fill="#c05c74">
-              <circle cx="431" cy="118" r="4"/><circle cx="440" cy="101" r="4"/><circle cx="464" cy="101" r="4"/><circle cx="473" cy="118" r="4"/><circle cx="452" cy="95" r="4.5"/>
-            </g>
-            <!-- couple silhouettes under the arch -->
-            <g fill="#241b45">
-              <path d="M444 170 L444 150 Q444 143 449 143 Q454 143 454 150 L454 170 Z"/>
-              <circle cx="449" cy="137" r="5"/>
-              <path d="M456 170 Q455 148 461 144 Q467 143 468 150 L468 170 Z"/>
-              <circle cx="463" cy="138" r="5"/>
-            </g>
-            <!-- golf: rolling green + flag -->
-            <path d="M496 170 Q570 122 664 152 L664 170 Z" fill="#2f5941"/>
-            <g transform="translate(586,102)">
-              <rect x="0" y="0" width="2.6" height="42" fill="#f3ede2"/>
-              <path d="M2.6 2 L24 8 L2.6 15 Z" fill="#e2593a"/>
-              <ellipse cx="3" cy="43" rx="12" ry="3" fill="#3f7351"/>
-            </g>
-            <!-- ski peaks (right) -->
-            <g>
-              <path d="M636 170 L700 74 L764 170 Z" fill="#3a2b5c"/>
-              <path d="M700 74 L716 98 L706 96 L698 106 L688 94 Z" fill="#f3ede2"/>
-              <path d="M700 170 L756 92 L780 128 L780 170 Z" fill="#2c2048"/>
-              <path d="M756 92 L768 110 L760 107 L751 115 Z" fill="#f3ede2"/>
-            </g>
-            <!-- unifying foreground -->
-            <path d="M0 170 L0 156 Q200 140 420 156 T780 150 L780 170 Z" fill="#1a1333" opacity="0.92"/>
-          </svg>
-          <div aria-hidden="true" style="margin-bottom:6px"><svg viewBox="0 0 100 74" width="58" height="43"><path d="M78 60 C60 30 92 22 98 4" fill="none" stroke="#e3c07e" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 10" opacity=".8"/><g fill="#f3d3c4"><path d="M8 32 C8 20 16 15 23 15 C30 15 38 20 38 32 C38 44 23 60 23 60 C23 60 8 44 8 32 Z"/></g><circle cx="23" cy="31" r="6" fill="#241b45"/><g fill="#f09c4a"><path d="M34 22 C34 8 44 2 52 2 C60 2 70 8 70 22 C70 36 52 55 52 55 C52 55 34 36 34 22 Z"/></g><circle cx="52" cy="21" r="7" fill="#241b45"/><g fill="#e2593a"><path d="M66 32 C66 20 74 15 81 15 C88 15 96 20 96 32 C96 44 81 60 81 60 C81 60 66 44 66 32 Z"/></g><circle cx="81" cy="31" r="6" fill="#241b45"/></svg></div>
-          <div class="kicker">Plan trips together</div>
-          <h1>SquadTrip</h1>
-          <div class="dates">Shared itinerary · group votes · split costs · one link, no accounts</div>
-        </div>
+      <div class="screen active lp">
+
+        <!-- One scene, not a sampler. It drifts through the kinds of trip the
+             app is for instead of lining up their ingredients in a row. -->
+        <section class="lp-hero">
+          <div class="lp-scene" aria-hidden="true">
+            <div class="lp-sky"></div>
+            <div class="lp-sun"></div>
+            <svg class="mural lp-ridge" viewBox="0 0 780 150" preserveAspectRatio="none" aria-hidden="true">
+              <path class="r r-1" d="M0 150 L0 96 Q150 58 330 82 Q500 104 640 68 Q720 48 780 62 L780 150 Z"/>
+              <path class="r r-2" d="M0 150 L0 118 Q190 92 400 110 Q600 126 780 104 L780 150 Z"/>
+              <path class="r r-3" d="M0 150 L0 136 Q220 122 460 132 Q640 140 780 130 L780 150 Z"/>
+            </svg>
+          </div>
+          <div class="lp-hero-in">
+            <div class="lp-mark" aria-hidden="true">
+              <svg viewBox="0 0 100 74" width="52" height="38"><g fill="#f3d3c4"><path d="M8 32 C8 20 16 15 23 15 C30 15 38 20 38 32 C38 44 23 60 23 60 C23 60 8 44 8 32 Z"/></g><circle cx="23" cy="31" r="6" fill="#241b45"/><g fill="#f09c4a"><path d="M34 22 C34 8 44 2 52 2 C60 2 70 8 70 22 C70 36 52 55 52 55 C52 55 34 36 34 22 Z"/></g><circle cx="52" cy="21" r="7" fill="#241b45"/><g fill="#e2593a"><path d="M66 32 C66 20 74 15 81 15 C88 15 96 20 96 32 C96 44 81 60 81 60 C81 60 66 44 66 32 Z"/></g><circle cx="81" cy="31" r="6" fill="#241b45"/></svg>
+            </div>
+            <div class="lp-eyebrow">SquadTrip</div>
+            <h1 class="lp-h1">Ten people.<br>One plan.<br><em>No group chat.</em></h1>
+            <p class="lp-lede">Every trip has one person holding it together. This is for them.
+              Share one link and the plan, the votes, the money and the flights live in the same place for everybody.</p>
+            <div class="lp-cta">
+              <button class="btn primary" id="createBtn">Start a trip</button>
+              <a class="lp-link" href="#join">I have a code</a>
+            </div>
+          </div>
+        </section>
 
         <div id="landingSetup"></div>
 
-        <div class="card" id="pitchCard">
-          <h3>What it does</h3>
-          <div class="pitch">
-            <div><span>🗓️</span><div><b>One shared plan</b><br>Every day and event, with locations, that everyone can add to.</div></div>
-            <div><span>🗳️</span><div><b>Decisions that settle</b><br>Vote on anything, discuss it in the same place, see where the group landed.</div></div>
-            <div><span>💰</span><div><b>Money sorted</b><br>Log who paid, see who owes who, mark it paid and it closes.</div></div>
-            <div><span>✈️</span><div><b>Everyone's flights</b><br>Who lands when, so rides and arrivals plan themselves.</div></div>
-            <div><span>✨</span><div><b>AI assistant</b><br>Drafts your whole itinerary from just the dates, then sticks around to answer questions about the trip.</div></div>
-            <div><span>👥</span><div><b>Groups</b><br>Foursomes, cars, bedrooms, whatever needs splitting up.</div></div>
+        <!-- The product, not a description of it. -->
+        <section class="lp-shot">
+          <div class="lp-phone">
+            <img src="assets/app-wedding.jpg" width="585" height="1230" alt="A guest's home screen, showing what is next, where it is, the dress code and their table" loading="lazy" />
           </div>
-        </div>
+          <p class="lp-caption">What a guest opens to. Nobody had to download anything.</p>
+        </section>
 
-        <div class="card" id="wedCard">
-          <h3>💍 Planning a destination wedding?</h3>
-          <p class="section-sub" style="margin:4px 0 0">There is a whole mode for it: RSVPs with party sizes and meal choices, room blocks with rates and deadlines, dress codes on every event, arrival windows for shuttles, and a host view with the counts your caterer will ask for. Pick <b>Wedding</b> when you set it up.</p>
-        </div>
+        <!-- Editorial rows, no icon grid. -->
+        <section class="lp-sec" id="pitchCard">
+          <h2 class="lp-h2">What it does</h2>
+          <dl class="lp-list">
+            <div><dt>One shared plan</dt><dd>Every day and event, with locations, that anyone can add to.</dd></div>
+            <div><dt>Decisions that settle</dt><dd>Vote on anything, argue in the same place, see where the group landed.</dd></div>
+            <div><dt>Money that closes</dt><dd>Log who paid, see who owes who, mark it settled and it disappears.</dd></div>
+            <div><dt>Everyone's flights</dt><dd>Who lands when, so rides and arrivals plan themselves.</dd></div>
+            <div><dt>An assistant that knows the trip</dt><dd>Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it.</dd></div>
+            <div><dt>Nothing gets lost</dt><dd>Works on a plane. Anything you change offline syncs the moment you land.</dd></div>
+          </dl>
+        </section>
 
-        <div class="card">
-          <h3>Got a code?</h3>
-          <p class="section-sub" style="margin:4px 0 12px">Punch in the code your group or the hosts sent you.</p>
-          <div style="display:flex;gap:8px">
-            <input id="joinCode" placeholder="e.g. X7KQ2P" maxlength="8" autocapitalize="characters"
-                   style="flex:1;padding:13px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:17px;letter-spacing:3px;font-weight:700;text-transform:uppercase;background:#fffdfa;color:var(--ink)" />
+        <section class="lp-sec lp-wed" id="wedCard">
+          <div class="lp-rule" aria-hidden="true"></div>
+          <h2 class="lp-h2">Destination weddings</h2>
+          <p class="lp-body">There is a whole mode for it. RSVPs with party sizes, meal choices and dietary notes.
+            Room blocks with rates and deadlines, and who has actually booked. Dress codes on every event.
+            Arrival windows that turn into shuttle runs. A seating chart built from the yeses.
+            A run of show and every vendor's number, which your guests never see.</p>
+          <p class="lp-body lp-quiet">Pick <b>Wedding</b> when you set it up.</p>
+        </section>
+
+        <section class="lp-sec lp-join" id="join">
+          <div class="lp-rule" aria-hidden="true"></div>
+          <h2 class="lp-h2">Got a code?</h2>
+          <p class="lp-body">Punch in the code your group or the hosts sent you.</p>
+          <div class="lp-joinrow">
+            <input id="joinCode" placeholder="e.g. X7KQ2P" maxlength="8" autocapitalize="characters" aria-label="Trip code" />
             <button class="btn primary" id="joinBtn">Join</button>
           </div>
-          <div id="joinErr" class="r-sub" style="color:var(--vermilion);margin-top:8px"></div>
-        </div>
+          <div id="joinErr" class="r-sub" style="color:var(--vermilion);margin-top:10px"></div>
+        </section>
 
-        <div class="card" id="createCard">
-          <h3>Start a new trip</h3>
-          <p class="section-sub" style="margin:4px 0 12px">Any group trip, or a 💍 destination wedding. Name it, add your people, share the code. About two minutes.</p>
-          <button class="btn primary" id="createBtn" style="width:100%">＋ Create a trip</button>
-        </div>
+        <section class="lp-sec" id="createCard">
+          <div class="lp-rule" aria-hidden="true"></div>
+          <h2 class="lp-h2">Or start one</h2>
+          <p class="lp-body">Any group trip, or a destination wedding. Name it, add your people, share the code.
+            About two minutes, and nobody needs an account.</p>
+          <button class="btn primary lp-wide" id="createBtn2">Create a trip</button>
+        </section>
 
         <div id="myTrips"></div>
 
         <div class="foot-note">SquadTrip · your group's trip, in everyone's pocket</div>
       </div>
 
-      <!-- Create-trip wizard (modal) -->
       <div class="modal-backdrop" id="wizModal">
         <div class="modal" style="max-height:86vh;overflow-y:auto">
           <h3>Create your trip</h3>

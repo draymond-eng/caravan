@@ -493,10 +493,6 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 
 /* ---- Landing mural: one continuous skyline of trip types ------------------- */
 /* city → sailboat → beach → wedding arch → golf green → ski peaks             */
-.hero-mural { padding-bottom: 112px; }
-@media (min-width: 560px) { .hero-mural { padding-bottom: 178px; } }
-.hero-mural::after { display: none; } /* mural replaces the dunes */
-.hero-mural .mural { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: auto; display: block; pointer-events: none; }
 
 /* ---- Wedding theme: champagne & blush over deep plum ----------------------- */
 /* Applied to <body> the moment a wedding is opened (or picked in the wizard). */
@@ -589,11 +585,6 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .cmt-add .btn { padding: 10px 14px; font-size: 13px; }
 
 /* ---- Landing pitch list --------------------------------------------------- */
-.pitch { display: grid; gap: 12px; margin-top: 10px; }
-.pitch > div { display: flex; gap: 11px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
-.pitch > div > span { font-size: 19px; line-height: 1.2; flex: none; }
-.pitch b { color: var(--ink); font-size: 13.5px; }
-@media (min-width: 560px) { .pitch { grid-template-columns: 1fr 1fr; gap: 14px 18px; } }
 
 /* RSVP: one row per seat in the party */
 .seat { display: grid; gap: 6px; padding: 8px; border-radius: var(--r-sm);
@@ -601,7 +592,6 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .seat input, .seat select { background: rgba(255,255,255,.94) !important; }
 
 /* The wedding path on the landing page, present without taking over */
-#wedCard { border-color: var(--sakura-deep); background: linear-gradient(180deg, #fdf6f4, var(--card)); }
 
 /* Pairings shown under a tee time or any event linked to a group set */
 .pairings { margin-top: 8px; padding: 9px 11px; border-radius: var(--r-sm);
@@ -816,3 +806,99 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .live-row span { flex: 1; }
 .live-row .tl-map { flex: none; }
 .live-rest { border-top: 1px solid var(--line); margin-top: 12px; }
+
+/* =============================================================================
+   LANDING - elevated
+   Restraint over decoration: one scene instead of a sampler, editorial type
+   instead of an icon grid, air instead of boxes, and one accent colour used
+   only on the thing you are meant to tap.
+   ========================================================================== */
+.lp { padding: 0 0 60px; }
+.lp-sec { max-width: 620px; margin: 0 auto; padding: 0 22px; }
+
+/* ---- Hero: one drifting scene ---- */
+.lp-hero { position: relative; overflow: hidden; color: #f6f1e8;
+  padding: calc(58px + env(safe-area-inset-top, 0px)) 22px 76px; margin-bottom: 8px; }
+.lp-scene { position: absolute; inset: 0; z-index: 0; }
+.lp-sky { position: absolute; inset: 0;
+  background:
+    radial-gradient(90% 62% at 78% 84%, rgba(240,156,74,.34), rgba(240,156,74,0) 62%),
+    radial-gradient(120% 92% at 84% -18%, rgba(226,89,58,.42), rgba(226,89,58,0) 54%),
+    linear-gradient(168deg, #1b1638 0%, #2f2358 42%, #6b3f63 74%, #b96a4a 100%);
+  animation: lp-drift 42s ease-in-out infinite alternate; }
+@keyframes lp-drift {
+  0%   { filter: hue-rotate(0deg)    saturate(1); }
+  50%  { filter: hue-rotate(-14deg)  saturate(1.06); }
+  100% { filter: hue-rotate(10deg)   saturate(.96); }
+}
+.lp-sun { position: absolute; top: 12%; right: 12%; width: 84px; height: 84px; border-radius: 50%;
+  background: radial-gradient(circle at 42% 38%, #ffe6b8, #f6ae5c 56%, #e2593a);
+  box-shadow: 0 0 70px 26px rgba(246,174,92,.34), 0 0 140px 60px rgba(226,89,58,.18);
+  animation: lp-rise 42s ease-in-out infinite alternate; }
+@keyframes lp-rise { from { transform: translateY(10px); } to { transform: translateY(-14px); } }
+.lp-ridge { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 150px; display: block; }
+.lp-ridge .r-1 { fill: #2a2050; opacity: .55; }
+.lp-ridge .r-2 { fill: #1d1740; opacity: .8; }
+.lp-ridge .r-3 { fill: #14102e; }
+
+.lp-hero-in { position: relative; z-index: 1; max-width: 620px; margin: 0 auto; }
+.lp-mark { margin-bottom: 20px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.4)); }
+.lp-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 4.5px; text-transform: uppercase;
+  color: var(--gold-soft); margin-bottom: 20px; }
+.lp-h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(40px, 12vw, 62px);
+  line-height: 1.02; letter-spacing: -.5px; margin: 0 0 22px; }
+.lp-h1 em { font-style: italic; color: var(--gold-soft); }
+.lp-lede { font-size: 15.5px; line-height: 1.7; color: rgba(246,241,232,.86); margin: 0 0 30px; max-width: 30em; }
+.lp-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.lp-cta .btn.primary { padding: 16px 30px; font-size: 15px; }
+.lp-link { color: var(--gold-soft); font-weight: 700; font-size: 14.5px; text-decoration: none;
+  border-bottom: 1px solid rgba(227,192,126,.4); padding-bottom: 2px; }
+
+/* ---- The product itself ---- */
+.lp-shot { padding: 46px 22px 10px; text-align: center; }
+.lp-phone { width: min(268px, 74vw); margin: 0 auto; border-radius: 34px; padding: 9px;
+  background: linear-gradient(160deg, #2b2450, #16122f);
+  box-shadow: 0 40px 70px -34px rgba(36,27,69,.55), 0 6px 16px -8px rgba(36,27,69,.4); }
+.lp-phone img { display: block; width: 100%; height: auto; border-radius: 26px; }
+.lp-caption { font-size: 12.5px; color: var(--ink-3); margin: 18px auto 0; max-width: 24em; line-height: 1.6; }
+
+/* ---- Sections: air, not boxes ---- */
+.lp-sec { padding-top: 54px; }
+.lp-rule { height: 1px; background: linear-gradient(90deg, var(--gold-soft), rgba(227,192,126,0)); margin-bottom: 30px; }
+.lp-h2 { font-family: var(--serif); font-size: 27px; font-weight: 600; letter-spacing: .1px; margin: 0 0 20px; }
+.lp-body { font-size: 15px; line-height: 1.75; color: var(--ink-2); margin: 0 0 14px; }
+.lp-quiet { color: var(--ink-3); font-size: 14px; }
+
+.lp-list { margin: 0; }
+.lp-list > div { padding: 17px 0; border-top: 1px solid var(--line); }
+.lp-list > div:first-child { border-top: none; padding-top: 0; }
+.lp-list dt { font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: .1px; }
+.lp-list dd { margin: 5px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ink-2); }
+
+.lp-joinrow { display: flex; gap: 10px; }
+.lp-joinrow input { flex: 1; padding: 15px 16px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-size: 18px; letter-spacing: 4px; font-weight: 700; text-transform: uppercase;
+  background: #fffdfa; color: var(--ink); font-family: inherit; }
+.lp-joinrow input::placeholder { letter-spacing: 2px; font-weight: 600; color: var(--ink-3); }
+.lp-joinrow .btn { flex: none; padding: 15px 26px; }
+.lp-wide { width: 100%; padding: 16px; font-size: 15px; }
+
+.lp .foot-note { margin-top: 54px; }
+.lp #myTrips { max-width: 620px; margin: 0 auto; padding: 30px 22px 0; }
+.lp #landingSetup { max-width: 620px; margin: 0 auto; padding: 22px 22px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-sky, .lp-sun { animation: none; }
+}
+@media (min-width: 720px) {
+  .lp-hero { padding-top: 84px; padding-bottom: 96px; }
+  .lp-shot { padding-top: 60px; }
+}
+/* The landing hero ignores the app's column and runs edge to edge. */
+.lp-hero { margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
+  padding-left: calc(50vw - 50% + 22px); padding-right: calc(50vw - 50% + 22px); }
+@media (min-width: 720px) {
+  .lp-hero-in { max-width: 620px; }
+  .lp-h1 { font-size: 64px; }
+  .lp-sun { width: 108px; height: 108px; top: 16%; right: 16%; }
+}
