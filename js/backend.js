@@ -19,6 +19,7 @@
       const wanted = (code || "").toUpperCase();
       if (client && ready && wanted === currentCode) return true;
       currentCode = wanted;
+      loadQueue();
       client = window.supabase.createClient(cfg.url, cfg.anonKey, {
         auth: { persistSession: false },
         global: { headers: wanted ? { "x-trip-code": wanted } : {} },
@@ -52,7 +53,7 @@
   }
   async function updateTrip(code, patch) {
     try { await client.from("trips").update(patch).eq("code", code); return true; }
-    catch (e) { writeFailed("updateTrip", e); return false; }
+    catch (e) { writeFailed("updateTrip", e); enqueue({ kind: "updateTrip", code, patch }); return false; }
   }
 
 
@@ -63,22 +64,101 @@
     console.warn(what, e);
     try { if (onWriteFail) onWriteFail(what, e); } catch (err) { /* never break a write path */ }
   }
+
+  /* ---- Offline write queue --------------------------------------------------
+     A trip happens on planes, foreign SIMs and hotel basements. A write that
+     fails is parked here, kept across app restarts, and replayed in order the
+     moment the connection comes back. Reads are never queued; stale is fine,
+     lost is not.
+     -------------------------------------------------------------------------- */
+  const qKey = () => "cv_q_" + (currentCode || "none");
+  let queue = [];
+  let flushing = false;
+  let onQueueChange = null;
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID()
+    : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16); }));
+  function loadQueue() {
+    try { queue = JSON.parse(localStorage.getItem(qKey()) || "[]") || []; } catch { queue = []; }
+  }
+  function saveQueue() {
+    try { localStorage.setItem(qKey(), JSON.stringify(queue.slice(-200))); } catch { /* full */ }
+    try { if (onQueueChange) onQueueChange(queue.length); } catch { /* never break a write */ }
+  }
+  function enqueue(op) {
+    // Repeated edits to the same row collapse, so a slow connection does not
+    // replay every keystroke's worth of saves.
+    if (op.kind === "update") {
+      const prev = queue.find((o) => o.kind === "update" && o.table === op.table && String(o.id) === String(op.id));
+      if (prev) { prev.patch = { ...prev.patch, ...op.patch }; saveQueue(); return; }
+    }
+    if (op.kind === "updateTrip") {
+      const prev = queue.find((o) => o.kind === "updateTrip" && o.code === op.code);
+      if (prev) { prev.patch = { ...prev.patch, ...op.patch }; saveQueue(); return; }
+    }
+    queue.push(op);
+    saveQueue();
+  }
+  // Check the returned error rather than relying on throwOnError, so a replay
+  // fails the same way whatever version of the client is underneath.
+  const must = async (q) => { const r = await q; if (r && r.error) throw r.error; return r; };
+  async function runOp(op) {
+    switch (op.kind) {
+      case "insert":     await must(client.from(op.table).insert(op.row)); return;
+      case "update":     await must(client.from(op.table).update(op.patch).eq("id", op.id)); return;
+      case "remove":     await must(client.from(op.table).delete().eq("id", op.id)); return;
+      case "updateTrip": await must(client.from("trips").update(op.patch).eq("code", op.code)); return;
+      case "vote":
+        if (op.choice == null) await must(client.from("votes").delete().match({ trip: op.trip, kind: op.k, topic: op.topic, voter: op.voter }));
+        else await must(client.from("votes").upsert({ trip: op.trip, kind: op.k, topic: op.topic, choice: op.choice, voter: op.voter }, { onConflict: "trip,kind,topic,voter" }));
+        return;
+      case "flight":     await must(client.from("flights").upsert(op.row, { onConflict: "trip,traveler,dir" })); return;
+      default: return;
+    }
+  }
+  /* Replay in order and stop at the first failure, so a later write can never
+     land before the earlier one it depends on. */
+  async function flushQueue() {
+    if (flushing || !client || !queue.length) return { sent: 0, left: queue.length };
+    flushing = true;
+    let sent = 0;
+    try {
+      while (queue.length) {
+        try { await runOp(queue[0]); }
+        catch (e) { break; }
+        queue.shift(); sent++; saveQueue();
+      }
+    } finally { flushing = false; }
+    return { sent, left: queue.length };
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", () => { flushQueue(); });
+    setInterval(() => { if (queue.length && navigator.onLine !== false) flushQueue(); }, 20000);
+  }
+
   /* ---- Generic helpers (every table is scoped by `trip`) -------------------- */
   async function list(table, trip, order = "created_at", asc = true) {
     try { const { data, error } = await client.from(table).select("*").eq("trip", trip).order(order, { ascending: asc }); if (error) throw error; return data || []; }
     catch (e) { console.warn("list " + table, e); return []; }
   }
   async function insert(table, row) {
-    try { const { data, error } = await client.from(table).insert(row).select().single(); if (error) throw error; return data; }
-    catch (e) { writeFailed("insert " + table, e); return null; }
+    // Give the row its id up front so the screen, the queue and the database
+    // all agree on it even if the write only lands later.
+    const withId = row && row.id ? row : { ...row, id: uid() };
+    try { const { data, error } = await client.from(table).insert(withId).select().single(); if (error) throw error; return data; }
+    catch (e) {
+      writeFailed("insert " + table, e);
+      enqueue({ kind: "insert", table, row: withId });
+      return { ...withId, created_at: new Date().toISOString(), _pending: true };
+    }
   }
   async function update(table, id, patch) {
     try { await client.from(table).update(patch).eq("id", id); return true; }
-    catch (e) { writeFailed("update " + table, e); return false; }
+    catch (e) { writeFailed("update " + table, e); enqueue({ kind: "update", table, id, patch }); return false; }
   }
   async function remove(table, id) {
     try { await client.from(table).delete().eq("id", id); return true; }
-    catch (e) { writeFailed("remove " + table, e); return false; }
+    catch (e) { writeFailed("remove " + table, e); enqueue({ kind: "remove", table, id }); return false; }
   }
 
   /* ---- Votes (upsert one per person/topic) ---------------------------------- */
@@ -87,7 +167,7 @@
       if (choice == null) await client.from("votes").delete().match({ trip, kind, topic, voter });
       else await client.from("votes").upsert({ trip, kind, topic, choice, voter }, { onConflict: "trip,kind,topic,voter" });
       return true;
-    } catch (e) { writeFailed("castVote", e); return false; }
+    } catch (e) { writeFailed("castVote", e); enqueue({ kind: "vote", trip, k: kind, topic, choice, voter }); return false; }
   }
 
   /* ---- Bulk helpers --------------------------------------------------------- */
@@ -107,7 +187,7 @@
   /* ---- Flights (upsert per traveler+dir) ------------------------------------ */
   async function upsertFlight(row) {
     try { const { data, error } = await client.from("flights").upsert(row, { onConflict: "trip,traveler,dir" }).select().single(); if (error) throw error; return data; }
-    catch (e) { writeFailed("upsertFlight", e); return null; }
+    catch (e) { writeFailed("upsertFlight", e); enqueue({ kind: "flight", row }); return { ...row, _pending: true }; }
   }
 
   /* ---- Files (photos + confirmations) --------------------------------------- */
@@ -152,6 +232,8 @@
 
   window.Backend = {
     init, isReady: () => ready, configured, lastError: () => lastError,
+    pending: () => queue.length, flush: flushQueue,
+    onQueueChange: (cb) => { onQueueChange = cb; },
     onWriteError: (cb) => { onWriteFail = cb; },
     createTrip, getTrip, updateTrip, deleteTrip,
     list, insert, update, remove, clearTable,

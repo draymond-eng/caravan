@@ -588,31 +588,84 @@
       show(go.dataset.go);
     });
   }
-  /* A host must never think something saved when it did not. Any failed write
-     raises one banner that stays until the change goes through. */
-  let saveTrouble = 0;
-  function watchSaves() {
-    if (!window.Backend || !Backend.onWriteError) return;
-    Backend.onWriteError(() => {
-      saveTrouble++;
-      let bar = $("#saveBar");
-      if (!bar) {
-        bar = document.createElement("div");
-        bar.id = "saveBar";
-        bar.className = "save-bar";
-        document.body.appendChild(bar);
+  /* Nothing you do is lost to a bad connection. Failed writes are parked in a
+     queue that survives closing the app, and this bar shows what is still
+     waiting. It clears itself the moment the queue drains. */
+  function saveBar() {
+    let bar = $("#saveBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "saveBar";
+      bar.className = "save-bar";
+      document.body.appendChild(bar);
+    }
+    return bar;
+  }
+  function showPending(n) {
+    const bar = saveBar();
+    if (!n) {
+      if (bar.classList.contains("open")) {
+        bar.className = "save-bar done open";
+        bar.innerHTML = `<span>✓ Everything is saved.</span>`;
+        setTimeout(() => { bar.className = "save-bar"; }, 2200);
       }
-      bar.innerHTML = `<span>⚠️ ${saveTrouble} change${saveTrouble === 1 ? "" : "s"} did not save. You may be offline.</span>
-        <button class="btn" id="saveRetry">Retry</button>`;
-      bar.classList.add("open");
-      $("#saveRetry").addEventListener("click", async () => {
-        $("#saveRetry").textContent = "Checking…";
-        const fresh = await Backend.getTrip(TRIP_CODE).catch(() => null);
-        if (fresh) { saveTrouble = 0; bar.classList.remove("open"); await hydrate("all"); renderCurrent(); }
-        else $("#saveRetry").textContent = "Still offline";
-      });
+      return;
+    }
+    bar.className = "save-bar open";
+    bar.innerHTML = `<span>${navigator.onLine === false ? "📡 Offline." : "⏳"} ${n} change${n === 1 ? "" : "s"} waiting to sync. Nothing is lost.</span>
+      <button class="btn" id="saveRetry">Try now</button>`;
+    $("#saveRetry").addEventListener("click", async () => {
+      $("#saveRetry").textContent = "Syncing…";
+      const r = await Backend.flush();
+      if (r && r.left) { $("#saveRetry").textContent = "Still offline"; setTimeout(() => showPending(r.left), 1400); }
+      else { showPending(0); await hydrate("all"); renderCurrent(); }
     });
   }
+  function watchSaves() {
+    if (!window.Backend || !Backend.onQueueChange) return;
+    Backend.onQueueChange((n) => showPending(n));
+    if (Backend.pending && Backend.pending()) showPending(Backend.pending());
+    // A queue that drains in the background should refresh what you are looking at.
+    window.addEventListener("online", async () => {
+      const r = await Backend.flush();
+      if (r && !r.left && r.sent) { await hydrate("all"); renderCurrent(); }
+    });
+  }
+  /* ---- Undo -----------------------------------------------------------------
+     Deleting a day takes every event on it. One mis-tap should not be final,
+     so anything destructive offers a few seconds to take it back. Restoring
+     re-inserts the same row with the same id, so nothing else has to change.
+     -------------------------------------------------------------------------- */
+  let undoTimer = null;
+  function offerUndo(what, restore) {
+    const el = $("#undoBar") || (() => {
+      const d = document.createElement("div");
+      d.id = "undoBar"; d.className = "undo-bar";
+      document.body.appendChild(d);
+      return d;
+    })();
+    clearTimeout(undoTimer);
+    el.innerHTML = `<span>${esc(what)} deleted</span><button class="btn" id="undoGo">Undo</button>`;
+    el.classList.add("open");
+    const close = () => { el.classList.remove("open"); clearTimeout(undoTimer); };
+    $("#undoGo").addEventListener("click", async () => {
+      close();
+      try { await restore(); } catch (e) { console.warn("undo", e); }
+      renderCurrent();
+    });
+    undoTimer = setTimeout(close, 7000);
+  }
+  /* Delete a row and hand back a way to put it exactly as it was. */
+  async function deleteWithUndo(table, row, label, onLocal, onRestore) {
+    onLocal();
+    renderCurrent();
+    await Backend.remove(table, row.id);
+    offerUndo(label, async () => {
+      const back = await Backend.insert(table, row);
+      if (back) onRestore(back);
+    });
+  }
+
   function bindShell() {
     bindGoDelegate();
     watchSaves();
@@ -1769,10 +1822,13 @@
 
     list.querySelectorAll("[data-rmitem]").forEach((b) => b.addEventListener("click", () => removeItem(b.dataset.rmitem)));
     list.querySelectorAll("[data-rmday]").forEach((b) => b.addEventListener("click", async () => {
-      if (!confirm("Delete this whole day?")) return;
-      state.days = state.days.filter((x) => x.id !== b.dataset.rmday);
-      renderDayList();
-      await Backend.remove("days", b.dataset.rmday);
+      const row = state.days.find((x) => String(x.id) === String(b.dataset.rmday));
+      if (!row) return;
+      const n = (row.items || []).length;
+      if (!confirm(`Delete this whole day${n ? ` and its ${n} event${n === 1 ? "" : "s"}` : ""}?`)) return;
+      await deleteWithUndo("days", row, row.title || "Day",
+        () => { state.days = state.days.filter((x) => String(x.id) !== String(row.id)); },
+        (back) => { state.days.push(back); state.days.sort((a, c) => String(a.date).localeCompare(String(c.date))); });
     }));
   }
   async function addDay() {
@@ -2326,11 +2382,21 @@
       { id: "checkin",  by: 1,   label: "Check in and pack", note: "Check in 24 hours ahead. The Packing tab has the list." },
     ];
     const out = daysUntilTrip();
-    return list.map((i) => ({
-      ...i,
-      due: i.hard || `by ${dateMinusDays(i.by)}`,
-      bucket: out <= i.by ? "now" : (out <= i.by + 45 ? "soon" : "later"),
+    // Your own items sit alongside the generated ones, and anything that does
+    // not apply to this trip can be hidden rather than argued with.
+    const L2 = TRIP.links || {};
+    const hidden = new Set(L2.booking_hidden || []);
+    const extra = (L2.booking_extra || []).map((e) => ({
+      id: e.id, by: Number(e.by) || 30, label: e.label, note: e.note || "", hard: e.hard || "", mine: true,
     }));
+    return list.concat(extra)
+      .filter((i) => !hidden.has(i.id))
+      .map((i) => ({
+        ...i,
+        due: i.hard || `by ${dateMinusDays(i.by)}`,
+        bucket: out <= i.by ? "now" : (out <= i.by + 45 ? "soon" : "later"),
+      }))
+      .sort((a, b) => b.by - a.by);
   }
   function renderBooking() {
     const s = $("#screen-booking");
@@ -2364,15 +2430,62 @@
                   <div class="r-sub" style="margin-top:3px">${esc(i.note)}</div>
                   <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
                     <span class="when-chip">${esc(i.due)}</span>
+                    ${i.mine ? `<span class="pill any">yours</span>` : ""}
                     ${who.length ? `<span class="tally" style="margin:0">${voterChips(who)}<span class="tally-n">handled</span></span>` : ""}
+                    ${isHost() ? `<span class="tl-map" style="color:var(--ink-3);cursor:pointer;margin-left:auto" data-bkhide="${esc(i.id)}">${i.mine ? "Remove" : "Not for us"}</span>` : ""}
                   </div>
                 </div>
               </div>
             </div>`;
           }).join("")}
         </div>`;
-      }).join("")}`;
+      }).join("")}
+
+      ${isHost() ? `<div class="card">
+        <h3>＋ Add your own</h3>
+        <p class="section-sub" style="margin:4px 0 10px">The things only you know about. "Shinkansen seats open exactly 30 days before each leg." It slots into the timeline by when it is due.</p>
+        <div class="expense-add">
+          <input id="bkLabel" placeholder="What needs doing" />
+          <input id="bkNote2" placeholder="Why, or how (optional)" />
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="bkBy" type="number" inputmode="numeric" placeholder="Days before the trip" style="flex:2" />
+            <span class="r-sub" style="flex:1">days out</span>
+          </div>
+          <button class="btn primary" id="bkAdd">Add to the timeline</button>
+        </div>
+        <div id="bkMsg" class="r-sub" style="margin-top:8px"></div>
+      </div>
+      ${(TRIP.links || {}).booking_hidden && (TRIP.links || {}).booking_hidden.length ? `<button class="btn ghost" id="bkRestore" style="width:100%">Bring back ${(TRIP.links || {}).booking_hidden.length} hidden item${(TRIP.links || {}).booking_hidden.length === 1 ? "" : "s"}</button>` : ""}` : ""}`;
     s.querySelectorAll("[data-book]").forEach((b) => b.addEventListener("click", () => setVote("booking", b.dataset.book, "done")));
+    s.querySelectorAll("[data-bkhide]").forEach((b) => b.addEventListener("click", () => hideBookingItem(b.dataset.bkhide)));
+    const ba = $("#bkAdd"); if (ba) ba.addEventListener("click", addBookingItem);
+    const br = $("#bkRestore"); if (br) br.addEventListener("click", async () => {
+      await saveLinks({ booking_hidden: [] }, ["booking_hidden"]);
+      renderBooking();
+    });
+  }
+  async function addBookingItem() {
+    const label = $("#bkLabel").value.trim();
+    if (!label) { $("#bkMsg").textContent = "Say what needs doing."; return; }
+    const by = parseInt($("#bkBy").value, 10);
+    const extra = ((TRIP.links || {}).booking_extra || []).concat([{
+      id: "own-" + Date.now().toString(36),
+      label: label.slice(0, 140),
+      note: $("#bkNote2").value.trim().slice(0, 300),
+      by: by > 0 ? by : 30,
+    }]);
+    const ok = await saveLinks({ booking_extra: extra }, []);
+    if (!ok) { $("#bkMsg").textContent = "Couldn't save it. It will sync when you're back online."; }
+    renderBooking();
+  }
+  async function hideBookingItem(id) {
+    const L = TRIP.links || {};
+    if (String(id).startsWith("own-")) {
+      await saveLinks({ booking_extra: (L.booking_extra || []).filter((e) => e.id !== id) }, []);
+    } else {
+      await saveLinks({ booking_hidden: [...new Set([...(L.booking_hidden || []), id])] }, []);
+    }
+    renderBooking();
   }
 
   /* =========================================================================
@@ -2424,8 +2537,11 @@
       </div>` : ""}`;
     s.querySelectorAll("[data-dec]").forEach((b) => b.addEventListener("click", () => setVote("decision", b.dataset.dec, b.dataset.opt)));
     s.querySelectorAll("[data-decdel]").forEach((b) => b.addEventListener("click", async () => {
-      state.decisions = state.decisions.filter((x) => x.id !== b.dataset.decdel); renderDecisions();
-      await Backend.remove("decisions", b.dataset.decdel);
+      const row = state.decisions.find((x) => String(x.id) === String(b.dataset.decdel));
+      if (!row) return;
+      await deleteWithUndo("decisions", row, row.title || "Question",
+        () => { state.decisions = state.decisions.filter((x) => String(x.id) !== String(row.id)); },
+        (back) => state.decisions.push(back));
     }));
     bindComments(s);
     const dA = $("#decAdd"); if (dA) dA.addEventListener("click", addDecision);
@@ -3627,8 +3743,11 @@
       await Backend.update("notes", c.dataset.notedone, { done: c.checked });
     }));
     s.querySelectorAll("[data-notedel]").forEach((b) => b.addEventListener("click", async () => {
-      state.notes = state.notes.filter((x) => String(x.id) !== String(b.dataset.notedel)); renderNotes();
-      await Backend.remove("notes", b.dataset.notedel);
+      const row = state.notes.find((x) => String(x.id) === String(b.dataset.notedel));
+      if (!row) return;
+      await deleteWithUndo("notes", row, row.text || "Note",
+        () => { state.notes = state.notes.filter((x) => String(x.id) !== String(row.id)); },
+        (back) => state.notes.push(back));
     }));
   }
 
@@ -3667,8 +3786,11 @@
     bindComments(s);
     s.querySelectorAll("[data-idea]").forEach((b) => b.addEventListener("click", () => setVote("idea", b.dataset.idea, "up")));
     s.querySelectorAll("[data-iddel]").forEach((b) => b.addEventListener("click", async () => {
-      state.ideas = state.ideas.filter((x) => String(x.id) !== String(b.dataset.iddel)); renderIdeas();
-      await Backend.remove("ideas", b.dataset.iddel);
+      const row = state.ideas.find((x) => String(x.id) === String(b.dataset.iddel));
+      if (!row) return;
+      await deleteWithUndo("ideas", row, row.title || "Idea",
+        () => { state.ideas = state.ideas.filter((x) => String(x.id) !== String(row.id)); },
+        (back) => state.ideas.push(back));
     }));
     $("#ideaAdd").addEventListener("click", async () => {
       const title = $("#ideaTitle").value.trim(); if (!title) return alert("Give it a title.");
