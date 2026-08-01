@@ -67,7 +67,7 @@
       h1: "Ten people.<br>One plan.<br><em>No group chat.</em>",
       lede: "Every trip has one person holding it together. This is for them. Share one link and the plan, the votes, the money and the flights live in the same place for everybody.",
       shots: ["plan", "votes", "money", "live", "guest"],
-      caption: "Swipe. Nobody in any of these downloaded anything.",
+      caption: "Nobody in any of these downloaded anything.",
       what: [
         ["One shared plan", "Every day and event, with locations, that anyone can add to."],
         ["Decisions that settle", "Vote on anything, argue in the same place, see where the group landed."],
@@ -130,6 +130,8 @@
     set(".lp-eyebrow", esc(L.eyebrow));
     set(".lp-h1", L.h1);
     set(".lp-lede", esc(L.lede));
+    // A vertical list, not a slider. Nothing scrolls sideways, so nothing can
+    // drag the rest of the page out of alignment with it.
     set("#lpStrip", L.shots.map((k) => {
       const [file, title, body] = SHOTS[k];
       return `<figure class="lp-slide">
@@ -194,16 +196,6 @@
       setTimeout(() => $("#joinCode") && $("#joinCode").focus(), 420);
     }));
 
-    // dots follow the gallery, so it reads as something to swipe
-    const strip = $("#lpStrip"), dots = $("#lpDots");
-    if (strip && dots) {
-      const slides = strip.children.length;
-      dots.innerHTML = Array.from({ length: slides }, (_, n) => `<i class="${n === 0 ? "on" : ""}"></i>`).join("");
-      strip.addEventListener("scroll", () => {
-        const at = Math.min(slides - 1, Math.round(strip.scrollLeft / (strip.scrollWidth / slides)));
-        Array.from(dots.children).forEach((d, n) => { d.className = n === at ? "on" : ""; });
-      }, { passive: true });
-    }
     registerSW();
   }
 

@@ -855,12 +855,12 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   border-bottom: 1px solid rgba(227,192,126,.4); padding-bottom: 2px; }
 
 /* ---- The product itself ---- */
-.lp-shot { padding: 46px 22px 10px; text-align: center; }
+.lp-shot { padding: 46px 22px 10px; max-width: 620px; margin: 0 auto; }
 .lp-phone { width: min(268px, 74vw); margin: 0 auto; border-radius: 34px; padding: 9px;
   background: linear-gradient(160deg, #2b2450, #16122f);
   box-shadow: 0 40px 70px -34px rgba(36,27,69,.55), 0 6px 16px -8px rgba(36,27,69,.4); }
 .lp-phone img { display: block; width: 100%; height: auto; border-radius: 26px; }
-.lp-caption { font-size: 12.5px; color: var(--ink-3); margin: 18px auto 0; max-width: 24em; line-height: 1.6; }
+.lp-caption { font-size: 12.5px; color: var(--ink-3); margin: 26px 0 0; line-height: 1.6; }
 
 /* ---- Sections: air, not boxes ---- */
 .lp-sec { padding-top: 54px; }
@@ -903,22 +903,23 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   .lp-sun { width: 108px; height: 108px; top: 16%; right: 16%; }
 }
 
-/* ---- Landing gallery: swipe through what it actually does ---- */
-.lp-strip { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch; scrollbar-width: none;
-  padding: 4px calc(50% - 134px) 10px; }
-.lp-strip::-webkit-scrollbar { display: none; }
-.lp-slide { flex: 0 0 268px; margin: 0; scroll-snap-align: center; }
-.lp-slide figcaption { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin-top: 16px; text-align: left; }
-.lp-slide figcaption b { display: block; font-family: var(--serif); font-size: 16px; font-weight: 600;
-  color: var(--ink); margin-bottom: 4px; letter-spacing: .1px; }
-.lp-dots { display: flex; justify-content: center; gap: 7px; margin-top: 18px; }
-.lp-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .2s, width .2s; }
-.lp-dots i.on { background: var(--gold); width: 18px; border-radius: 999px; }
-@media (min-width: 720px) {
-  .lp-strip { padding-left: calc(50% - 144px); padding-right: calc(50% - 144px); gap: 28px; }
-  .lp-slide { flex-basis: 288px; }
+/* ---- Landing gallery ------------------------------------------------------
+   A vertical list of rows, not a slider. Horizontal scrolling inside a page
+   drags the rest of it out of line, and nothing here needs to move sideways.
+   -------------------------------------------------------------------------- */
+.lp-strip { display: grid; gap: 26px; }
+.lp-slide { margin: 0; display: grid; grid-template-columns: 116px 1fr; gap: 18px; align-items: center; text-align: left; }
+.lp-slide .lp-phone { width: 116px; padding: 5px; border-radius: 18px; }
+.lp-slide .lp-phone img { border-radius: 14px; }
+.lp-slide figcaption { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); margin: 0; }
+.lp-slide figcaption b { display: block; font-family: var(--serif); font-size: 17px; font-weight: 600;
+  color: var(--ink); margin-bottom: 5px; letter-spacing: .1px; }
+@media (min-width: 620px) {
+  .lp-strip { grid-template-columns: 1fr 1fr; gap: 30px 28px; }
+  .lp-slide { grid-template-columns: 104px 1fr; }
+  .lp-slide .lp-phone { width: 104px; }
 }
+
 .lp-aside-link { display: inline-block; margin-top: 6px; font-weight: 700; font-size: 14.5px;
   color: var(--ai-2); text-decoration: none; border-bottom: 1px solid rgba(92,74,153,.3); padding-bottom: 2px; }
 /* A longer eyebrow ("SquadTrip for weddings") has to clear the sun. */
@@ -932,3 +933,8 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .lp-kinds > div { padding: 14px 0; }
 .lp-kinds dt { font-size: 16.5px; }
 .lp-kinds dd { font-size: 14px; }
+
+/* Nothing on the landing may scroll sideways. The full-bleed hero uses vw, so
+   a stray overflow anywhere would shift every section under it out of line. */
+html, body { overflow-x: hidden; }
+.lp, .lp-sec, .lp-strip { overscroll-behavior-x: contain; }
