@@ -904,21 +904,25 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 }
 
 /* ---- Landing gallery ------------------------------------------------------
-   A vertical list of rows, not a slider. Horizontal scrolling inside a page
-   drags the rest of it out of line, and nothing here needs to move sideways.
+   The screenshots scroll sideways; nothing else does. overscroll-behavior-x
+   stops the swipe chaining out to the document, which is what used to drag
+   every section below it out of line.
    -------------------------------------------------------------------------- */
-.lp-strip { display: grid; gap: 26px; }
-.lp-slide { margin: 0; display: grid; grid-template-columns: 116px 1fr; gap: 18px; align-items: center; text-align: left; }
-.lp-slide .lp-phone { width: 116px; padding: 5px; border-radius: 18px; }
-.lp-slide .lp-phone img { border-radius: 14px; }
-.lp-slide figcaption { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); margin: 0; }
-.lp-slide figcaption b { display: block; font-family: var(--serif); font-size: 17px; font-weight: 600;
-  color: var(--ink); margin-bottom: 5px; letter-spacing: .1px; }
-@media (min-width: 620px) {
-  .lp-strip { grid-template-columns: 1fr 1fr; gap: 30px 28px; }
-  .lp-slide { grid-template-columns: 104px 1fr; }
-  .lp-slide .lp-phone { width: 104px; }
-}
+.lp-strip { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding: 4px 0 10px; margin: 0 -22px; scroll-padding-left: 22px; }
+.lp-strip::-webkit-scrollbar { display: none; }
+.lp-slide { flex: 0 0 250px; margin: 0; scroll-snap-align: start; text-align: left; }
+.lp-slide:first-child { margin-left: 22px; }
+.lp-slide:last-child { margin-right: 22px; }
+.lp-slide .lp-phone { width: 250px; margin: 0; padding: 8px; border-radius: 30px; }
+.lp-slide .lp-phone img { border-radius: 23px; }
+.lp-slide figcaption { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin-top: 15px; }
+.lp-slide figcaption b { display: block; font-family: var(--serif); font-size: 16px; font-weight: 600;
+  color: var(--ink); margin-bottom: 4px; letter-spacing: .1px; }
+.lp-dots { display: flex; justify-content: flex-start; gap: 7px; margin-top: 18px; }
+.lp-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .2s, width .2s; }
+.lp-dots i.on { background: var(--gold); width: 18px; border-radius: 999px; }
 
 .lp-aside-link { display: inline-block; margin-top: 6px; font-weight: 700; font-size: 14.5px;
   color: var(--ai-2); text-decoration: none; border-bottom: 1px solid rgba(92,74,153,.3); padding-bottom: 2px; }
@@ -938,3 +942,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
    a stray overflow anywhere would shift every section under it out of line. */
 html, body { overflow-x: hidden; }
 .lp, .lp-sec, .lp-strip { overscroll-behavior-x: contain; }
+/* The other page is offered in the hero, not four screens down. */
+.lp-herolink { margin: 26px 0 0; font-size: 14px; color: rgba(246,241,232,.72); }
+.lp-herolink a { color: var(--gold-soft); font-weight: 700; text-decoration: none;
+  border-bottom: 1px solid rgba(227,192,126,.4); padding-bottom: 1px; }

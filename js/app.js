@@ -58,6 +58,7 @@
     plan:    ["app-plan.jpg",    "One shared plan", "Times, places and notes. Tap I'm in and everyone knows who is coming."],
     votes:   ["app-votes.jpg",   "Decisions that settle", "Ask the question once. The tally is the answer, and the thread is right there."],
     money:   ["app-money.jpg",   "Money that closes", "Who owes who, worked out for you. Mark it paid and it disappears."],
+    ai:      ["app-ai.jpg",      "An assistant that knows the trip", "Ask it anything about your own plan. Send it a photo of a tee sheet and it reads it."],
     seating: ["app-seating.jpg", "Seating, from the yeses", "Tables built from who accepted, plus-ones included, with the meal counts per table."],
     dayof:   ["app-dayof.jpg",   "The day itself", "A run of show and every vendor's number. Hosts only, guests never see it."],
   };
@@ -66,8 +67,8 @@
       eyebrow: "SquadTrip",
       h1: "Ten people.<br>One plan.<br><em>No group chat.</em>",
       lede: "Every trip has one person holding it together. This is for them. Share one link and the plan, the votes, the money and the flights live in the same place for everybody.",
-      shots: ["plan", "votes", "money", "live", "guest"],
-      caption: "Nobody in any of these downloaded anything.",
+      shots: ["plan", "ai", "votes", "money", "live", "guest"],
+      caption: "Swipe. Nobody in any of these downloaded anything.",
       what: [
         ["One shared plan", "Every day and event, with locations, that anyone can add to."],
         ["Decisions that settle", "Vote on anything, argue in the same place, see where the group landed."],
@@ -76,26 +77,17 @@
         ["An assistant that knows the trip", "Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it."],
         ["Nothing gets lost", "Works on a plane. Anything you change offline syncs the moment you land."],
       ],
-      kindsTitle: "It knows what kind of trip it is",
-      kindsLede: "Pick the kind when you set it up and the plan, the groups and the booking timeline change to suit it.",
-      kinds: [
-        ["Golf", "Rounds with the course and the tee time, foursomes underneath, and a timeline that knows prime slots go months out."],
-        ["Ski", "Days that start on the mountain, lift tickets and rentals booked ahead, and a rest day nobody has to argue for."],
-        ["Beach", "Loose days, one anchor a thing, and sunset mattering more than sightseeing."],
-        ["Bachelor and bachelorette", "One big night, one daytime thing, a recovery morning, and a dinner worth booking."],
-        ["Family", "Mixed ages and paces, shorter days, and one meal everybody actually sits down for."],
-        ["Outdoors", "Trails rated by effort, early starts, weather backups and gear notes."],
-      ],
       asideTitle: "Planning a wedding?",
       aside: "There is a whole function for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
       asideLink: ["See the wedding version", "?for=weddings"],
+      heroLink: ["Planning a wedding?", "See the wedding version", "weddings/"],
       createLabel: "Create a trip",
     },
     wedding: {
       eyebrow: "SquadTrip for weddings",
       h1: "Everyone knows<br>where to be.<br><em>Without asking you.</em>",
       lede: "One link for your guests. The schedule, the dress codes, the room block, the shuttles and their table, all in the place they already have open. And a planning side they never see.",
-      shots: ["guest", "seating", "dayof", "live", "votes"],
+      shots: ["guest", "seating", "dayof", "ai", "live", "votes"],
       caption: "Your guests see the first one. The rest is yours.",
       what: [
         ["RSVPs that actually count", "Party sizes capped by the invitation, meal choices and dietary notes per seat. Your caterer's numbers, ready to copy."],
@@ -108,6 +100,7 @@
       asideTitle: "Not a wedding?",
       aside: "The same app runs group trips: golf weekends, ski houses, beach weeks, bachelor parties and family reunions. The plan, the votes and the money work the same way.",
       asideLink: ["See the group trip version", "/"],
+      heroLink: ["Not a wedding?", "See the group trip version", "/"],
       createLabel: "Start your wedding",
     },
   };
@@ -141,18 +134,13 @@
     }).join(""));
     set(".lp-caption", esc(L.caption));
     set(".lp-list", L.what.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join(""));
-    const kinds = $("#lpKinds");
-    if (kinds) {
-      kinds.hidden = !L.kinds;
-      if (L.kinds) {
-        kinds.innerHTML = `<div class="lp-rule" aria-hidden="true"></div>
-          <h2 class="lp-h2">${esc(L.kindsTitle)}</h2>
-          <p class="lp-body">${esc(L.kindsLede)}</p>
-          <dl class="lp-list lp-kinds">${L.kinds.map(([t, d]) => `<div><dt>${esc(t)}</dt><dd>${esc(d)}</dd></div>`).join("")}</dl>`;
-      }
-    }
     set("#asideTitle", esc(L.asideTitle));
     set("#asideBody", esc(L.aside));
+    const hl = $("#lpHeroLink");
+    if (hl) {
+      const [lead, label, href] = L.heroLink;
+      hl.innerHTML = `<span>${esc(lead)}</span> <a href="${href === "/" ? (base || "./") : (base ? base + href : href)}">${esc(label)} \u203a</a>`;
+    }
     const al = $("#asideLink");
     if (al) { al.textContent = L.asideLink[0] + " \u203a"; al.setAttribute("href", L.asideLink[1] === "/" ? (base || "./") : L.asideLink[1]); }
     $$("#createBtn, #createBtn2").forEach((b) => { b.textContent = L.createLabel; });
@@ -196,6 +184,16 @@
       setTimeout(() => $("#joinCode") && $("#joinCode").focus(), 420);
     }));
 
+    // the dots track the strip, so it reads as something to swipe
+    const strip = $("#lpStrip"), dots = $("#lpDots");
+    if (strip && dots) {
+      const n = strip.children.length;
+      dots.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i === 0 ? "on" : ""}"></i>`).join("");
+      strip.addEventListener("scroll", () => {
+        const at = Math.min(n - 1, Math.round(strip.scrollLeft / (strip.scrollWidth / n)));
+        Array.from(dots.children).forEach((d, i) => { d.className = i === at ? "on" : ""; });
+      }, { passive: true });
+    }
     registerSW();
   }
 
