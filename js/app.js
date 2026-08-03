@@ -818,6 +818,12 @@
         title: o.label || o.who, sub: [o.time, o.who, o.phone, o.note].filter(Boolean).join(" · ") })) },
     { screen: "booking", icon: "📋", label: "Booking", rows: () => (TRIP.start_date ? bookingItems() : []).map((i) => ({ title: i.label, sub: [i.due, i.note].filter(Boolean).join(" · ") })) },
     { screen: "crew", icon: "👥", label: "Crew", rows: () => (TRIP.travelers || []).map((t) => ({ title: t.name, sub: "" })) },
+    { screen: "outfits", icon: "👗", label: "Outfits", rows: () => (state.allVotes || []).filter((v) => v.kind === "outfit").map((v) => {
+        const d = (state.days || []).find((x) => x.id === v.topic), t = byId(v.voter);
+        if (!d || !t) return null;
+        const f = fmtDate(d.date);
+        return { title: v.choice, sub: [t.name, `${f.wd} ${f.mon} ${f.day}`, d.title].filter(Boolean).join(" · ") };
+      }).filter(Boolean) },
   ];
   function searchAll(q) {
     const needle = q.trim().toLowerCase();
@@ -2249,6 +2255,7 @@
         <div class="day-body">
           ${d.meetup ? `<div class="meetup">${isWedding() ? "👔" : "📍"} <span>${isWedding() ? esc(d.meetup) : "Meetup: " + esc(d.meetup)}</span></div>` : ""}
           <div class="timeline">${items || ""}</div>
+          ${outfitLine(d)}
           ${commentBlock("day:" + d.id)}
           ${isHost() ? `<div class="expense-add" style="margin:10px 0 8px">
             <div style="display:flex;gap:8px">
@@ -4311,6 +4318,10 @@
       <div class="section-title">Packing</div>
       <div class="section-sub">Your personal checklist (saved on this phone). ${done}/${all.length} packed.</div>
       <div class="progress"><i style="width:${pct}%"></i></div>
+      ${(state.days || []).length ? `<div class="outfit-line" data-go="outfits" style="margin:12px 0 16px">👗 <span>${
+        outfitCount() ? `You have <b>${outfitCount()}</b> day${outfitCount() === 1 ? "" : "s"} of outfits planned. Check the pieces are on this list.`
+                      : "Work out what you're wearing each day first, with the dress codes and the weather."
+      }</span><span class="of-go">›</span></div>` : ""}
       ${PACKING.map((cat) => `
         <div class="check-cat">${esc(cat.cat)}</div>
         ${cat.items.map((it, i) => {
@@ -4626,6 +4637,401 @@
     chatLog.push({ role: "assistant", content: `✓ Applied: ${days.length} day${days.length === 1 ? "" : "s"} updated in the plan.` });
     LS.set("chat", chatLog.slice(-30));
     renderAssistant();
+  }
+
+  /* =========================================================================
+     WEATHER - Open-Meteo. No key, no account, no signup.
+
+     A trip booked in August for the following April has no forecast, and
+     pretending otherwise would be worse than saying nothing. So there are two
+     honest answers and the app always says which one you are looking at:
+       inside 16 days  → the real forecast
+       further out     → the same calendar week averaged over the last three
+                         years, labelled "typical"
+     Everything is cached per device, because the answer for a day six months
+     out does not change hour to hour.
+     ====================================================================== */
+  const WMO = {
+    0: ["☀️", "Clear"], 1: ["🌤️", "Mostly clear"], 2: ["⛅️", "Partly cloudy"], 3: ["☁️", "Cloudy"],
+    45: ["🌫️", "Fog"], 48: ["🌫️", "Freezing fog"],
+    51: ["🌦️", "Light drizzle"], 53: ["🌦️", "Drizzle"], 55: ["🌦️", "Heavy drizzle"],
+    56: ["🌧️", "Freezing drizzle"], 57: ["🌧️", "Freezing drizzle"],
+    61: ["🌧️", "Light rain"], 63: ["🌧️", "Rain"], 65: ["🌧️", "Heavy rain"],
+    66: ["🌧️", "Freezing rain"], 67: ["🌧️", "Freezing rain"],
+    71: ["🌨️", "Light snow"], 73: ["🌨️", "Snow"], 75: ["❄️", "Heavy snow"], 77: ["🌨️", "Snow grains"],
+    80: ["🌦️", "Showers"], 81: ["🌦️", "Showers"], 82: ["⛈️", "Heavy showers"],
+    85: ["🌨️", "Snow showers"], 86: ["🌨️", "Snow showers"],
+    95: ["⛈️", "Thunderstorms"], 96: ["⛈️", "Thunderstorms"], 99: ["⛈️", "Thunderstorms"],
+  };
+  const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const cToF = (c) => Math.round(c * 9 / 5 + 32);
+
+  /* A weather line is never worth a spinner that lasts forever. If the network
+     is slow or captive-portal'd, give up quietly and say so. */
+  async function wxGet(url) {
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    const t = setTimeout(() => { try { ac && ac.abort(); } catch (e) {} }, 8000);
+    try {
+      const r = await fetch(url, ac ? { signal: ac.signal } : undefined);
+      return r.ok ? await r.json() : null;
+    } catch (e) { return null; }
+    finally { clearTimeout(t); }
+  }
+
+  /* Open-Meteo's own geocoder, so there is still exactly one weather service
+     to trust and nothing else to sign up for. */
+  async function geoOf(place) {
+    const key = String(place || "").trim().toLowerCase();
+    if (!key) return null;
+    const cache = LSG.get("geo", {});
+    if (cache[key]) return cache[key].lat == null ? null : cache[key];
+    try {
+      const d = await wxGet(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=1&language=en&format=json`);
+      if (!d) return null;
+      const hit = d.results && d.results[0];
+      // remember the misses too, so a made-up stop name is not looked up forever
+      const out = hit ? { lat: hit.latitude, lon: hit.longitude, label: [hit.name, hit.country].filter(Boolean).join(", ") } : { lat: null };
+      cache[key] = out; LSG.set("geo", cache);
+      return out.lat == null ? null : out;
+    } catch (e) { return null; }
+  }
+
+  async function wxForecast(g, date) {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${g.lat}&longitude=${g.lon}` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${date}&end_date=${date}`;
+    const d = await wxGet(u);
+    const dl = d && d.daily;
+    if (!dl || !dl.time || !dl.time.length || dl.temperature_2m_max[0] == null) return null;
+    return { kind: "forecast", hi: dl.temperature_2m_max[0], lo: dl.temperature_2m_min[0],
+             rain: dl.precipitation_probability_max[0], code: dl.weather_code[0] };
+  }
+
+  /* The same week, three years running. A single year is weather; three is
+     closer to what you should actually pack for. */
+  async function wxTypical(g, date) {
+    const y = +date.slice(0, 4), md = date.slice(5);
+    const reqs = [];
+    for (let n = 1; n <= 3; n++) {
+      const c = new Date(`${y - n}-${md}T12:00:00`);
+      if (isNaN(c.getTime())) continue; // Feb 29 in a year that had no Feb 29
+      const s = isoDay(new Date(c.getTime() - 3 * 864e5)), e = isoDay(new Date(c.getTime() + 3 * 864e5));
+      reqs.push(wxGet(`https://archive-api.open-meteo.com/v1/archive?latitude=${g.lat}&longitude=${g.lon}` +
+        `&start_date=${s}&end_date=${e}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`));
+    }
+    if (!reqs.length) return null;
+    const his = [], los = [];
+    let wet = 0, tot = 0;
+    (await Promise.all(reqs)).forEach((d) => {
+      const dl = d && d.daily;
+      if (!dl || !dl.time) return;
+      dl.time.forEach((_, i) => {
+        const hi = dl.temperature_2m_max[i], lo = dl.temperature_2m_min[i];
+        if (hi == null || lo == null) return;
+        his.push(hi); los.push(lo); tot++;
+        if ((dl.precipitation_sum[i] || 0) >= 1) wet++;
+      });
+    });
+    if (!his.length) return null;
+    const avg = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+    return { kind: "typical", hi: avg(his), lo: avg(los), rain: tot ? Math.round(wet / tot * 100) : null };
+  }
+
+  const wxInFlight = {};
+  async function wxFor(place, date) {
+    if (!place || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return null;
+    const g = await geoOf(place);
+    if (!g) return null;
+    const key = `${g.lat.toFixed(2)},${g.lon.toFixed(2)}|${date}`;
+    const cache = LSG.get("wx", {});
+    const hit = cache[key];
+    if (hit && hit.exp > Date.now()) return hit.v;
+    if (wxInFlight[key]) return wxInFlight[key];
+    const out = (async () => {
+      const away = Math.round((new Date(date + "T12:00:00") - new Date(isoDay(new Date()) + "T12:00:00")) / 864e5);
+      let v = null;
+      try { v = away >= 0 && away <= 15 ? await wxForecast(g, date) : await wxTypical(g, date); }
+      catch (e) { v = null; }
+      if (v) {
+        const c = LSG.get("wx", {});
+        const keys = Object.keys(c);
+        // a long trip touches a lot of keys; keep the store from growing forever
+        if (keys.length > 300) keys.forEach((k) => { if (c[k].exp < Date.now()) delete c[k]; });
+        c[key] = { v, exp: Date.now() + (v.kind === "forecast" ? 6 * 36e5 : 60 * 864e5) };
+        LSG.set("wx", c);
+      }
+      delete wxInFlight[key];
+      return v;
+    })();
+    wxInFlight[key] = out;
+    return out;
+  }
+
+  function wxEmoji(w) {
+    if (!w) return "🌡️";
+    if (w.kind === "forecast") return (WMO[w.code] || ["🌡️"])[0];
+    return w.rain >= 40 ? "🌧️" : w.rain >= 20 ? "🌤️" : "☀️";
+  }
+  function wxLine(w, place) {
+    if (!w) return "";
+    const word = w.kind === "forecast" ? (WMO[w.code] || ["", ""])[1] : "";
+    const t = (c) => `${cToF(c)}°F / ${Math.round(c)}°C`;
+    const rain = w.rain == null ? "" :
+      w.kind === "forecast" ? `${Math.round(w.rain)}% chance of rain` : `Rain on ${w.rain}% of those days`;
+    const head = `${wxEmoji(w)} ${w.kind === "forecast" ? "Forecast" : "Typical for this week"}${place ? ` in ${esc(place)}` : ""}${word ? `, ${word.toLowerCase()}` : ""}`;
+    return `<div class="of-wx-head">${head}</div>
+      <div class="of-wx-row"><span>High <b>${t(w.hi)}</b></span><span>Low <b>${t(w.lo)}</b></span>${rain ? `<span>${rain}</span>` : ""}</div>`;
+  }
+  const wxShort = (w) => (w ? `${wxEmoji(w)} ${cToF(w.hi)}° / ${cToF(w.lo)}°` : "");
+  /* Weather is per stop where the trip has stops, so Tokyo and Kyoto do not
+     share a forecast just because they share a trip. */
+  const wxPlace = (d) => (d.stop && stopById(d.stop).label) || TRIP.destination || "";
+
+  /* =========================================================================
+     OUTFITS - what each person is wearing, day by day.
+
+     Rides on the votes table (kind "outfit", topic = day id, choice = the
+     text), so it inherits the unique-per-person constraint, the offline queue
+     and the trip's row policy without a migration.
+
+     It is deliberately visible to the group. There is no private space in a
+     trip whose join code is the only key, and pretending otherwise would be a
+     lie. Visible is also the more useful answer: the point of a group knowing
+     the dress code is that nobody turns up in the wrong thing.
+     ====================================================================== */
+  const OUTFIT = "outfit";
+  const outfitsFor = (dayId) => state.allVotes.filter((v) => v.kind === OUTFIT && v.topic === dayId);
+  const outfitCount = () => (state.days || []).filter((d) => myOutfit(d.id)).length;
+  function myOutfit(dayId) {
+    const r = outfitsFor(dayId).find((v) => v.voter === state.me);
+    return r ? r.choice : "";
+  }
+  async function setOutfit(dayId, text) {
+    if (!state.me) { openWho(); return false; }
+    const t = String(text || "").trim().slice(0, 240);
+    state.allVotes = state.allVotes.filter((v) => !(v.kind === OUTFIT && v.topic === dayId && v.voter === state.me));
+    if (t) state.allVotes.push({ kind: OUTFIT, topic: dayId, choice: t, voter: state.me });
+    await Backend.castVote(TRIP_CODE, OUTFIT, dayId, t || null, state.me);
+    return true;
+  }
+  /* Every dress code on the day, deduped, in the order they happen. */
+  function dressOf(d) {
+    const seen = new Set(), out = [];
+    (d.items || []).forEach((i) => {
+      const v = (i.dress || "").trim();
+      if (!v || seen.has(v.toLowerCase())) return;
+      seen.add(v.toLowerCase()); out.push(v);
+    });
+    return out;
+  }
+  const dayLineup = (d) => (d.items || [])
+    .map((i) => `${i.time ? i.time + " " : ""}${i.title}${i.where ? " @ " + i.where : ""}${i.dress ? ` (dress: ${i.dress})` : ""}`);
+
+  function renderOutfits() {
+    const s = $("#screen-outfits");
+    const days = state.days || [];
+    if (!days.length) {
+      s.innerHTML = `<div class="section-title">Outfits</div>${emptyState("👗", "No days yet",
+        "Once the plan has days on it, this is where you work out what you are wearing to each one. Weather and dress codes included.", "Go to the Plan tab", "itinerary")}`;
+      return;
+    }
+    const today = isoDay(new Date());
+    const mineCount = outfitCount();
+    s.innerHTML = `
+      <div class="section-title">Outfits</div>
+      <div class="section-sub">What you are wearing each day, with the dress code and the weather next to it. Everyone on the trip can see these, which is the point: nobody turns up in the wrong thing.</div>
+      <div class="card" style="padding:12px 14px">
+        <div class="r-sub">${mineCount ? `You have planned <b>${mineCount}</b> of ${days.length} day${days.length === 1 ? "" : "s"}.` : "Nothing planned yet. Start with the day that has a dress code."}</div>
+      </div>
+      ${days.map((d) => {
+        const f = fmtDate(d.date);
+        const mine = myOutfit(d.id);
+        const others = outfitsFor(d.id).filter((v) => v.voter !== state.me && byId(v.voter));
+        const codes = dressOf(d);
+        const past = d.date < today;
+        const sug = LS.get("outfitsug", {})[d.id];
+        return `<div class="card outfit-card${past ? " past" : ""}" data-outfit="${d.id}">
+          <div class="of-head">
+            <div class="day-date" style="flex:0 0 auto"><div class="d">${f.day}</div><div class="m">${f.wd} ${f.mon}</div></div>
+            <div style="flex:1;min-width:0">
+              <h3 style="margin:0">${esc(d.title)}</h3>
+              ${codes.length ? `<div class="of-codes">${codes.map((c) => `<span class="of-code">👔 ${esc(c)}</span>`).join("")}</div>`
+                : isWedding() ? `<div class="r-sub">No dress code on this one</div>` : ""}
+            </div>
+          </div>
+          <div class="of-wx" data-wx="${d.id}">Checking the weather…</div>
+          ${(d.items || []).length ? `<div class="r-sub of-lineup">${(d.items || []).slice(0, 6).map((i) =>
+            `${i.time ? `<b>${esc(i.time)}</b> ` : ""}${esc(i.title)}`).join("<br>")}</div>` : ""}
+          <textarea data-ofin="${d.id}" rows="2" placeholder="Navy linen suit, no tie, brown loafers…" style="width:100%;padding:11px;margin-top:10px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14.5px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:vertical">${esc(mine)}</textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn primary" data-ofsave="${d.id}" style="flex:1.4">${mine ? "Update" : "Save"}</button>
+            <button class="btn ghost" data-ofai="${d.id}" style="flex:1.6">✨ What should I wear?</button>
+            ${mine ? `<button class="btn danger" data-ofclear="${d.id}" style="flex:0 0 auto">✕</button>` : ""}
+          </div>
+          <div class="r-sub" data-ofmsg="${d.id}" style="margin-top:6px"></div>
+          ${sug ? `<div class="of-sug">
+            <div class="r-sub" style="margin-bottom:8px"><b>✨ Suggested for this day</b></div>
+            ${sug.options.map((o, i) => `<button class="of-pick" data-ofuse="${d.id}#${i}">${esc(o)}</button>`).join("")}
+            ${sug.bring ? `<div class="r-sub" style="margin-top:8px">🧳 <b>Bring:</b> ${esc(sug.bring)}</div>` : ""}
+            <div class="tl-map" data-ofdrop="${d.id}" style="margin-top:8px;cursor:pointer">Dismiss</div>
+          </div>` : ""}
+          ${others.length ? `<div class="of-others">
+            ${others.map((v) => {
+              const t = byId(v.voter);
+              return `<div class="of-other"><span class="avatar vchip" style="background:${t.color}">${initials(t.name)}</span>
+                <div style="flex:1;min-width:0"><b>${esc(t.name.split(" ")[0])}</b> ${esc(v.choice)}</div>
+                <button class="tl-map" data-ofcopy="${d.id}#${v.voter}">Same</button></div>`;
+            }).join("")}
+          </div>` : `<div class="r-sub of-others" style="opacity:.7">Nobody else has planned this day yet.</div>`}
+        </div>`;
+      }).join("")}
+      <div class="card" style="margin-top:4px">
+        <h3>🧳 Packing</h3>
+        <p class="section-sub" style="margin:4px 0 10px">Once these are settled, the packing list is the place to make sure the pieces actually come with you.</p>
+        <button class="btn ghost" data-go="packing" style="width:100%">Open the packing list</button>
+      </div>`;
+    bindOutfits();
+    fillOutfitWeather();
+  }
+
+  /* The weather is a network call per day, so the screen draws first and the
+     lines fill themselves in. A day that cannot be located just says so. */
+  async function fillOutfitWeather() {
+    for (const d of state.days || []) {
+      const el = $(`[data-wx="${d.id}"]`);
+      if (!el) continue;
+      const place = wxPlace(d);
+      if (!place) { el.textContent = "Add a destination in Settings to see the weather."; continue; }
+      const w = await wxFor(place, d.date);
+      const still = $(`[data-wx="${d.id}"]`);
+      if (!still) return; // screen moved on
+      still.innerHTML = w ? wxLine(w, place) : `<span style="opacity:.7">No weather for ${esc(place)} right now.</span>`;
+    }
+  }
+
+  function bindOutfits() {
+    const s = $("#screen-outfits");
+    if (!s || s.dataset.ofBound) return;
+    s.dataset.ofBound = "1";
+    s.addEventListener("click", async (e) => {
+      const t = e.target;
+      const msg = (id, m) => { const el = $(`[data-ofmsg="${id}"]`); if (el) el.textContent = m; };
+
+      const save = t.closest("[data-ofsave]");
+      if (save) {
+        const id = save.dataset.ofsave;
+        const box = $(`[data-ofin="${id}"]`);
+        msg(id, "Saving…");
+        const ok = await setOutfit(id, box ? box.value : "");
+        if (ok) { renderOutfits(); msg(id, "Saved ✓"); }
+        return;
+      }
+      const clr = t.closest("[data-ofclear]");
+      if (clr) { await setOutfit(clr.dataset.ofclear, ""); renderOutfits(); return; }
+
+      const copy = t.closest("[data-ofcopy]");
+      if (copy) {
+        const [id, voter] = copy.dataset.ofcopy.split("#");
+        const row = outfitsFor(id).find((v) => v.voter === voter);
+        const box = $(`[data-ofin="${id}"]`);
+        if (row && box) { box.value = row.choice; box.focus(); msg(id, "Copied into your box. Tap Save to keep it."); }
+        return;
+      }
+      const use = t.closest("[data-ofuse]");
+      if (use) {
+        const [id, i] = use.dataset.ofuse.split("#");
+        const sug = LS.get("outfitsug", {})[id];
+        const box = $(`[data-ofin="${id}"]`);
+        if (sug && box) { box.value = sug.options[+i] || ""; box.focus(); msg(id, "Dropped in. Edit it however you like, then Save."); }
+        return;
+      }
+      const drop = t.closest("[data-ofdrop]");
+      if (drop) {
+        const all = LS.get("outfitsug", {});
+        delete all[drop.dataset.ofdrop];
+        LS.set("outfitsug", all);
+        renderOutfits();
+        return;
+      }
+      const ai = t.closest("[data-ofai]");
+      if (ai) { await suggestOutfit(ai.dataset.ofai); return; }
+    });
+  }
+
+  /* Ask the assistant what to wear. It already has the trip in its system
+     prompt, so all this has to add is the one thing it cannot know: the
+     weather. Uses the existing chat endpoint, so there is nothing new to
+     deploy. */
+  async function suggestOutfit(dayId) {
+    const d = (state.days || []).find((x) => x.id === dayId);
+    if (!d) return;
+    const msg = (m) => { const el = $(`[data-ofmsg="${dayId}"]`); if (el) el.textContent = m; };
+    const btn = $(`[data-ofai="${dayId}"]`);
+    if (btn) { btn.disabled = true; btn.style.opacity = ".6"; }
+    msg("✨ Checking the weather and thinking…");
+    try {
+      const place = wxPlace(d);
+      const w = place ? await wxFor(place, d.date) : null;
+      const f = fmtDate(d.date);
+      const weather = w
+        ? `${w.kind === "forecast" ? "Forecast" : "Typical weather for that week (three year average, there is no forecast this far out)"} for ${place}: high ${cToF(w.hi)}F, low ${cToF(w.lo)}F${w.rain == null ? "" : `, ${w.rain}% ${w.kind === "forecast" ? "chance of rain" : "of days see rain"}`}.`
+        : "No weather data available for that day, so keep the suggestions adaptable.";
+      const lineup = dayLineup(d);
+      const prompt = [
+        `What should I wear on ${f.wd} ${f.mon} ${f.day}${place ? ` in ${place}` : ""}? The day is "${d.title}".`,
+        lineup.length ? `Here is everything on that day:\n${lineup.map((l) => "- " + l).join("\n")}` : "There is nothing scheduled that day yet.",
+        weather,
+        `Give me two options. Reply in exactly this shape and nothing else:`,
+        `Option 1: <one sentence naming real garments, layers and shoes>`,
+        `Option 2: <a different one sentence>`,
+        `Bring: <at most three extra things, comma separated>`,
+        `Each option has to work for every event listed and for that weather, and has to respect any dress code above. Keep each option under 25 words. Do not assume my gender. Never use an em dash. Do not add any other text and do not change the itinerary.`,
+      ].join("\n\n");
+      const cfg = window.CARAVAN_CONFIG;
+      const res = await fetch(`${cfg.url}/functions/v1/generate-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.anonKey, "apikey": cfg.anonKey },
+        body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: [{ role: "user", content: prompt }] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) { msg("⚠️ " + (data.error || "Couldn't get a suggestion. Try again.")); return; }
+      const parsed = parseOutfitReply(data.reply || "");
+      if (!parsed.options.length) { msg("⚠️ Got an answer it couldn't read. Try once more."); return; }
+      const all = LS.get("outfitsug", {});
+      all[dayId] = parsed;
+      LS.set("outfitsug", all);
+      renderOutfits();
+    } catch (e) {
+      msg("⚠️ Couldn't reach the assistant. Check you're online.");
+    } finally {
+      const b = $(`[data-ofai="${dayId}"]`);
+      if (b) { b.disabled = false; b.style.opacity = 1; }
+    }
+  }
+  /* The model is asked for a fixed shape, but a reply is still a reply, so
+     read it loosely and fall back to whatever sentences came back. */
+  function parseOutfitReply(text) {
+    const lines = String(text).split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const options = [], out = { options, bring: "" };
+    lines.forEach((l) => {
+      const o = l.match(/^\**\s*option\s*\d*\s*[:.)-]\s*(.+)$/i);
+      if (o) { options.push(o[1].replace(/\*\*/g, "").trim().slice(0, 240)); return; }
+      const b = l.match(/^\**\s*bring\s*[:.]\s*(.+)$/i);
+      if (b) out.bring = b[1].replace(/\*\*/g, "").trim().slice(0, 200);
+    });
+    if (!options.length) {
+      lines.filter((l) => l.length > 15 && !/^[#*]/.test(l)).slice(0, 2)
+        .forEach((l) => options.push(l.replace(/^[-•]\s*/, "").slice(0, 240)));
+    }
+    return out;
+  }
+
+  /* One line on the day in the Plan tab, so the feature is where the dress
+     codes already are instead of only behind the More menu. */
+  function outfitLine(d) {
+    const mine = myOutfit(d.id);
+    const others = outfitsFor(d.id).filter((v) => v.voter !== state.me && byId(v.voter)).length;
+    return `<div class="outfit-line" data-go="outfits">👗 <span>${mine ? `<b>You:</b> ${esc(mine)}` : "Plan what you're wearing"}${
+      others ? ` <span style="opacity:.65">· ${others} other${others === 1 ? "" : "s"} planned</span>` : ""}</span><span class="of-go">›</span></div>`;
   }
 
   /* =========================================================================
@@ -4986,7 +5392,7 @@
     stays: renderStays, flights: renderFlights, budget: renderBudget, vault: renderVault,
     photos: renderPhotos, notes: renderNotes, ideas: renderIdeas, packing: renderPacking, translate: renderTranslate, guide: renderGuide,
     settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups, map: renderMap,
-    fares: renderFares, dayof: renderDayOf, seating: renderSeating,
+    fares: renderFares, dayof: renderDayOf, seating: renderSeating, outfits: renderOutfits,
   };
   function renderCurrent() {
     if (!TRIP) return;

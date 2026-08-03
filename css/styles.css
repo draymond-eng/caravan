@@ -946,3 +946,46 @@ html, body { overflow-x: hidden; }
 .lp-herolink { margin: 26px 0 0; font-size: 14px; color: rgba(246,241,232,.72); }
 .lp-herolink a { color: var(--gold-soft); font-weight: 700; text-decoration: none;
   border-bottom: 1px solid rgba(227,192,126,.4); padding-bottom: 1px; }
+
+/* ---- Outfits ---------------------------------------------------------------
+   The day's dress code, the weather and what everyone is wearing, in one card.
+   -------------------------------------------------------------------------- */
+.outfit-line { display: flex; gap: 8px; align-items: center; cursor: pointer;
+  background: linear-gradient(180deg,#fdf6f2,#faece4); border: 1px solid #f0d9cc;
+  color: #8d4a34; border-radius: var(--r); padding: 10px 13px; font-size: 12.5px;
+  font-weight: 600; margin: 10px 0 2px; }
+.outfit-line span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outfit-line .of-go { color: var(--sakura-deep); font-weight: 800; }
+.outfit-line b { font-weight: 800; }
+
+.outfit-card { padding: 16px 16px 14px; }
+.outfit-card.past { opacity: .58; }
+.of-head { display: flex; gap: 12px; align-items: center; }
+.of-head h3 { font-size: 16px; }
+.of-head .r-sub { font-size: 12px; margin-top: 3px; }
+.of-codes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.of-code { background: var(--ai); color: #f6f1e8; border-radius: 999px; padding: 5px 11px;
+  font-size: 11.5px; font-weight: 800; letter-spacing: .01em; }
+.of-lineup { margin-top: 9px; line-height: 1.75; }
+.of-lineup b { color: var(--ink-2); }
+
+.of-sug { margin-top: 12px; padding: 12px 13px; border-radius: var(--r);
+  background: linear-gradient(180deg,#f5f1ff,#ece6fb); border: 1px solid #ddd3f5; }
+.of-pick { display: block; width: 100%; text-align: left; margin-bottom: 7px; cursor: pointer;
+  background: var(--card); border: 1px solid #ddd3f5; border-radius: var(--r-sm);
+  padding: 10px 12px; font: inherit; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.of-pick:last-of-type { margin-bottom: 0; }
+.of-pick:active { background: #f6f2ff; }
+
+.of-others { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line-2); }
+.of-other { display: flex; gap: 9px; align-items: center; font-size: 13px; line-height: 1.5;
+  color: var(--ink-2); padding: 5px 0; }
+.of-other b { color: var(--ink); }
+.of-other .tl-map { flex: 0 0 auto; cursor: pointer; }
+
+.of-wx { margin-top: 11px; padding: 10px 12px; border-radius: var(--r);
+  background: linear-gradient(180deg,#f4f7fb,#eaf0f8); border: 1px solid #dbe5f1;
+  color: #40506a; font-size: 12.5px; line-height: 1.5; }
+.of-wx-head { font-weight: 800; }
+.of-wx-row { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.of-wx-row b { color: var(--ink); font-weight: 800; }
