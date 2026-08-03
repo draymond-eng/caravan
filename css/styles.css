@@ -989,3 +989,4 @@ html, body { overflow-x: hidden; }
 .of-wx-head { font-weight: 800; }
 .of-wx-row { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
 .of-wx-row b { color: var(--ink); font-weight: 800; }
+.outfit-card [data-ofmsg] { font-size: 12px; }
