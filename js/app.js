@@ -5088,7 +5088,7 @@
         body: JSON.stringify({ code: TRIP_CODE, mode: "chat", messages: [{ role: "user", content: prompt }] }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!data.ok) { msg("⚠️ " + (data.error || "Couldn't get a suggestion. Try again.")); return; }
+      if (!data.ok) { msg("⚠️ " + fnError(res, data, "generate-plan")); return; }
       const parsed = parseOutfitReply(data.reply || "");
       if (!parsed.options.length) { msg("⚠️ Got an answer it couldn't read. Try once more."); return; }
       const all = LS.get("outfitsug", {});
@@ -5103,6 +5103,16 @@
       if (b) { b.disabled = false; b.style.opacity = 1; }
     }
   }
+  /* "Something went wrong" is not a fix. Say which wall you hit, because the
+     three real ones each need a different thing done about them. */
+  function fnError(res, data, name) {
+    if (res.status === 404) return `The ${name} function isn't deployed on this Supabase project yet.`;
+    if (res.status === 401 || res.status === 403) return `${name} is rejecting the key. Turn OFF "Verify JWT" on the function.`;
+    if (data && data.error) return String(data.error);
+    if (res.status >= 500) return `${name} errored (${res.status}). Check its logs in Supabase.`;
+    return "Couldn't get a suggestion. Try again.";
+  }
+
   /* The model is asked for a fixed shape, but a reply is still a reply, so
      read it loosely and fall back to whatever sentences came back. */
   function parseOutfitReply(text) {
