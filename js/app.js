@@ -818,7 +818,7 @@
         title: o.label || o.who, sub: [o.time, o.who, o.phone, o.note].filter(Boolean).join(" · ") })) },
     { screen: "booking", icon: "📋", label: "Booking", rows: () => (TRIP.start_date ? bookingItems() : []).map((i) => ({ title: i.label, sub: [i.due, i.note].filter(Boolean).join(" · ") })) },
     { screen: "crew", icon: "👥", label: "Crew", rows: () => (TRIP.travelers || []).map((t) => ({ title: t.name, sub: "" })) },
-    { screen: "outfits", icon: "👗", label: "Outfits", rows: () => (state.allVotes || []).filter((v) => v.kind === "outfit").map((v) => {
+    { screen: "outfits", icon: "👗", label: "Outfits", rows: () => (outfitsOn() ? (state.allVotes || []) : []).filter((v) => v.kind === "outfit").map((v) => {
         const d = (state.days || []).find((x) => x.id === v.topic), t = byId(v.voter);
         if (!d || !t) return null;
         const f = fmtDate(d.date);
@@ -4318,7 +4318,7 @@
       <div class="section-title">Packing</div>
       <div class="section-sub">Your personal checklist (saved on this phone). ${done}/${all.length} packed.</div>
       <div class="progress"><i style="width:${pct}%"></i></div>
-      ${(state.days || []).length ? `<div class="outfit-line" data-go="outfits" style="margin:12px 0 16px">👗 <span>${
+      ${outfitsOn() && (state.days || []).length ? `<div class="outfit-line" data-go="outfits" style="margin:12px 0 16px">👗 <span>${
         outfitCount() ? `You have <b>${outfitCount()}</b> day${outfitCount() === 1 ? "" : "s"} of outfits planned. Check the pieces are on this list.`
                       : "Work out what you're wearing each day first, with the dress codes and the weather."
       }</span><span class="of-go">›</span></div>` : ""}
@@ -4782,6 +4782,21 @@
       <div class="of-wx-row"><span>High <b>${t(w.hi)}</b></span><span>Low <b>${t(w.lo)}</b></span>${rain ? `<span>${rain}</span>` : ""}</div>`;
   }
   const wxShort = (w) => (w ? `${wxEmoji(w)} ${cToF(w.hi)}° / ${cToF(w.lo)}°` : "");
+  /* Which animated texture the strip wears. Driven by the data, not decoration
+     for its own sake: a week of cards becomes readable at a glance. */
+  function wxCond(w) {
+    if (!w) return "";
+    if (w.kind === "forecast") {
+      const c = w.code;
+      if (c >= 71 && c <= 77 || c === 85 || c === 86) return "snow";
+      if (c >= 51 && c <= 67 || c >= 80 && c <= 82 || c >= 95) return "rain";
+      if (c <= 1) return "sun";
+      return "cloud";
+    }
+    if (w.rain >= 45) return "rain";
+    if (w.rain <= 20) return "sun";
+    return "cloud";
+  }
   /* Weather is per stop where the trip has stops, so Tokyo and Kyoto do not
      share a forecast just because they share a trip. */
   const wxPlace = (d) => (d.stop && stopById(d.stop).label) || TRIP.destination || "";
@@ -4799,6 +4814,10 @@
      the dress code is that nobody turns up in the wrong thing.
      ====================================================================== */
   const OUTFIT = "outfit";
+  /* Trips only. A wedding guest list turns "what is everyone wearing" into a
+     wall of eighty strangers, and what a guest actually wants there is the
+     host's dress code, which the Plan tab already carries. */
+  const outfitsOn = () => !isWedding();
   const outfitsFor = (dayId) => state.allVotes.filter((v) => v.kind === OUTFIT && v.topic === dayId);
   const outfitCount = () => (state.days || []).filter((d) => myOutfit(d.id)).length;
   function myOutfit(dayId) {
@@ -4826,9 +4845,16 @@
   const dayLineup = (d) => (d.items || [])
     .map((i) => `${i.time ? i.time + " " : ""}${i.title}${i.where ? " @ " + i.where : ""}${i.dress ? ` (dress: ${i.dress})` : ""}`);
 
+  let outfitOpen = {};   // day id -> the full list of others is showing
+  let lastOutfitCount = null;
   function renderOutfits() {
     const s = $("#screen-outfits");
     const days = state.days || [];
+    if (!outfitsOn()) {
+      s.innerHTML = `<div class="section-title">Outfits</div>${emptyState("👗", "Not for weddings",
+        "Every event already carries its dress code on the Plan tab, which is what a guest actually needs. Comparing outfits across a whole guest list would be noise.", "Go to the Plan tab", "itinerary")}`;
+      return;
+    }
     if (!days.length) {
       s.innerHTML = `<div class="section-title">Outfits</div>${emptyState("👗", "No days yet",
         "Once the plan has days on it, this is where you work out what you are wearing to each one. Weather and dress codes included.", "Go to the Plan tab", "itinerary")}`;
@@ -4836,11 +4862,12 @@
     }
     const today = isoDay(new Date());
     const mineCount = outfitCount();
+    const myDays = days.filter((d) => myOutfit(d.id));
     s.innerHTML = `
       <div class="section-title">Outfits</div>
       <div class="section-sub">What you are wearing each day, with the dress code and the weather next to it. Everyone on the trip can see these, which is the point: nobody turns up in the wrong thing.</div>
       <div class="card" style="padding:12px 14px">
-        <div class="r-sub">${mineCount ? `You have planned <b>${mineCount}</b> of ${days.length} day${days.length === 1 ? "" : "s"}.` : "Nothing planned yet. Start with the day that has a dress code."}</div>
+        <div class="r-sub">${mineCount ? `You have planned <b id="ofCount">${mineCount}</b> of ${days.length} day${days.length === 1 ? "" : "s"}.` : "Nothing planned yet. Start with the day that has a dress code."}</div>
       </div>
       ${days.map((d) => {
         const f = fmtDate(d.date);
@@ -4849,7 +4876,8 @@
         const codes = dressOf(d);
         const past = d.date < today;
         const sug = LS.get("outfitsug", {})[d.id];
-        return `<div class="card outfit-card${past ? " past" : ""}" data-outfit="${d.id}">
+        const sameAs = myDays.filter((x) => x.id !== d.id);
+        return `<div class="card outfit-card${past ? " past" : ""}${mine ? " planned" : ""}" data-outfit="${d.id}">
           <div class="of-head">
             <div class="day-date" style="flex:0 0 auto"><div class="d">${f.day}</div><div class="m">${f.wd} ${f.mon}</div></div>
             <div style="flex:1;min-width:0">
@@ -4867,6 +4895,11 @@
             <button class="btn ghost" data-ofai="${d.id}" style="flex:1.6">✨ What should I wear?</button>
             ${mine ? `<button class="btn danger" data-ofclear="${d.id}" style="flex:0 0 auto">✕</button>` : ""}
           </div>
+          ${sameAs.length ? `<div class="r-sub" style="margin-top:8px">Same as
+            ${sameAs.slice(0, 4).map((x) => {
+              const g = fmtDate(x.date);
+              return `<button class="tl-map" data-ofday="${d.id}#${x.id}" style="margin-right:6px">${g.wd} ${g.day}</button>`;
+            }).join("")}</div>` : ""}
           <div class="r-sub" data-ofmsg="${d.id}" style="margin-top:6px"></div>
           ${sug ? `<div class="of-sug">
             <div class="r-sub" style="margin-bottom:8px"><b>✨ Suggested for this day</b></div>
@@ -4875,12 +4908,14 @@
             <div class="tl-map" data-ofdrop="${d.id}" style="margin-top:8px;cursor:pointer">Dismiss</div>
           </div>` : ""}
           ${others.length ? `<div class="of-others">
-            ${others.map((v) => {
+            ${(outfitOpen[d.id] ? others : others.slice(0, 3)).map((v) => {
               const t = byId(v.voter);
               return `<div class="of-other"><span class="avatar vchip" style="background:${t.color}">${initials(t.name)}</span>
                 <div style="flex:1;min-width:0"><b>${esc(t.name.split(" ")[0])}</b> ${esc(v.choice)}</div>
                 <button class="tl-map" data-ofcopy="${d.id}#${v.voter}">Same</button></div>`;
             }).join("")}
+            ${others.length > 3 ? `<button class="of-more" data-ofmore="${d.id}">${outfitOpen[d.id]
+              ? "Show fewer" : `and ${others.length - 3} more ›`}</button>` : ""}
           </div>` : `<div class="r-sub of-others" style="opacity:.7">Nobody else has planned this day yet.</div>`}
         </div>`;
       }).join("")}
@@ -4891,6 +4926,51 @@
       </div>`;
     bindOutfits();
     fillOutfitWeather();
+    countUp($("#ofCount"), lastOutfitCount, mineCount);
+    lastOutfitCount = mineCount;
+    typeInSuggestion();
+  }
+  const calm = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  /* A number that ticks reads as something that happened. A number that jumps
+     reads as a redraw. */
+  function countUp(el, from, to) {
+    if (!el || from == null || from === to || calm()) return;
+    const steps = Math.min(Math.abs(to - from), 6), dir = to > from ? 1 : -1;
+    let cur = to - dir * steps, i = 0;
+    el.textContent = cur;
+    const tick = setInterval(() => {
+      cur += dir; i++;
+      el.textContent = cur;
+      if (i >= steps) { clearInterval(tick); el.textContent = to; }
+    }, 70);
+  }
+  /* The options write themselves in, so the assistant reads as thinking rather
+     than fetching. Only ever on the suggestion that just arrived. */
+  let freshSuggestion = null;
+  function typeInSuggestion() {
+    const id = freshSuggestion; freshSuggestion = null;
+    if (!id || calm()) return;
+    const card = $(`[data-outfit="${id}"]`);
+    if (!card) return;
+    card.querySelectorAll(".of-pick").forEach((btn, n) => {
+      const full = btn.textContent;
+      btn.textContent = "";
+      btn.style.minHeight = btn.offsetHeight + "px";
+      let i = 0;
+      setTimeout(() => {
+        const t = setInterval(() => {
+          btn.textContent = full.slice(0, ++i);
+          if (i >= full.length) { clearInterval(t); btn.style.minHeight = ""; }
+        }, 14);
+      }, n * 260);
+    });
+  }
+
+  function settle(id) {
+    const card = $(`[data-outfit="${id}"]`);
+    if (!card || calm()) return;
+    card.classList.add("just-saved");
+    setTimeout(() => card.classList.remove("just-saved"), 600);
   }
 
   /* The weather is a network call per day, so the screen draws first and the
@@ -4905,6 +4985,7 @@
       const still = $(`[data-wx="${d.id}"]`);
       if (!still) return; // screen moved on
       still.innerHTML = w ? wxLine(w, place) : `<span style="opacity:.7">No weather for ${esc(place)} right now.</span>`;
+      if (w) still.dataset.cond = wxCond(w); else delete still.dataset.cond;
     }
   }
 
@@ -4922,7 +5003,21 @@
         const box = $(`[data-ofin="${id}"]`);
         msg(id, "Saving…");
         const ok = await setOutfit(id, box ? box.value : "");
-        if (ok) { renderOutfits(); msg(id, "Saved ✓"); }
+        if (ok) { renderOutfits(); settle(id); msg(id, "Saved ✓"); }
+        return;
+      }
+      const more = t.closest("[data-ofmore]");
+      if (more) {
+        const id = more.dataset.ofmore;
+        outfitOpen[id] = !outfitOpen[id];
+        renderOutfits();
+        return;
+      }
+      const same = t.closest("[data-ofday]");
+      if (same) {
+        const [id, from] = same.dataset.ofday.split("#");
+        const box = $(`[data-ofin="${id}"]`);
+        if (box) { box.value = myOutfit(from); box.focus(); msg(id, "Copied from that day. Tap Save to keep it."); }
         return;
       }
       const clr = t.closest("[data-ofclear]");
@@ -4999,6 +5094,7 @@
       const all = LS.get("outfitsug", {});
       all[dayId] = parsed;
       LS.set("outfitsug", all);
+      freshSuggestion = dayId;
       renderOutfits();
     } catch (e) {
       msg("⚠️ Couldn't reach the assistant. Check you're online.");
@@ -5028,6 +5124,7 @@
   /* One line on the day in the Plan tab, so the feature is where the dress
      codes already are instead of only behind the More menu. */
   function outfitLine(d) {
+    if (!outfitsOn()) return "";
     const mine = myOutfit(d.id);
     const others = outfitsFor(d.id).filter((v) => v.voter !== state.me && byId(v.voter)).length;
     return `<div class="outfit-line" data-go="outfits">👗 <span>${mine ? `<b>You:</b> ${esc(mine)}` : "Plan what you're wearing"}${
@@ -5402,6 +5499,10 @@
     if (dayofTab) dayofTab.hidden = !hostOnly;
     const seatTab = $("#sheetSeating");
     if (seatTab) seatTab.hidden = !hostOnly;
+    // Outfits is a group-trip thing. See the note on outfitsOn().
+    const fitTab = $("#sheetOutfits");
+    if (fitTab) fitTab.hidden = !outfitsOn();
+    paintTimeOfDay();
     const active = $("#tripApp .screen.active");
     const id = active ? active.id.replace("screen-", "") : "home";
     if (!RENDERERS[id]) return;
@@ -5412,6 +5513,21 @@
       if (el) el.innerHTML = `<div class="card" style="margin-top:16px"><h3>😕 This screen hit a snag</h3>
         <p class="r-sub" style="margin:6px 0 0">${esc(String(e && e.message ? e.message : e))}</p></div>`;
     }
+  }
+  /* The header tints toward dawn, day, dusk or night in the destination's own
+     clock. Quiet and constant, and it does the "you are going somewhere" work
+     better than any animation. */
+  function paintTimeOfDay() {
+    let h = new Date().getHours();
+    const tz = TRIP && TRIP.tz;
+    if (tz) {
+      try {
+        h = +new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false }).format(new Date());
+        if (h === 24) h = 0;
+      } catch (e) { /* a bad tz string is not worth a broken header */ }
+    }
+    const tod = h < 5 ? "night" : h < 9 ? "dawn" : h < 17 ? "day" : h < 21 ? "dusk" : "night";
+    if (document.body.dataset.tod !== tod) document.body.dataset.tod = tod;
   }
   function renderAll() { renderCurrent(); }
 

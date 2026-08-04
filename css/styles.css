@@ -990,3 +990,98 @@ html, body { overflow-x: hidden; }
 .of-wx-row { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
 .of-wx-row b { color: var(--ink); font-weight: 800; }
 .outfit-card [data-ofmsg] { font-size: 12px; }
+
+/* ---- Outfit weather, reacting to the actual condition ----------------------
+   The strip already carries the numbers. This makes a week of cards readable
+   without reading a word. All CSS, no images, and every loop translates by
+   exactly one pattern period so there is no seam.
+   -------------------------------------------------------------------------- */
+.of-wx { position: relative; overflow: hidden; }
+.of-wx > * { position: relative; z-index: 1; }
+.of-wx::after { content: ""; position: absolute; left: -30%; right: -30%; top: -120%; bottom: -120%;
+  pointer-events: none; z-index: 0; }
+
+.of-wx[data-cond="rain"] { background: linear-gradient(180deg,#eef3fa,#dfe9f5); border-color: #cddcee; }
+.of-wx[data-cond="rain"]::after {
+  background-image: repeating-linear-gradient(105deg, rgba(52,96,150,.13) 0 1px, rgba(52,96,150,0) 1px 9px);
+  /* broken into dashes, so it reads as drizzle rather than pinstripes */
+  -webkit-mask-image: repeating-linear-gradient(15deg, #000 0 7px, transparent 7px 22px);
+          mask-image: repeating-linear-gradient(15deg, #000 0 7px, transparent 7px 22px);
+  animation: of-rain 1.05s linear infinite; }
+@keyframes of-rain { from { transform: translate(0,0); } to { transform: translate(2.34px, 26px); } }
+
+.of-wx[data-cond="snow"] { background: linear-gradient(180deg,#f4f8fc,#e7eef6); border-color: #d7e3ef; }
+.of-wx[data-cond="snow"]::after {
+  background-image: radial-gradient(circle at 30% 30%, rgba(255,255,255,.95) 0 1.5px, transparent 1.7px),
+                    radial-gradient(circle at 70% 70%, rgba(255,255,255,.65) 0 1.1px, transparent 1.3px);
+  background-size: 26px 26px, 34px 34px;
+  animation: of-snow 9s linear infinite; }
+@keyframes of-snow { from { background-position: 0 0, 0 0; } to { background-position: 26px 26px, -34px 34px; } }
+
+.of-wx[data-cond="sun"] { background: linear-gradient(180deg,#fdf6e8,#f9ecd6); border-color: #efdcb8; color: #6d5320; }
+.of-wx[data-cond="sun"]::after {
+  background: radial-gradient(46% 130% at 88% -20%, rgba(240,156,74,.34), rgba(240,156,74,0) 70%);
+  animation: of-sun 7s ease-in-out infinite; }
+@keyframes of-sun { 0%,100% { transform: translateX(0) scale(1); opacity: .85; }
+                    50%      { transform: translateX(-14px) scale(1.1); opacity: 1; } }
+
+.of-wx[data-cond="cloud"]::after {
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0) 0 40px, rgba(255,255,255,.42) 90px, rgba(255,255,255,0) 140px);
+  animation: of-cloud 18s linear infinite; }
+@keyframes of-cloud { from { transform: translateX(0); } to { transform: translateX(140px); } }
+
+/* ---- A save that lands ------------------------------------------------------
+   Feedback on a save is worth more than any flourish. This is the one people
+   will feel forty times.
+   -------------------------------------------------------------------------- */
+.outfit-card { position: relative; transition: box-shadow .3s ease; }
+.outfit-card.planned::before { content: ""; position: absolute; left: 0; top: 24px; bottom: 24px; width: 3px; opacity: .85;
+  border-radius: 0 3px 3px 0; background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+  animation: of-hair .45s cubic-bezier(.2,.8,.3,1); }
+@keyframes of-hair { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.outfit-card.planned::before { transform-origin: top; }
+.outfit-card.just-saved { animation: of-settle .5s cubic-bezier(.2,.8,.3,1); }
+@keyframes of-settle { 0% { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+                       65% { transform: translateY(1px); }
+                       100% { transform: none; } }
+
+/* ---- Others on a day, capped ------------------------------------------------
+   Eight people is a nice thing to browse. Twenty is a wall.
+   -------------------------------------------------------------------------- */
+.of-more { display: block; width: 100%; margin-top: 8px; cursor: pointer; font: inherit; font-size: 12.5px;
+  font-weight: 700; color: var(--ai-2); background: none; border: 0; padding: 6px 0; text-align: left; }
+
+@media (prefers-reduced-motion: reduce) {
+  .of-wx::after, .outfit-card.planned::before, .outfit-card.just-saved { animation: none !important; }
+}
+
+/* ---- The header knows what time it is there ---------------------------------
+   Same dusk band, re-lit by the destination's own clock. Set on <body> by
+   paintTimeOfDay().
+   -------------------------------------------------------------------------- */
+.topbar { transition: background-color .8s ease; }
+body[data-tod="dawn"] .topbar {
+  background:
+    radial-gradient(130% 170% at 88% -45%, rgba(243,211,196,.60), rgba(243,211,196,0) 58%),
+    radial-gradient(90% 120% at 10% -30%, rgba(240,156,74,.28), rgba(240,156,74,0) 60%),
+    var(--g-dusk);
+  background-color: #33285c;
+}
+body[data-tod="day"] .topbar {
+  background:
+    radial-gradient(120% 165% at 92% -50%, rgba(227,192,126,.42), rgba(227,192,126,0) 58%),
+    linear-gradient(150deg, #55458a 0%, #3f3172 45%, #2b2152 100%);
+  background-color: #3f3172;
+}
+body[data-tod="dusk"] .topbar {
+  background:
+    radial-gradient(120% 160% at 92% -40%, rgba(226,89,58,.62), rgba(226,89,58,0) 55%),
+    var(--g-dusk);
+  background-color: var(--ai-ink);
+}
+body[data-tod="night"] .topbar {
+  background:
+    radial-gradient(110% 150% at 88% -45%, rgba(92,74,153,.55), rgba(92,74,153,0) 60%),
+    linear-gradient(150deg, #241b45 0%, #1b1436 55%, #140f28 100%);
+  background-color: #140f28;
+}
