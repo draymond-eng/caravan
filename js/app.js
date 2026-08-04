@@ -4459,6 +4459,30 @@
     });
   }
 
+  /* ---- Reading an assistant reply ------------------------------------------
+     The model is told to skip markdown and never to use an em dash. It mostly
+     listens, and "mostly" is not a standard. So the answer is cleaned on the
+     way in rather than hoped for: dashes become the punctuation they were
+     standing in for, and the bold markers that do slip through get rendered
+     instead of shown as asterisks.
+     ------------------------------------------------------------------------ */
+  function deDash(t) {
+    return String(t == null ? "" : t)
+      // " word - word " reads fine; the em dash is the thing to lose
+      .replace(/\s*\u2014\s*/g, ", ")
+      .replace(/\s*\u2013\s*/g, " to ")
+      .replace(/,\s*,/g, ",")
+      .replace(/,\s*([.!?;:])/g, "$1");
+  }
+  /* Escape first, then promote the few markers worth showing. Order matters:
+     the other way round would let a reply inject markup. */
+  function richText(t) {
+    let h = esc(deDash(t));
+    h = h.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+    h = h.replace(/^\s*#{1,6}\s*(.+)$/gm, "<b>$1</b>");
+    h = h.replace(/^\s*[-*\u2022]\s+(.+)$/gm, "\u00b7 $1");
+    return h;
+  }
   function renderAssistant() {
     const s = $("#screen-assistant");
     if (chatLog == null) chatLog = LS.get("chat", []);
@@ -4466,7 +4490,7 @@
       <div class="section-title">Assistant</div>
       <div class="section-sub">Knows this trip: the plan, the votes, the dates. Ask anything, or tell it to change the itinerary.</div>
       <div id="chatFeed">
-        ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${m.photo ? "📷 " : ""}${esc(m.content)}</div>`).join("")
+        ${chatLog.length ? chatLog.map((m) => `<div class="chat-msg ${m.role}">${m.photo ? "📷 " : ""}${m.role === "assistant" ? richText(m.content) : esc(m.content)}</div>`).join("")
           : `<div class="card ai-card">
               <h3>📋 Paste your schedule and I'll build it</h3>
               <p class="section-sub" style="margin:4px 0 10px">However you have it: a text from the group, a list of tee times, an email, or a photo of the confirmation. I'll turn it into days on the Plan tab for you to approve.</p>
@@ -5116,7 +5140,7 @@
   /* The model is asked for a fixed shape, but a reply is still a reply, so
      read it loosely and fall back to whatever sentences came back. */
   function parseOutfitReply(text) {
-    const lines = String(text).split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const lines = deDash(text).split(/\n+/).map((l) => l.trim()).filter(Boolean);
     const options = [], out = { options, bring: "" };
     lines.forEach((l) => {
       const o = l.match(/^\**\s*option\s*\d*\s*[:.)-]\s*(.+)$/i);
