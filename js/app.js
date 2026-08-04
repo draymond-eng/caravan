@@ -17,7 +17,10 @@
   const makeCode = () => Array.from({ length: 6 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join("");
   const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || ("x" + Math.random().toString(36).slice(2, 6));
 
-  const initials = (name) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  /* A row can outlive the person it points at, and that is never worth a blank
+     app, so an unknown traveler degrades to a "?" rather than throwing. */
+  const initials = (name) => String(name == null ? "" : name).trim().split(/\s+/)
+    .map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
   const avatarHTML = (t, size = 42, fs = 14) =>
     t.photo
       ? `<span class="avatar" style="width:${size}px;height:${size}px;background-image:url('${t.photo}')"></span>`
