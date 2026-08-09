@@ -128,19 +128,42 @@
     }
   }
   /* Replay in order and stop at the first failure, so a later write can never
-     land before the earlier one it depends on. */
+     land before the earlier one it depends on.
+
+     With one exception. Some rejections will never come good however long you
+     wait: a NOT NULL or check constraint, a column that does not exist, a
+     policy that says no. Leaving one of those at the head of the queue wedges
+     every later write behind it forever, and the app goes on truthfully
+     reporting "waiting to sync" about something that is never going to sync.
+     Those get dropped and counted. Anything that could plausibly be the
+     network still blocks, which is the whole point of the ordering. */
+  function permanent(e) {
+    const code = String((e && e.code) || "");
+    // Postgres SQLSTATE: 22 bad data, 23 constraint violation, 42 undefined
+    // object or insufficient privilege. PGRST* is PostgREST refusing to parse.
+    if (/^(22|23|42)/.test(code) || /^PGRST/.test(code)) return true;
+    const status = Number((e && e.status) || 0);
+    return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  }
+  let dropped = [];
   async function flushQueue() {
-    if (flushing || !client || !queue.length) return { sent: 0, left: queue.length };
+    if (flushing || !client || !queue.length) return { sent: 0, left: queue.length, dropped: dropped.length };
     flushing = true;
     let sent = 0;
     try {
       while (queue.length) {
         try { await runOp(queue[0]); }
-        catch (e) { break; }
+        catch (e) {
+          if (!permanent(e)) break;
+          console.error("dropping a write the database will never accept", queue[0], e);
+          dropped.push({ op: queue[0], why: String((e && e.message) || e) });
+          queue.shift(); saveQueue();
+          continue;
+        }
         queue.shift(); sent++; saveQueue();
       }
     } finally { flushing = false; }
-    return { sent, left: queue.length };
+    return { sent, left: queue.length, dropped: dropped.length };
   }
   if (typeof window !== "undefined") {
     window.addEventListener("online", () => { flushQueue(); });
@@ -244,6 +267,7 @@
   window.Backend = {
     init, isReady: () => ready, configured, lastError: () => lastError,
     pending: () => queue.length, flush: flushQueue,
+    dropped: () => dropped.slice(), clearDropped: () => { dropped = []; },
     onQueueChange: (cb) => { onQueueChange = cb; },
     onWriteError: (cb) => { onWriteFail = cb; },
     createTrip, getTrip, updateTrip, deleteTrip,

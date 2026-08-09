@@ -747,6 +747,9 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .save-bar .btn { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.45);
   color: #fff; padding: 9px 14px; font-size: 13px; flex: none; }
 .save-bar.done { background: #3c6b4a; }
+/* A write the database refused. Not the green of "saved", not the red of
+   "offline", because it is neither: it is gone and you should know. */
+.save-bar.warn { background: #8a6414; }
 
 /* ---- Undo ------------------------------------------------------------------
    A few seconds to take back anything destructive.

@@ -834,8 +834,21 @@
     $("#saveRetry").addEventListener("click", async () => {
       $("#saveRetry").textContent = "Syncing…";
       const r = await Backend.flush();
-      if (r && r.left) { $("#saveRetry").textContent = "Still offline"; setTimeout(() => showPending(r.left), 1400); }
-      else { showPending(0); await hydrate("all"); renderCurrent(); }
+      if (r && r.left) { $("#saveRetry").textContent = "Still offline"; setTimeout(() => showPending(r.left), 1400); return; }
+      showPending(0);
+      /* A dropped write is not a synced write. Saying "everything is saved"
+         over the top of one is exactly the lie the queue exists to prevent. */
+      const gone = (Backend.dropped && Backend.dropped()) || [];
+      if (gone.length) {
+        Backend.clearDropped();
+        const b = saveBar();
+        b.className = "save-bar warn open";
+        b.innerHTML = `<span>⚠️ ${gone.length} change${gone.length === 1 ? "" : "s"} could not be saved and ${gone.length === 1 ? "was" : "were"} dropped. Everything else is through.</span>
+          <button class="btn" id="saveDropOk">OK</button>`;
+        const okBtn = $("#saveDropOk");
+        if (okBtn) okBtn.addEventListener("click", () => { b.className = "save-bar"; });
+      }
+      await hydrate("all"); renderCurrent();
     });
   }
   function watchSaves() {
@@ -3699,9 +3712,14 @@
       doomed.length ? `\n\nThe ${doomed.length} empty placeholder day${doomed.length === 1 ? "" : "s"} in the Plan tab will be cleared too.${
         kept ? ` The ${kept} day${kept === 1 ? "" : "s"} with anything written in ${kept === 1 ? "stays" : "stay"} put.` : ""}` : ""}`)) return;
     say("Reopening the vote…");
-    const ok = await Backend.updateTrip(TRIP_CODE, { start_date: null, end_date: null });
+    /* Empty string, not null. start_date and end_date are NOT NULL in the
+       schema, and "no dates yet" has always been "" here: that is what the
+       wizard writes for a trip whose dates are not known. Sending null gets
+       the write rejected outright, which then sits at the head of the retry
+       queue and blocks everything behind it. */
+    const ok = await Backend.updateTrip(TRIP_CODE, { start_date: "", end_date: "" });
     if (!ok) { say("Couldn't save that. Check you're online."); return; }
-    TRIP.start_date = null; TRIP.end_date = null;
+    TRIP.start_date = ""; TRIP.end_date = "";
     $("#brandSub").textContent = fmtRange(TRIP.start_date, TRIP.end_date);
     for (const d of doomed) {
       try { await Backend.remove("days", d.id); state.days = state.days.filter((x) => String(x.id) !== String(d.id)); }
