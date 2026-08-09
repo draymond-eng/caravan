@@ -184,7 +184,8 @@
 
     $("#joinBtn").addEventListener("click", joinTrip);
     $("#joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") joinTrip(); });
-    $$("#createBtn, #createBtn2").forEach((b) => b.addEventListener("click", () => { openWizard(); }));
+    $$("#createBtn, #createBtn2").forEach((b) => b.addEventListener("click", () =>
+      openWizard(whichLanding() === "wedding" ? "wedding" : "trip")));
     $$('.lp-link[href="#join"]').forEach((a) => a.addEventListener("click", (e) => {
       e.preventDefault();
       const j = $("#join"); if (j) j.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -217,9 +218,16 @@
 
   /* ---- Create-trip wizard -------------------------------------------------- */
   const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", datesTbd: false, stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "", trip_type: "general" };
-  function openWizard() {
+  function openWizard(mode) {
     wiz.step = 0;
     wiz.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    /* Every open starts clean. Tapping Wedding, backing out and tapping Create
+       again used to leave the wizard still in wedding mode, so a group trip
+       came out the other end as a wedding. The wedding landing page still gets
+       what it asks for, because it says so explicitly. */
+    wiz.mode = mode === "wedding" ? "wedding" : "trip";
+    wiz.datesTbd = false;
+    document.body.classList.toggle("theme-wedding", wiz.mode === "wedding");
     if (!wiz.travelers.length) wiz.travelers = [""];
     $("#wizModal").classList.add("open");
     renderWizard();
@@ -3529,6 +3537,32 @@
       <div class="r-sub" id="availMsg" style="margin-top:8px"></div>
     </div>`;
   }
+  /* Dates without days is a plan tab that still says "the plan is empty" the
+     moment you have just settled when you are going. So the skeleton gets
+     built: one day per date, named enough to be useful and vague enough to
+     be obviously a starting point. Only ever fills gaps, never removes a day
+     someone has put work into. */
+  async function fillDays(start, end) {
+    if (!start || !end || end < start) return 0;
+    const have = new Set((state.days || []).map((d) => d.date));
+    const a = new Date(start + "T12:00:00"), b = new Date(end + "T12:00:00");
+    const span = Math.round((b - a) / 864e5);
+    if (span < 0 || span > 60) return 0;      // a sane ceiling, not a guess
+    let made = 0;
+    for (let i = 0; i <= span; i++) {
+      const d = new Date(a); d.setDate(d.getDate() + i);
+      const date = isoDay(d);
+      if (have.has(date)) continue;
+      const title = i === 0 ? "Arrive" : i === span ? "Head home"
+        : d.toLocaleDateString("en-US", { weekday: "long" });
+      const row = await Backend.insert("days", { trip: TRIP_CODE, date, stop: ((TRIP.stops || [])[0] || {}).id || "",
+        title, summary: "", meetup: "", items: [] });
+      if (row) { state.days.push(row); made++; }
+    }
+    state.days.sort((x, y) => String(x.date).localeCompare(String(y.date)));
+    return made;
+  }
+
   /* Turning the winning week into the trip's actual dates is the whole point,
      so it is one tap rather than a trip to Settings. */
   async function useWeek(weekId) {
@@ -3541,8 +3575,10 @@
     if (!ok) { say("Couldn't save that. Check you're online."); return; }
     TRIP.start_date = start; TRIP.end_date = end;
     $("#brandSub").textContent = fmtRange(start, end);
+    say("Building the days…");
+    const made = await fillDays(start, end);
     renderAll();
-    show("home");
+    show(made ? "itinerary" : "home");
   }
 
   /* A vote that lands has to actually change the trip, or it is just a poll.
@@ -6157,6 +6193,12 @@
       $("#brandName").textContent = TRIP.name;
       $("#brandSub").textContent = fmtRange(TRIP.start_date, TRIP.end_date);
       await Backend.updateTrip(TRIP.code, patch);
+      const made = await fillDays(patch.start_date, patch.end_date);
+      if (made) {
+        renderAll();   // redraws this screen, so the message has to land after
+        const msg = $("#stBasicsMsg");
+        if (msg) msg.textContent = `Saved ✓ and ${made} day${made === 1 ? "" : "s"} added to the Plan.`;
+      }
       loadRate();
     });
 
