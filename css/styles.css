@@ -1144,3 +1144,4 @@ body[data-tod="night"] .topbar {
 .settled-row:active { background: #f2f8f3; }
 .settled-row .si { font-size: 19px; line-height: 1.2; flex: 0 0 auto; }
 .settled-row .r-sub { display: block; margin-top: 2px; }
+.avail-set { border-color: var(--gold-soft); background: linear-gradient(180deg,#fffaf0,#fdf4e4); }

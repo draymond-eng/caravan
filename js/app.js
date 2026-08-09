@@ -1631,13 +1631,27 @@
           "🏨 Go to Stays", "stays"));
       }
     }
-    // nothing outstanding is worth saying out loud too
+    /* Nothing outstanding is worth saying out loud too, but only when it is
+       true. Having voted yourself is not the same as the trip being settled,
+       and "all caught up" directly under an open question reads as a bug. */
     if (!cards.length) {
+      const waiting = [];
+      if (!datesKnown()) waiting.push("dates");
+      if (!datesKnownPlace()) waiting.push("a destination");
+      const stillOpen = state.decisions.filter((d) => d.status !== "decided").length;
+      if (waiting.length) {
+        return `<div class="act calm">
+          <span class="act-pill">Your part is done</span>
+          <h3>You've answered. The group hasn't finished.</h3>
+          <p>Still no ${waiting.join(" and ")}. Nudge whoever hasn't weighed in, or change your own answer if something shifted.</p>
+          <button class="btn act-btn" data-go="decisions">🗳️ Open the votes</button>
+        </div>`;
+      }
       return `<div class="act calm">
         <span class="act-pill">All caught up</span>
         <h3>Nothing needs you right now</h3>
-        <p>Every vote is in and nothing is due. Have a look around, or add something for the group.</p>
-        <button class="btn act-btn" data-go="assistant">✨ Ask the assistant</button>
+        <p>${stillOpen ? `You've answered every open question. ${stillOpen === 1 ? "One is" : `${stillOpen} are`} still waiting on other people.` : "Every vote is in and nothing is due."} Have a look around, or add something for the group.</p>
+        <button class="btn act-btn" data-go="${stillOpen ? "decisions" : "assistant"}">${stillOpen ? "🗳️ See the open votes" : "✨ Ask the assistant"}</button>
       </div>`;
     }
     return cards.join("");
@@ -3483,8 +3497,28 @@
   }
   let openMonths = null;
   let availEditing = false;
+  let availForced = false;      // dates are set but they want the picker back
   function availCard() {
-    if (datesKnown()) return "";
+    /* Settling on a week is not the end of the conversation. People change
+       their minds, someone answers late, a flight gets expensive. So the
+       picker never disappears, it just gets out of the way once there are
+       dates: a line saying what they are and a way back in. */
+    if (datesKnown() && !availForced) {
+      const chosen = weekTally()[TRIP.start_date];
+      return `<div class="card avail-set">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div class="r-sub" style="font-weight:800">Dates are set</div>
+            <b>${fmtRange(TRIP.start_date, TRIP.end_date)}</b>
+            <span class="r-sub"> · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights</span>
+          </div>
+          <button class="btn ghost" id="availReopen" style="flex:0 0 auto">Change</button>
+        </div>
+        <div class="r-sub" style="margin-top:8px">${anyAnsweredAvail().size
+          ? `Everyone's availability is still on file${chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again.`
+          : "Tap Change to ask everyone when they're free and pick from the overlap."}</div>
+      </div>`;
+    }
     if (availEditing) {
       const { from, count } = availWindow();
       return `<div class="card avail-card">
@@ -3526,6 +3560,8 @@
           ${isHost() ? `<button class="btn ghost" data-availuse="${w.id}">Use it</button>` : ""}
         </div>`).join("")}
       </div>` : ""}
+      ${datesKnown() ? `<div class="r-sub" style="margin:-4px 0 12px">Currently set to <b>${fmtRange(TRIP.start_date, TRIP.end_date)}</b>. Picking a week below moves the whole trip.
+        <span class="tl-map" id="availKeep" style="cursor:pointer">Leave it as it is</span></div>` : ""}
       <div class="avail-months">
         ${availMonths().map((id) => {
           const open = openMonths.has(id);
@@ -3589,12 +3625,14 @@
     say("Setting the dates…");
     const ok = await Backend.updateTrip(TRIP_CODE, { start_date: start, end_date: end });
     if (!ok) { say("Couldn't save that. Check you're online."); return; }
+    const hadDates = datesKnown();
     TRIP.start_date = start; TRIP.end_date = end;
     $("#brandSub").textContent = fmtRange(start, end);
     say("Building the days…");
     const made = await fillDays(start, end);
+    availForced = false;
     renderAll();
-    show(made ? "itinerary" : "home");
+    show(made && !hadDates ? "itinerary" : "decisions");
   }
 
   /* A vote that lands has to actually change the trip, or it is just a poll.
@@ -3743,6 +3781,8 @@
     s.querySelectorAll("[data-availuse]").forEach((b) => b.addEventListener("click", () => useWeek(b.dataset.availuse)));
     s.querySelectorAll("[data-useplace]").forEach((b) => b.addEventListener("click", () => usePlace(b.dataset.useplace)));
     const ae = $("#availEdit"); if (ae) ae.addEventListener("click", () => { availEditing = true; renderDecisions(); });
+    const ar = $("#availReopen"); if (ar) ar.addEventListener("click", () => { availForced = true; renderDecisions(); });
+    const ak = $("#availKeep"); if (ak) ak.addEventListener("click", () => { availForced = false; renderDecisions(); });
     const ac = $("#availCancel"); if (ac) ac.addEventListener("click", () => { availEditing = false; renderDecisions(); });
     let pendingCount = null;
     s.querySelectorAll("[data-availcount]").forEach((b) => b.addEventListener("click", () => {
