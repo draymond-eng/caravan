@@ -1085,3 +1085,7 @@ body[data-tod="night"] .topbar {
     linear-gradient(150deg, #241b45 0%, #1b1436 55%, #140f28 100%);
   background-color: #140f28;
 }
+
+/* A trip can start before its dates do. */
+.wiz-tbd { display: flex; gap: 8px; margin-top: 2px; }
+.wiz-tbd .chip { flex: 1; justify-content: center; text-align: center; }

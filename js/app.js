@@ -30,7 +30,11 @@
     const d = new Date(iso + "T12:00:00");
     return { day: d.getDate(), mon: d.toLocaleString("en-US", { month: "short" }), wd: d.toLocaleString("en-US", { weekday: "short" }) };
   };
-  const fmtRange = (a, b) => { const fa = fmtDate(a), fb = fmtDate(b); return `${fa.mon} ${fa.day} → ${fb.mon} ${fb.day}`; };
+  const fmtRange = (a, b) => {
+    if (!a || !b) return "Dates not set";
+    const fa = fmtDate(a), fb = fmtDate(b);
+    return `${fa.mon} ${fa.day} → ${fb.mon} ${fb.day}`;
+  };
   const nightsBetween = (a, b) => Math.max(0, Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000));
 
   /* =========================================================================
@@ -212,7 +216,7 @@
   }
 
   /* ---- Create-trip wizard -------------------------------------------------- */
-  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "", trip_type: "general" };
+  const wiz = { step: 0, mode: "trip", name: "", destination: "", start: "", end: "", datesTbd: false, stops: [], travelers: [], tz: "", currency: "USD", home_currency: "USD", home_city: "", home_airport: "", trip_type: "general" };
   function openWizard() {
     wiz.step = 0;
     wiz.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -242,18 +246,32 @@
         <label class="wiz-label">Destination</label>
         <input id="wDest" data-suggest="city" autocomplete="off" placeholder="${w ? "Start typing, e.g. Tulum" : "Start typing, e.g. Tokyo"}" value="${esc(wiz.destination)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px" />
         ${cityListHTML()}
-        <div style="display:flex;gap:10px">
+        <label class="wiz-label">When</label>
+        <div class="wiz-tbd">
+          <button class="chip ${wiz.datesTbd ? "" : "active"}" id="wDatesKnown">📅 We have dates</button>
+          <button class="chip ${wiz.datesTbd ? "active" : ""}" id="wDatesTbd">🤷 Not sure yet</button>
+        </div>
+        ${wiz.datesTbd ? `<p class="section-sub" style="margin:8px 0 0;font-size:12.5px">Fine. Start the group, gather ideas and vote on when. You can add the dates in Settings the moment they are real.</p>`
+        : `<div style="display:flex;gap:10px;margin-top:8px">
           <div style="flex:1"><label class="wiz-label">First day</label>
             <input id="wStart" type="date" value="${esc(wiz.start)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
           <div style="flex:1"><label class="wiz-label">Last day</label>
             <input id="wEnd" type="date" value="${esc(wiz.end)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
-        </div>
+        </div>`}
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wCancel" style="flex:1">Cancel</button>
           <button class="btn primary" id="wNext" style="flex:2">Next: stops →</button>
         </div>`;
       $("#wCancel").addEventListener("click", closeWizard);
-      const keep = () => { wiz.name = $("#wName").value.trim(); wiz.destination = $("#wDest").value.trim(); wiz.start = $("#wStart").value; wiz.end = $("#wEnd").value; };
+      const keep = () => {
+        wiz.name = $("#wName").value.trim();
+        wiz.destination = $("#wDest").value.trim();
+        const st = $("#wStart"), en = $("#wEnd");
+        if (st) wiz.start = st.value;
+        if (en) wiz.end = en.value;
+      };
+      $("#wDatesKnown").addEventListener("click", () => { keep(); wiz.datesTbd = false; renderWizard(); });
+      $("#wDatesTbd").addEventListener("click", () => { keep(); wiz.datesTbd = true; renderWizard(); });
       $$("#wizBody [data-wtype]").forEach((b) => b.addEventListener("click", () => { keep(); wiz.trip_type = b.dataset.wtype; renderWizard(); }));
       $("#wModeTrip").addEventListener("click", () => { keep(); wiz.mode = "trip"; document.body.classList.remove("theme-wedding"); renderWizard(); });
       $("#wModeWed").addEventListener("click", () => { keep(); wiz.mode = "wedding"; document.body.classList.add("theme-wedding"); renderWizard(); });
@@ -267,7 +285,8 @@
         keep();
         syncDestTz();
         if (!wiz.name) return alert("Give the trip a name.");
-        if (!wiz.start || !wiz.end || wiz.end < wiz.start) return alert("Pick valid dates.");
+        if (wiz.datesTbd) { wiz.start = ""; wiz.end = ""; }
+        else if (!wiz.start || !wiz.end || wiz.end < wiz.start) return alert("Pick valid dates, or tap \"Not sure yet\".");
         wiz.step = 1; renderWizard();
       });
     } else if (wiz.step === 1) {
@@ -280,6 +299,7 @@
         </div>`).join("")}
         ${cityListHTML()}
         <button class="btn ghost" id="wAddStop" style="width:100%">＋ Add a stop</button>
+        <p class="section-sub" style="margin:10px 0 0;font-size:12.5px">Not decided where yet? Leave this blank and keep going. The group can propose places in <b>Stays</b> and vote on it.</p>
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wBack" style="flex:1">← Back</button>
           <button class="btn primary" id="wNext" style="flex:2">Next: crew →</button>
@@ -291,8 +311,7 @@
       $("#wNext").addEventListener("click", () => {
         readStops();
         wiz.stops = wiz.stops.map((s) => s.trim()).filter(Boolean);
-        if (!wiz.stops.length) return alert("Add at least one stop.");
-        const stopTz = tzForCity(wiz.stops[0]);
+        const stopTz = wiz.stops.length ? tzForCity(wiz.stops[0]) : "";
         if (stopTz && (wiz.tzAuto || !wiz.tz)) { wiz.tz = stopTz; wiz.tzAuto = true; }
         wiz.step = 2; renderWizard();
       });
@@ -383,6 +402,8 @@
     const mine = LSG.get("mytrips", []);
     mine.unshift({ code: created.code, name: created.name, dates: fmtRange(created.start_date, created.end_date) });
     LSG.set("mytrips", mine.slice(0, 8));
+    // remember that this phone made it, so only the host gets asked to invite
+    LSG.set("made_" + created.code, true);
     location.search = "?t=" + created.code;
   }
 
@@ -441,7 +462,9 @@
       // shortest name first, so a query matching two cities favours the closer one
       starts.sort((a, b) => a.length - b.length);
       has.sort((a, b) => a.length - b.length);
-      list = starts.concat(has).slice(0, 8);
+      // "obx" and "nola" are what people type, so they resolve too
+      const aliased = kind === "city" && window.cityAliasHits ? window.cityAliasHits(q) : [];
+      list = aliased.concat(starts, has).filter((x, i, a) => a.indexOf(x) === i).slice(0, 8);
     }
     if (!list.length) { hideSuggest(); return; }
     if (!suggestBox) {
@@ -569,6 +592,7 @@
     if (!LSG.get("onboarded", false)) setTimeout(openWelcome, 500);
     else if (!state.me) setTimeout(openWho, 700);
     else setTimeout(maybeOfferInstall, 1200); // already tagged: nudge once, then snooze
+    watchForInviteMoment();
     loadRate();
     registerSW();
   }
@@ -1010,7 +1034,7 @@
     LSG.set("onboarded", true);
     $("#welcomeModal").classList.remove("open");
     if (!state.me) openWho();
-    else maybeOfferInstall();
+    else { maybeOfferInstall(); maybeOfferInvite(); }
   }
 
   /* ---- Add to home screen --------------------------------------------------
@@ -1083,7 +1107,34 @@
       closeInstall();
     });
   }
-  function closeInstall() { $("#installModal").classList.remove("open"); }
+  function closeInstall() {
+    $("#installModal").classList.remove("open");
+    maybeOfferInvite();
+  }
+  /* The trip is useless until other people are in it, and the moment right
+     after setup is the only moment the host is definitely paying attention.
+     Asked once, on the device that made the trip, and never again. */
+  function maybeOfferInvite() {
+    if (!TRIP || invitedCount() > 0) return;
+    if (!LSG.get("made_" + TRIP.code, false)) return;   // not the creator's phone
+    if (LS.get("inviteOffered", false)) return;
+    const busy = ["welcomeModal", "installModal", "whoModal"]
+      .some((id) => { const el = $("#" + id); return el && el.classList.contains("open"); });
+    if (busy) return;                                    // wait for the queue to clear
+    LS.set("inviteOffered", true);
+    setTimeout(openInvite, 500);
+  }
+  /* The prompt chain is welcome, then identity, then install, and any of them
+     can be dismissed in a way that skips the next. Rather than thread the ask
+     through every exit, keep looking until the screen is actually clear. */
+  function watchForInviteMoment() {
+    let tries = 0;
+    const t = setInterval(() => {
+      if (++tries > 40 || LS.get("inviteOffered", false) || invitedCount() > 0) { clearInterval(t); return; }
+      if (!LSG.get("made_" + (TRIP ? TRIP.code : ""), false)) { clearInterval(t); return; }
+      maybeOfferInvite();
+    }, 700);
+  }
 
   /* ---- Push notifications --------------------------------------------------
      Subscribe this device to the trip's alerts. iOS only allows this from a
@@ -1515,11 +1566,14 @@
         <div class="sun"></div>
         <div class="kicker">${isWedding() ? (isHost() ? "💍 You're hosting · " : "💍 You're invited · ") + esc(TRIP.destination || "") : esc(TRIP.destination || "The trip")}</div>
         <h1 style="font-size:32px">${esc(TRIP.name)}</h1>
-        <div class="dates">${fmtRange(TRIP.start_date, TRIP.end_date)} · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights</div>
+        <div class="dates">${datesKnown()
+          ? `${fmtRange(TRIP.start_date, TRIP.end_date)} · ${nightsBetween(TRIP.start_date, TRIP.end_date)} nights`
+          : "Dates not set yet"}</div>
         <div class="cities-row">${(TRIP.stops || []).map((c) => `<span class="city-chip">${esc(c.label)}</span>`).join("")}</div>
       </div>
 
       ${tzWarningCard()}
+      ${undecidedCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
       ${latestAnnouncementCard()}
 
@@ -1559,10 +1613,14 @@
       </div>
 
       <div class="card" style="margin-top:16px">
-        <h3>📍 Trip code</h3>
-        <p class="section-sub" style="margin:4px 0 0">Friends join with this code (or the link below).</p>
+        <h3>📍 ${isWedding() ? "Guest code" : "Trip code"}</h3>
+        <p class="section-sub" style="margin:4px 0 0">${isWedding() ? "Guests" : "Friends"} join with this code (or the link below).</p>
         <div class="code-big">${esc(TRIP.code)}</div>
-        <button class="btn ghost" id="copyLink" style="width:100%">Copy invite link</button>
+        <div class="btn-row">
+          <button class="btn primary" id="inviteBtn" style="flex:2">✉️ Send the invite</button>
+          <button class="btn ghost" id="copyLink" style="flex:1">Copy link</button>
+        </div>
+        <p class="r-sub" style="margin:9px 0 0">${invitedCount() ? `Sent to <b>${invitedCount()}</b> so far.` : "Nobody has been sent the walkthrough yet."}</p>
       </div>
 
       <div class="foot-note">SquadTrip · everything syncs live for the whole group</div>`;
@@ -1580,6 +1638,7 @@
       const ok = await Backend.updateTrip(TRIP_CODE, { tz: guess });
       if (ok) { TRIP.tz = guess; renderHome(); } else $("#tzFixMsg").textContent = "Couldn't save. Try again.";
     });
+    const ua = $("#undecidedAsk"); if (ua) ua.addEventListener("click", startUndecidedVote);
     s.querySelectorAll("[data-wrsvp]").forEach((b) => b.addEventListener("click", () => setVote("wrsvp", "attend", b.dataset.wrsvp)));
     s.querySelectorAll("[data-wparty]").forEach((b) => b.addEventListener("click", () => {
       const cur = myVote("wrsvp", "attend");
@@ -1599,11 +1658,101 @@
       $("#wrDetMsg").textContent = ok ? "Saved ✓ (the hosts can see this)" : "Couldn't save. Try again.";
     });
     $("#copyLink").addEventListener("click", () => {
-      const url = location.origin + location.pathname + "?t=" + TRIP.code;
-      navigator.clipboard?.writeText(url).then(() => { $("#copyLink").textContent = "Copied ✓"; setTimeout(() => $("#copyLink").textContent = "Copy invite link", 1500); }).catch(() => {});
+      const url = tripUrl();
+      navigator.clipboard?.writeText(url).then(() => { $("#copyLink").textContent = "Copied ✓"; setTimeout(() => $("#copyLink").textContent = "Copy link", 1500); }).catch(() => {});
     });
+    const ib = $("#inviteBtn"); if (ib) ib.addEventListener("click", openInvite);
     tickCountdown(); renderClocks();
   }
+  /* =========================================================================
+     THE INVITE
+
+     The code on its own asks people to work out what this is. Most of them
+     have never seen the app, and half will read the text on a phone, in a
+     group chat, between other things. So the invite is a written message: what
+     it is, what to tap first, and the two or three things that actually need
+     them. The host can edit every word before it goes.
+     ====================================================================== */
+  const tripUrl = () => location.origin + location.pathname + "?t=" + TRIP.code;
+  const invitedCount = () => Number((TRIP.links || {}).invited_count || 0);
+
+  /* Written for the person receiving it, not the person sending it. Numbered,
+     because a numbered list survives a group chat and a paragraph does not. */
+  function inviteText() {
+    const L = TRIP.links || {};
+    const wed = isWedding();
+    const when = datesKnown()
+      ? `${fmtRange(TRIP.start_date, TRIP.end_date)}`
+      : "Dates are not locked in yet, which is part of what we're sorting";
+    const where = TRIP.destination || (TRIP.stops || []).map((x) => x.label).filter(Boolean).join(", ");
+    const lines = [];
+
+    lines.push(wed ? `You're invited to ${TRIP.name}.` : `${TRIP.name} is happening.`);
+    lines.push("");
+    lines.push(`${when}${where ? ` · ${where}` : ""}`);
+    lines.push("");
+    lines.push(wed
+      ? `Everything for the weekend lives in one place. The schedule, the dress codes, where to stay, and your table when we get there. No app store, no account, no password. Open this and you're in:`
+      : `I put everything in one place so it isn't spread across six group chats. No app store, no account, no password. Open this and you're in:`);
+    lines.push("");
+    lines.push(tripUrl());
+    lines.push("");
+    lines.push(`If it asks for a code, it's ${TRIP.code}.`);
+    lines.push("");
+    lines.push("Three things when you're in:");
+    lines.push("");
+    lines.push("1. Tap your name so everything you do is tagged to you.");
+    lines.push(wed ? "2. RSVP, and say who is coming with you." : "2. Vote on the open questions. That is how we actually decide anything.");
+    lines.push(wed
+      ? "3. Add your flights so we know when to expect you."
+      : (datesKnown() ? "3. Check the Booking tab. It says what to book and by when." : "3. Add the dates that work for you so we can pick a weekend."));
+    lines.push("");
+    lines.push("Add it to your home screen when it offers. It works without signal, which matters once we're there.");
+    return lines.join("\n");
+  }
+
+  let inviteDraft = null;
+  function openInvite() {
+    if (inviteDraft == null) inviteDraft = inviteText();
+    const m = $("#inviteModal");
+    $("#inviteBody").innerHTML = `
+      <h3 style="margin:0 0 4px">✉️ Send the invite</h3>
+      <p class="section-sub" style="margin:0 0 12px">This is the whole message, written for someone who has never seen the app. Change anything you like before it goes.</p>
+      <textarea id="inviteText" rows="14" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;line-height:1.6;background:#fffdfa;color:var(--ink);font-family:inherit;resize:vertical">${esc(inviteDraft)}</textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn ghost" id="inviteReset" style="flex:1">Reset</button>
+        <button class="btn primary" id="inviteSend" style="flex:2">${navigator.share ? "Share it" : "Copy it"}</button>
+      </div>
+      <button class="btn ghost" id="inviteClose" style="width:100%;margin-top:8px">Close</button>
+      <div id="inviteMsg" class="r-sub" style="margin-top:8px"></div>`;
+    m.classList.add("open");
+    const keep = () => { inviteDraft = $("#inviteText").value; };
+    $("#inviteClose").addEventListener("click", () => { keep(); m.classList.remove("open"); });
+    $("#inviteReset").addEventListener("click", () => { inviteDraft = inviteText(); openInvite(); });
+    $("#inviteSend").addEventListener("click", async () => {
+      keep();
+      const text = inviteDraft;
+      const say = (t) => { const el = $("#inviteMsg"); if (el) el.textContent = t; };
+      let sent = false;
+      if (navigator.share) {
+        try { await navigator.share({ title: TRIP.name, text }); sent = true; }
+        catch (e) { if (e && e.name === "AbortError") return; }   // they backed out, leave it be
+      }
+      if (!sent) {
+        try { await navigator.clipboard.writeText(text); say("Copied. Paste it into the group chat."); sent = true; }
+        catch (e) { say("Couldn't copy automatically. Select the text above and copy it."); }
+      } else say("Sent.");
+      if (sent) await markInvited();
+    });
+  }
+  /* A count, not a list. We cannot know who actually received a text, so the
+     card says how many times the invite went out and nothing more. */
+  async function markInvited() {
+    const n = invitedCount() + 1;
+    await saveLinks({ invited_count: n }, ["invited_count"]);
+    if ($("#screen-home").classList.contains("active")) renderHome();
+  }
+
   /* ---- Wedding mode: RSVP, links, attendance ------------------------------ */
   /* How many seats a guest's invitation covers, and what is on the menu.
      Both live on data we already store, so no migration is needed. */
@@ -2009,7 +2158,7 @@
      know what week it is.
      -------------------------------------------------------------------------- */
   function tripPhase() {
-    if (!TRIP.start_date) return "planning";
+    if (!datesKnown()) return "planning";
     const out = daysUntilTrip();
     if (out > 0 && out <= 1) return "eve";
     if (out <= 0) {
@@ -2111,8 +2260,43 @@
       ${day.meetup ? `<div class="meetup" style="margin:10px 0 0">📍 ${esc(day.meetup)}</div>` : ""}
     </div>`;
   }
+  /* A trip with no dates and no stops is not broken, it is early. But it does
+     need a next move, and a countdown to nothing is not it. So the card says
+     what is missing and hands over the tool that settles it: a vote, because
+     that is how a group actually picks a weekend. */
+  function undecidedCard() {
+    const noDates = !datesKnown();
+    const noWhere = !(TRIP.stops || []).length && !TRIP.destination;
+    if (!noDates && !noWhere) return "";
+    const missing = noDates && noWhere ? "when or where" : noDates ? "when" : "where";
+    return `<div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fffaf0,#fdf4e4)">
+      <h3>🤷 You haven't settled ${missing} yet</h3>
+      <p class="section-sub" style="margin:4px 0 12px">That is fine this early. Put it to the group and decide it together, then fill it in and everything else here starts working: the countdown, the booking deadlines, the weather.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="undecidedAsk" style="flex:2">🗳️ Ask the group</button>
+        <button class="btn ghost" data-go="settings" style="flex:1">Fill it in</button>
+      </div>
+      <div class="r-sub" id="undecidedMsg" style="margin-top:8px"></div>
+    </div>`;
+  }
+  async function startUndecidedVote() {
+    const msg = $("#undecidedMsg");
+    const noDates = !datesKnown();
+    const title = noDates ? "When should we go?" : "Where should we go?";
+    const existing = (state.decisions || []).find((d) => d.title === title);
+    if (existing) { show("decisions"); return; }
+    if (msg) msg.textContent = "Starting it…";
+    const row = await Backend.insert("decisions", {
+      trip: TRIP_CODE, title,
+      note: noDates ? "Add the weekends that work for you, then everyone votes." : "Add the places you'd go, then everyone votes.",
+      options: [], status: "open", author: state.me || "",
+    });
+    if (row) { state.decisions.push(row); show("decisions"); }
+    else if (msg) msg.textContent = "Couldn't start it. Check you're online.";
+  }
+
   function tickCountdown() {
-    const box = $("#countdown"); if (!box) return;
+    const box = $("#countdown"); if (!box || !datesKnown()) return;
     const target = new Date(TRIP.start_date + "T08:00:00");
     const now = new Date();
     let diff = Math.max(0, target - now);
@@ -2800,14 +2984,20 @@
     general:  [{ id: "bigticket", by: 75, label: "Anything that sells out", note: "Headline tours, tickets and tastings. If it has a queue at home, it has one there." }],
   };
 
+  /* A trip can exist before its dates do. Everything that counts down, sorts by
+     date or nags about a deadline has to ask this first. */
+  const datesKnown = () => !!(TRIP && TRIP.start_date && TRIP.end_date);
+
   /* =========================================================================
      BOOKING TIMELINE - what to lock in, and when, built from this trip's dates
      ====================================================================== */
   function daysUntilTrip() {
+    if (!datesKnown()) return Infinity;
     const start = new Date(TRIP.start_date + "T00:00:00");
     return Math.ceil((start - new Date()) / 86400000);
   }
   function dateMinusDays(days) {
+    if (!datesKnown()) return "";
     const d = new Date(TRIP.start_date + "T00:00:00");
     d.setDate(d.getDate() - days);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -2862,8 +3052,9 @@
       .filter((i) => !hidden.has(i.id))
       .map((i) => ({
         ...i,
-        due: i.hard || `by ${dateMinusDays(i.by)}`,
-        bucket: out <= i.by ? "now" : (out <= i.by + 45 ? "soon" : "later"),
+        // no dates means no deadline to print, and no honest way to rank urgency
+        due: i.hard || (datesKnown() ? `by ${dateMinusDays(i.by)}` : ""),
+        bucket: !datesKnown() ? "later" : out <= i.by ? "now" : (out <= i.by + 45 ? "soon" : "later"),
       }))
       .sort((a, b) => b.by - a.by);
   }
@@ -2876,11 +3067,15 @@
     const buckets = [
       { key: "now",   title: "Do this now", sub: "Due, or close enough that waiting costs money." },
       { key: "soon",  title: "Coming up",   sub: "Get it on the radar. Not urgent yet." },
-      { key: "later", title: "Later",       sub: "Too early to bother. It will move up on its own." },
+      { key: "later", title: datesKnown() ? "Later" : "Everything",
+        sub: datesKnown() ? "Too early to bother. It will move up on its own."
+                          : "Once the dates are in, these sort themselves by what is most urgent." },
     ];
     s.innerHTML = `
       <div class="section-title">Booking timeline</div>
-      <div class="section-sub">${out > 0 ? `${out} day${out === 1 ? "" : "s"} out.` : "Trip time."} Things move up the list as the date gets closer. Tap ✓ when one is handled and the whole group sees it. ${done}/${items.length} done.</div>
+      <div class="section-sub">${!datesKnown()
+        ? `No dates yet, so nothing here has a deadline. <b data-go="settings" style="cursor:pointer;text-decoration:underline">Set them</b> and the whole list starts counting itself.`
+        : `${out > 0 ? `${out} day${out === 1 ? "" : "s"} out.` : "Trip time."} Things move up the list as the date gets closer.`} Tap ✓ when one is handled and the whole group sees it. ${done}/${items.length} done.</div>
       <div class="progress"><i style="width:${Math.round((done / items.length) * 100)}%"></i></div>
       ${buckets.map((bk) => {
         const rows = items.filter((i) => i.bucket === bk.key);
@@ -2898,7 +3093,7 @@
                   <div class="r-title" style="font-size:15px;${isDone ? "text-decoration:line-through" : ""}">${esc(i.label)}</div>
                   <div class="r-sub" style="margin-top:3px">${esc(i.note)}</div>
                   <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
-                    <span class="when-chip">${esc(i.due)}</span>
+                    ${i.due ? `<span class="when-chip">${esc(i.due)}</span>` : ""}
                     ${i.mine ? `<span class="pill any">yours</span>` : ""}
                     ${who.length ? `<span class="tally" style="margin:0">${voterChips(who)}<span class="tally-n">handled</span></span>` : ""}
                     ${isHost() ? `<span class="tl-map" style="color:var(--ink-3);cursor:pointer;margin-left:auto" data-bkhide="${esc(i.id)}">${i.mine ? "Remove" : "Not for us"}</span>` : ""}
