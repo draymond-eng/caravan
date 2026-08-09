@@ -5935,6 +5935,31 @@
     });
     return out;
   }
+  /* A trip created in the wrong mode used to be stuck that way, which meant
+     living with a seating chart and a run of show on a golf weekend. Nothing
+     is destroyed either way: wedding data sits dormant in trip mode and comes
+     straight back if they switch back. */
+  async function switchMode() {
+    const toWedding = !isWedding();
+    const msg = $("#stModeMsg");
+    const say = (t) => { if (msg) msg.textContent = t; };
+    const warn = toWedding
+      ? "Turn this into a wedding? Guests will be asked to RSVP, and only the hosts will be able to edit."
+      : "Turn this into a group trip? The RSVPs, seating chart and Day of run sheet all disappear from the menu, and everyone can edit again. Nothing is deleted.";
+    if (!confirm(warn)) return;
+    say("Switching…");
+    const patch = { mode: toWedding ? "wedding" : "trip" };
+    // a wedding with no hosts is a wedding nobody can administer
+    if (toWedding && !((TRIP.hosts || []).length)) patch.hosts = state.me ? [state.me] : (TRIP.travelers || []).map((t) => t.id);
+    const ok = await Backend.updateTrip(TRIP_CODE, patch);
+    if (!ok) { say("Couldn't switch it. Check you're online."); return; }
+    Object.assign(TRIP, patch);
+    document.body.classList.toggle("theme-wedding", isWedding());
+    renderAll();
+    renderCurrent();
+    show("home");
+  }
+
   function renderSettings() {
     const s = $("#screen-settings");
     const inp = (id, val, ph, type = "text") =>
@@ -6024,6 +6049,15 @@
         <datalist id="tzlist2">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <button class="btn primary" id="stSaveBasics" style="width:100%;margin-top:14px">Save basics</button>
         <div id="stBasicsMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>${isWedding() ? "💍 This is set up as a wedding" : "🌍 This is set up as a group trip"}</h3>
+        <p class="section-sub" style="margin:4px 0 12px">${isWedding()
+          ? "Which is why it has RSVPs, a seating chart and a Day of run sheet. A group trip has none of that, and gets shared budgets, stay votes and an open plan instead."
+          : "Which is why anyone can edit and there are no RSVPs. A wedding gets guest RSVPs, a room block, a seating chart and a Day of run sheet, and only the hosts can edit."}</p>
+        <button class="btn ghost" id="stSwitchMode" style="width:100%">Switch to ${isWedding() ? "a group trip" : "a wedding"}</button>
+        <div id="stModeMsg" class="r-sub" style="margin-top:8px">Nothing is deleted. Switching back brings it all straight back.</div>
       </div>
 
       ${isWedding() ? `<div class="card">
@@ -6201,6 +6235,8 @@
       }
       loadRate();
     });
+
+    const sm = $("#stSwitchMode"); if (sm) sm.addEventListener("click", switchMode);
 
     $("#stAddTrav").addEventListener("click", () => {
       TRIP.travelers = [...(TRIP.travelers || []), { id: "t" + Date.now().toString(36), name: "New traveler", color: PALETTE[(TRIP.travelers || []).length % PALETTE.length] }];
