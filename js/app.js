@@ -394,6 +394,9 @@
       travelers, stops,
     };
     if (wiz.mode === "wedding") { row.mode = "wedding"; row.hosts = travelers.map((t) => t.id); row.links = {}; }
+    // The person setting the trip up is the organiser. It changes nothing they
+    // can do day to day, it just means locking the dates is theirs to call.
+    else if (travelers.length) row.hosts = [travelers[0].id];
     // Present the new code before inserting: the row is read back immediately,
     // and the policies only return a trip whose code the request carries.
     try { Backend.init(row.code); } catch (e) { console.warn("init", e); }
@@ -550,6 +553,15 @@
   // Wedding mode: one party plans (hosts), everyone else RSVPs and follows.
   const isWedding = () => !!TRIP && TRIP.mode === "wedding";
   const isHost = () => !isWedding() || (TRIP.hosts || []).includes(state.me);
+  /* A group trip is deliberately flat: anyone can add a day, post an update or
+     open a question. But a handful of actions change the trip for everybody at
+     once and are a pain to undo, above all locking in the dates. Those go
+     through the organiser. On a wedding that is the hosts. On a group trip it
+     is whoever set the trip up, and if nobody is on record yet the answer is
+     "nobody" until someone claims it, which is a tap. */
+  const organisers = () => (TRIP.hosts || []);
+  const canFinalize = () => (organisers().length ? organisers().includes(state.me) : (isWedding() ? isHost() : false));
+  const organiserNames = () => organisers().map((id) => (byId(id) || {}).name).filter(Boolean);
   const voterChips = (ids) => (ids || []).map((id) => { const t = byId(id); return t ? `<span class="avatar vchip" style="background:${t.color}" title="${esc(t.name)}">${initials(t.name)}</span>` : ""; }).join("");
 
   const TYPE = {
@@ -3443,11 +3455,23 @@
      starting two months out is a sane default, but a trip aimed at next summer
      or at three weeks from now needs to say so. Kept in trips.links, so
      everyone is looking at the same board. */
-  const AVAIL_MAX = 12;
+  const AVAIL_MAX = 18;
+  const monthDiff = (a, b) => {
+    const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number);
+    return (by - ay) * 12 + (bm - am);
+  };
   function availWindow() {
     const L = TRIP.links || {};
-    const count = Math.max(2, Math.min(AVAIL_MAX, Number(L.avail_count) || 6));
-    const from = /^\d{4}-\d{2}$/.test(L.avail_from || "") ? L.avail_from : nextMonths(1)[0].id;
+    let count = Math.max(2, Math.min(AVAIL_MAX, Number(L.avail_count) || 6));
+    let from = /^\d{4}-\d{2}$/.test(L.avail_from || "") ? L.avail_from : nextMonths(1)[0].id;
+    /* If the trip already has dates, the board has to reach them. Otherwise
+       reopening the vote shows a window that cannot see the week everyone is
+       arguing about, which reads as "the vote is gone". */
+    if (TRIP.start_date) {
+      const want = String(TRIP.start_date).slice(0, 7);
+      if (monthDiff(from, want) < 0) from = want;
+      count = Math.max(count, Math.min(AVAIL_MAX, monthDiff(from, want) + 2));
+    }
     return { from, count };
   }
   function availMonths() {
@@ -3505,6 +3529,9 @@
        dates: a line saying what they are and a way back in. */
     if (datesKnown() && !availForced) {
       const chosen = weekTally()[TRIP.start_date];
+      const heads = (TRIP.travelers || []).length || 1;
+      const answered = anyAnsweredAvail().size;
+      const thin = answered * 2 <= heads;   // half the room or fewer is worth saying out loud
       return `<div class="card avail-set">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
@@ -3514,9 +3541,15 @@
           </div>
           <button class="btn ghost" id="availReopen" style="flex:0 0 auto">Change</button>
         </div>
-        <div class="r-sub" style="margin-top:8px">${anyAnsweredAvail().size
+        <div class="r-sub" style="margin-top:8px">${answered
           ? `Everyone's availability is still on file${chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again.`
           : "Tap Change to ask everyone when they're free and pick from the overlap."}</div>
+        ${thin ? `<div class="r-sub" style="margin-top:8px;font-weight:700">Only ${answered} of ${heads} had answered when these were locked in.</div>` : ""}
+        ${canFinalize()
+          ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>`
+          : `<div class="r-sub" style="margin-top:8px">${organiserNames().length
+              ? `${esc(organiserNames().join(" and "))} can reopen the vote if these are wrong.`
+              : "The trip organiser can reopen the vote if these are wrong."} Tap Change to tick the weeks you're free either way.</div>`}
       </div>`;
     }
     if (availEditing) {
@@ -3528,7 +3561,7 @@
         <input id="availFrom" type="month" value="${esc(from)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink)" />
         <label class="wiz-label">How many months</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${[3, 6, 9, 12].map((n) => `<button class="chip ${count === n ? "active" : ""}" data-availcount="${n}">${n} months</button>`).join("")}
+          ${[3, 6, 9, 12, 18].map((n) => `<button class="chip ${count === n ? "active" : ""}" data-availcount="${n}">${n} months</button>`).join("")}
         </div>
         <div class="btn-row" style="margin-top:16px">
           <button class="btn ghost" id="availCancel" style="flex:1">Cancel</button>
@@ -3548,7 +3581,7 @@
     return `<div class="card avail-card">
       <div style="display:flex;align-items:flex-start;gap:8px">
         <h3 style="margin:0;flex:1">🗓️ When can everyone go?</h3>
-        ${isHost() ? `<button class="tl-map" id="availEdit" style="flex:0 0 auto">Edit</button>` : ""}
+        ${canFinalize() ? `<button class="tl-map" id="availEdit" style="flex:0 0 auto">Edit</button>` : ""}
       </div>
       <p class="section-sub" style="margin:6px 0 12px">Open the months that could work, then tick the weeks you're actually free. ${
         answered ? `<b>${answered}</b> of ${heads} ${answered === 1 ? "has" : "have"} answered.` : "Nobody has answered yet."}</p>
@@ -3557,7 +3590,7 @@
         ${best.map((w) => `<div class="avail-best-row">
           <div style="flex:1;min-width:0"><b>${weekLabel(w.id)}</b>
             <div class="tally" style="margin-top:2px">${voterChips(w.who)}<span class="tally-n">${w.who.length} of ${heads} free</span></div></div>
-          ${isHost() ? `<button class="btn ghost" data-availuse="${w.id}">Use it</button>` : ""}
+          ${canFinalize() ? `<button class="btn ghost" data-availuse="${w.id}">Lock it in</button>` : ""}
         </div>`).join("")}
       </div>` : ""}
       ${datesKnown() ? `<div class="r-sub" style="margin:-4px 0 12px">Currently set to <b>${fmtRange(TRIP.start_date, TRIP.end_date)}</b>. Picking a week below moves the whole trip.
@@ -3618,10 +3651,18 @@
   /* Turning the winning week into the trip's actual dates is the whole point,
      so it is one tap rather than a trip to Settings. */
   async function useWeek(weekId) {
+    if (!canFinalize()) { alert("Only the trip organiser can lock in the dates. Everyone else ticks the weeks that work."); return; }
     const a = new Date(weekId + "T12:00:00"), b = new Date(a); b.setDate(b.getDate() + 6);
     const start = isoDay(a), end = isoDay(b);
     const say = (t) => { const el = $("#availMsg"); if (el) el.textContent = t; };
-    if (!confirm(`Set the trip to ${weekLabel(weekId)}? Everyone sees it straight away, and you can change it in Settings.`)) return;
+    /* Say out loud how much of the group this is speaking for. Locking the
+       dates on two answers out of nine is the mistake worth preventing, and a
+       vague "are you sure" does not prevent it. */
+    const heads = (TRIP.travelers || []).length || 1;
+    const answered = anyAnsweredAvail().size;
+    const free = (weekTally()[weekId] || []).length;
+    if (!confirm(`Lock the trip to ${weekLabel(weekId)}?\n\n${answered} of ${heads} have said when they're free, and ${free} of those picked this week.${
+      answered < heads ? `\n\nThe other ${heads - answered} haven't answered yet.` : ""}\n\nEveryone sees it straight away. You can reopen the vote after.`)) return;
     say("Setting the dates…");
     const ok = await Backend.updateTrip(TRIP_CODE, { start_date: start, end_date: end });
     if (!ok) { say("Couldn't save that. Check you're online."); return; }
@@ -3633,6 +3674,56 @@
     availForced = false;
     renderAll();
     show(made && !hadDates ? "itinerary" : "decisions");
+  }
+
+  /* Locking in the dates has to be undoable, or one wrong tap holds the whole
+     group hostage. Reopening puts the trip back to no dates and leaves every
+     answer on file, so the board comes back exactly as people left it. */
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const isSkeletonDay = (d) => !!d
+    && (d.title === "Arrive" || d.title === "Head home" || WEEKDAYS.includes(d.title))
+    && !String(d.summary || "").trim() && !String(d.meetup || "").trim()
+    && !((d.items || []).length);
+  async function clearDates() {
+    if (!canFinalize()) { alert("Only the trip organiser can reopen the dates vote."); return; }
+    const say = (t) => { const el = $("#availMsg"); if (el) el.textContent = t; };
+    const doomed = (state.days || []).filter(isSkeletonDay);
+    const kept = (state.days || []).length - doomed.length;
+    if (!confirm(`Reopen the dates vote?\n\nThe trip goes back to no dates and everyone keeps voting. Nobody's availability is deleted.${
+      doomed.length ? `\n\nThe ${doomed.length} empty placeholder day${doomed.length === 1 ? "" : "s"} in the Plan tab will be cleared too.${
+        kept ? ` The ${kept} day${kept === 1 ? "" : "s"} with anything written in ${kept === 1 ? "stays" : "stay"} put.` : ""}` : ""}`)) return;
+    say("Reopening the vote…");
+    const ok = await Backend.updateTrip(TRIP_CODE, { start_date: null, end_date: null });
+    if (!ok) { say("Couldn't save that. Check you're online."); return; }
+    TRIP.start_date = null; TRIP.end_date = null;
+    $("#brandSub").textContent = fmtRange(TRIP.start_date, TRIP.end_date);
+    for (const d of doomed) {
+      try { await Backend.remove("days", d.id); state.days = state.days.filter((x) => String(x.id) !== String(d.id)); }
+      catch (e) { console.warn("could not clear placeholder day", e); }
+    }
+    availForced = false; openMonths = null;
+    renderAll();
+    show("decisions");
+  }
+  /* Nothing about a group trip needs a boss, right up until one tap can move
+     everybody's dates. An old trip has nobody on record, so it asks. */
+  async function claimOrganiser() {
+    if (!state.me) { openWho(); return; }
+    const el = $("#orgMsg"); if (el) el.textContent = "Saving…";
+    const hosts = organisers().concat([state.me]).filter((v, i, a) => a.indexOf(v) === i);
+    const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
+    if (!ok) { if (el) el.textContent = "Couldn't save that. Check you're online."; return; }
+    TRIP.hosts = hosts;
+    renderAll();
+  }
+  function organiserCard() {
+    if (isWedding() || organisers().length) return "";
+    return `<div class="card avail-set">
+      <div class="r-sub" style="font-weight:800">Who's running this trip?</div>
+      <p class="section-sub" style="margin:6px 0 10px">Everyone votes, adds ideas and edits the plan. But locking in the dates moves the trip for all of you at once, so that one is down to the organiser. Say who that is and the board stops being one stray tap away from being decided.</p>
+      <button class="btn primary" id="claimOrg" style="width:100%">${state.me ? "I'm running this trip" : "Pick your name first"}</button>
+      <div class="r-sub" id="orgMsg" style="margin-top:8px"></div>
+    </div>`;
   }
 
   /* A vote that lands has to actually change the trip, or it is just a poll.
@@ -3657,13 +3748,14 @@
         <div class="r-sub" style="font-weight:800">${lead.tie ? "Tied so far" : "Leading"}</div>
         <b>${esc(lead.o.label)}</b> <span class="r-sub">${lead.n} of ${heads || lead.n}</span>
       </div>
-      ${isHost() ? `<button class="btn ghost" data-useplace="${d.id}#${lead.o.id}">Make it official</button>` : ""}
+      ${canFinalize() ? `<button class="btn ghost" data-useplace="${d.id}#${lead.o.id}">Make it official</button>` : ""}
     </div>`;
   }
   const datesKnownPlace = () => !!(TRIP.destination || (TRIP.stops || []).length);
   /* Setting the destination is the recalibration: name, stop, timezone. The
      stop is what the itinerary, stays and map hang off, so it goes in too. */
   async function usePlace(key) {
+    if (!canFinalize()) { alert("Only the trip organiser can set the destination. Everyone else votes."); return; }
     const [decId, optId] = key.split("#");
     const d = state.decisions.find((x) => String(x.id) === String(decId));
     const opt = d && (d.options || []).find((o) => o.id === optId);
@@ -3686,6 +3778,7 @@
     s.innerHTML = `
       <div class="section-title">Votes</div>
       <div class="section-sub">${isWedding() ? "Questions from the hosts. Tap your pick, tallies update live." : "Open questions for the group. Tap your pick, tallies update live. Anyone can add one."}</div>
+      ${organiserCard()}
       ${availCard()}
       ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b>. Tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
       ${state.decisions.length ? state.decisions.map((d) => {
@@ -3782,6 +3875,8 @@
     s.querySelectorAll("[data-useplace]").forEach((b) => b.addEventListener("click", () => usePlace(b.dataset.useplace)));
     const ae = $("#availEdit"); if (ae) ae.addEventListener("click", () => { availEditing = true; renderDecisions(); });
     const ar = $("#availReopen"); if (ar) ar.addEventListener("click", () => { availForced = true; renderDecisions(); });
+    const au = $("#availUnlock"); if (au) au.addEventListener("click", clearDates);
+    const co = $("#claimOrg"); if (co) co.addEventListener("click", claimOrganiser);
     const ak = $("#availKeep"); if (ak) ak.addEventListener("click", () => { availForced = false; renderDecisions(); });
     const ac = $("#availCancel"); if (ac) ac.addEventListener("click", () => { availEditing = false; renderDecisions(); });
     let pendingCount = null;
@@ -6088,15 +6183,17 @@
         <textarea id="wlFaq" rows="5" placeholder="Are kids welcome? = We love your kids, but this one's adults-only.&#10;Is there a shuttle? = Yes, from the room-block hotel, times posted here." style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:13.5px;font-family:inherit;background:#fffdfa;color:var(--ink)">${esc(((TRIP.links || {}).faq || []).map((f) => `${f.q} = ${f.a}`).join("\n"))}</textarea>
         <button class="btn primary" id="wlSave" style="width:100%;margin-top:14px">Save wedding info</button>
         <div id="wlMsg" class="r-sub" style="margin-top:6px"></div>
-      </div>
+      </div>` : ""}
 
-      <div class="card">
-        <h3>Hosts</h3>
-        <p class="section-sub" style="margin:2px 0 10px">Hosts can edit the schedule, links, and settings. Everyone else RSVPs and follows along.</p>
+      ${isWedding() || canFinalize() || !organisers().length ? `<div class="card">
+        <h3>${isWedding() ? "Hosts" : "Who's running this trip"}</h3>
+        <p class="section-sub" style="margin:2px 0 10px">${isWedding()
+          ? "Hosts can edit the schedule, links, and settings. Everyone else RSVPs and follows along."
+          : "Everyone can vote, add ideas and edit the plan. The organiser is the one who locks in the dates and the destination, so the trip cannot move because someone tapped the wrong button. Pick one or two."}</p>
         <div id="hostChips" style="display:flex;flex-wrap:wrap;gap:8px">
           ${(TRIP.travelers || []).map((t) => `<label class="split-chip"><input type="checkbox" data-host="${t.id}" ${(TRIP.hosts || []).includes(t.id) ? "checked" : ""} /><span class="avatar" style="background:${t.color}">${initials(t.name)}</span>${esc(t.name.split(" ")[0])}</label>`).join("")}
         </div>
-        <button class="btn primary" id="hostSave" style="width:100%;margin-top:12px">Save hosts</button>
+        <button class="btn primary" id="hostSave" style="width:100%;margin-top:12px">${isWedding() ? "Save hosts" : "Save organiser"}</button>
         <div id="hostMsg" class="r-sub" style="margin-top:6px"></div>
       </div>` : ""}
 
@@ -6294,10 +6391,10 @@
     });
     const hs = $("#hostSave"); if (hs) hs.addEventListener("click", async () => {
       const hosts = $$("#hostChips [data-host]").filter((c) => c.checked).map((c) => c.dataset.host);
-      if (!hosts.length) { $("#hostMsg").textContent = "Keep at least one host."; return; }
+      if (!hosts.length) { $("#hostMsg").textContent = isWedding() ? "Keep at least one host." : "Pick at least one organiser."; return; }
       const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
       $("#hostMsg").textContent = ok ? "Saved ✓" : "Couldn't save. Try again.";
-      if (ok) TRIP.hosts = hosts;
+      if (ok) { TRIP.hosts = hosts; renderDecisions(); }
     });
     $("#stSaveBasics").addEventListener("click", async () => {
       const patch = {
