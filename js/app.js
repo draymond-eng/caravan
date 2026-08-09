@@ -251,7 +251,7 @@
           <button class="chip ${wiz.datesTbd ? "" : "active"}" id="wDatesKnown">📅 We have dates</button>
           <button class="chip ${wiz.datesTbd ? "active" : ""}" id="wDatesTbd">🤷 Not sure yet</button>
         </div>
-        ${wiz.datesTbd ? `<p class="section-sub" style="margin:8px 0 0;font-size:12.5px">Fine. Start the group, gather ideas and vote on when. You can add the dates in Settings the moment they are real.</p>`
+        ${wiz.datesTbd ? `<p class="section-sub" style="margin:8px 0 0;font-size:12.5px">Then the trip opens with a vote on it. Everyone picks the months that work, and you fill the dates in from Settings once one wins.</p>`
         : `<div style="display:flex;gap:10px;margin-top:8px">
           <div style="flex:1"><label class="wiz-label">First day</label>
             <input id="wStart" type="date" value="${esc(wiz.start)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px" /></div>
@@ -299,7 +299,7 @@
         </div>`).join("")}
         ${cityListHTML()}
         <button class="btn ghost" id="wAddStop" style="width:100%">＋ Add a stop</button>
-        <p class="section-sub" style="margin:10px 0 0;font-size:12.5px">Not decided where yet? Leave this blank and keep going. The group can propose places in <b>Stays</b> and vote on it.</p>
+        <p class="section-sub" style="margin:10px 0 0;font-size:12.5px">Not decided where yet? Leave this blank${wiz.destination ? " and clear the destination on the last step" : ""} and the trip opens with a vote on it instead. Anyone can put a place up.</p>
         <div class="btn-row" style="margin-top:18px">
           <button class="btn ghost" id="wBack" style="flex:1">← Back</button>
           <button class="btn primary" id="wNext" style="flex:2">Next: crew →</button>
@@ -399,6 +399,7 @@
             : "Couldn't create the trip. Check the backend setup and try again.");
       return;
     }
+    await seedUndecidedVotes(created);
     const mine = LSG.get("mytrips", []);
     mine.unshift({ code: created.code, name: created.name, dates: fmtRange(created.start_date, created.end_date) });
     LSG.set("mytrips", mine.slice(0, 8));
@@ -1664,6 +1665,45 @@
     const ib = $("#inviteBtn"); if (ib) ib.addEventListener("click", openInvite);
     tickCountdown(); renderClocks();
   }
+  /* When a trip is created without dates or without a destination, that is not
+     a gap to nag about later. It is the first thing the group has to decide,
+     so the trip opens with the vote already on the board.
+
+     The "when" vote comes seeded with real months, because a vote with nothing
+     in it is just a question, and a month is how groups actually narrow a date
+     before arguing about a weekend. The "where" vote starts empty on purpose:
+     guessing destinations for someone else is worse than useless, and anyone
+     can now put a candidate up. */
+  function nextMonths(n) {
+    const out = [], d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 2);   // two months out, the earliest most groups can book
+    for (let i = 0; i < n; i++) {
+      out.push({ id: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+                 label: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
+      d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }
+  async function seedUndecidedVotes(trip) {
+    const jobs = [];
+    if (!trip.start_date || !trip.end_date) {
+      jobs.push(Backend.insert("decisions", {
+        trip: trip.code, title: "When should we go?",
+        note: "Pick every month that works for you. Once one wins we'll narrow it to a weekend.",
+        options: nextMonths(6), status: "open", author: "",
+      }));
+    }
+    if (!trip.destination && !(trip.stops || []).length) {
+      jobs.push(Backend.insert("decisions", {
+        trip: trip.code, title: "Where should we go?",
+        note: "Add the places you'd actually go, then everyone votes. Anyone can put one up.",
+        options: [], status: "open", author: "",
+      }));
+    }
+    if (jobs.length) { try { await Promise.all(jobs); } catch (e) { console.warn("seed votes", e); } }
+  }
+
   /* =========================================================================
      THE INVITE
 
@@ -2269,11 +2309,17 @@
     const noWhere = !(TRIP.stops || []).length && !TRIP.destination;
     if (!noDates && !noWhere) return "";
     const missing = noDates && noWhere ? "when or where" : noDates ? "when" : "where";
+    const titles = [noDates ? "When should we go?" : null, noWhere ? "Where should we go?" : null].filter(Boolean);
+    const live = (state.decisions || []).filter((d) => titles.includes(d.title));
+    const votes = live.reduce((n, d) => n + Object.values(tally("decision", d.id)).reduce((m, v) => m + v.length, 0), 0);
+    const heads = (TRIP.travelers || []).length;
     return `<div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fffaf0,#fdf4e4)">
-      <h3>🤷 You haven't settled ${missing} yet</h3>
-      <p class="section-sub" style="margin:4px 0 12px">That is fine this early. Put it to the group and decide it together, then fill it in and everything else here starts working: the countdown, the booking deadlines, the weather.</p>
+      <h3>🗳️ ${live.length ? `First things first: ${missing}` : `You haven't settled ${missing} yet`}</h3>
+      <p class="section-sub" style="margin:4px 0 12px">${live.length
+        ? `The vote is up. ${votes ? `<b>${votes}</b> ${votes === 1 ? "vote is" : "votes are"} in${heads ? ` from ${heads} on the trip` : ""}.` : "Nobody has voted yet."} Once it lands, put it in Settings and the countdown, the booking deadlines and the weather all start working.`
+        : "That is fine this early. Put it to the group and decide it together, then fill it in and everything else here starts working."}</p>
       <div class="btn-row">
-        <button class="btn primary" id="undecidedAsk" style="flex:2">🗳️ Ask the group</button>
+        <button class="btn primary" id="undecidedAsk" style="flex:2">${live.length ? "🗳️ Open the vote" : "🗳️ Ask the group"}</button>
         <button class="btn ghost" data-go="settings" style="flex:1">Fill it in</button>
       </div>
       <div class="r-sub" id="undecidedMsg" style="margin-top:8px"></div>
@@ -2283,16 +2329,13 @@
     const msg = $("#undecidedMsg");
     const noDates = !datesKnown();
     const title = noDates ? "When should we go?" : "Where should we go?";
-    const existing = (state.decisions || []).find((d) => d.title === title);
-    if (existing) { show("decisions"); return; }
+    if ((state.decisions || []).some((d) => d.title === title)) { show("decisions"); return; }
+    // the trip should have opened with this, so an older one just gets it now
     if (msg) msg.textContent = "Starting it…";
-    const row = await Backend.insert("decisions", {
-      trip: TRIP_CODE, title,
-      note: noDates ? "Add the weekends that work for you, then everyone votes." : "Add the places you'd go, then everyone votes.",
-      options: [], status: "open", author: state.me || "",
-    });
-    if (row) { state.decisions.push(row); show("decisions"); }
-    else if (msg) msg.textContent = "Couldn't start it. Check you're online.";
+    await seedUndecidedVotes({ code: TRIP_CODE, start_date: noDates ? "" : TRIP.start_date,
+      end_date: noDates ? "" : TRIP.end_date, destination: noDates ? "x" : "", stops: [] });
+    await hydrate("decisions");
+    show("decisions");
   }
 
   function tickCountdown() {
@@ -3155,6 +3198,35 @@
   /* =========================================================================
      DECISIONS
      ====================================================================== */
+  /* A vote that cannot grow is a dead end when the whole point is "we have not
+     decided". On a trip anyone can put a candidate up; on a wedding the
+     questions belong to the couple, so only they can. */
+  const canAddOption = () => (isWedding() ? isHost() : true) && !!state.me;
+  function optionPlaceholder(d) {
+    const t = String(d.title || "").toLowerCase();
+    if (/where/.test(t)) return "Add a place, e.g. Outer Banks";
+    if (/when/.test(t)) return "Add a window, e.g. first week of June";
+    return "Add another option";
+  }
+  async function addOption(decId) {
+    const inp = $(`[data-decopt="${decId}"]`), msg = $(`[data-decoptmsg="${decId}"]`);
+    const say = (t) => { if (msg) msg.textContent = t; };
+    const label = (inp ? inp.value : "").trim();
+    if (!label) return;
+    if (!state.me) { openWho(); return; }
+    const d = state.decisions.find((x) => String(x.id) === String(decId));
+    if (!d) return;
+    const opts = (d.options || []).slice();
+    if (opts.length >= 12) { say("That's plenty of options already."); return; }
+    if (opts.some((o) => o.label.toLowerCase() === label.toLowerCase())) { say("That one is already up there."); return; }
+    opts.push({ id: slug(label) + "-" + opts.length, label: label.slice(0, 80) });
+    d.options = opts;
+    if (inp) inp.value = "";
+    renderDecisions();
+    const ok = await Backend.update("decisions", decId, { options: opts });
+    if (!ok) { const m = $(`[data-decoptmsg="${decId}"]`); if (m) m.textContent = "Saved on this phone. It will sync when you're back online."; }
+  }
+
   function renderDecisions() {
     const s = $("#screen-decisions");
     s.innerHTML = `
@@ -3180,6 +3252,12 @@
               </button>`;
             }).join("")}
           </div>
+          ${(d.options || []).length ? "" : `<p class="r-sub" style="margin:2px 0 0">Nothing to vote on yet. Put the first one up.</p>`}
+          ${canAddOption() ? `<div class="dec-add-opt">
+            <input data-decopt="${d.id}" placeholder="${esc(optionPlaceholder(d))}" />
+            <button class="btn ghost" data-decoptadd="${d.id}">＋ Add</button>
+          </div>
+          <div class="r-sub" data-decoptmsg="${d.id}"></div>` : ""}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
             <span class="r-sub" style="font-size:11px">${author ? "asked by " + esc(author.split(" ")[0]) : ""}</span>
             ${d.author === state.me ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
@@ -3209,6 +3287,10 @@
     }));
     bindComments(s);
     const dA = $("#decAdd"); if (dA) dA.addEventListener("click", addDecision);
+    s.querySelectorAll("[data-decoptadd]").forEach((b) => b.addEventListener("click", () => addOption(b.dataset.decoptadd)));
+    s.querySelectorAll("[data-decopt]").forEach((i) => i.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); addOption(i.dataset.decopt); }
+    }));
     const dw = $("#decWho"); if (dw) dw.addEventListener("click", openWho);
   }
   async function addDecision() {

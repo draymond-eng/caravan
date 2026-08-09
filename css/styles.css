@@ -1089,3 +1089,10 @@ body[data-tod="night"] .topbar {
 /* A trip can start before its dates do. */
 .wiz-tbd { display: flex; gap: 8px; margin-top: 2px; }
 .wiz-tbd .chip { flex: 1; justify-content: center; text-align: center; }
+
+/* A vote can grow options after it is posted, because "we haven't decided"
+   is exactly when nobody has the list yet. */
+.dec-add-opt { display: flex; gap: 8px; margin-top: 10px; }
+.dec-add-opt input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-sm); font-size: 14px; background: #fffdfa; color: var(--ink); }
+.dec-add-opt .btn { flex: 0 0 auto; }
