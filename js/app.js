@@ -1000,6 +1000,10 @@
     $("#moreTab").addEventListener("click", () => {
       const sheet = $("#moreSheet");
       if (sheet.classList.contains("open")) return closeSheet();
+      // The sheet is the one bit of chrome you can open without rendering a
+      // screen, so it decides for itself what belongs on it rather than
+      // trusting whenever renderCurrent last ran.
+      syncSheetItems();
       sheet.classList.add("open"); $("#sheetBackdrop").classList.add("open");
     });
     $("#sheetBackdrop").addEventListener("click", closeSheet);
@@ -3712,18 +3716,34 @@
   async function claimOrganiser() {
     if (!state.me) { openWho(); return; }
     const el = $("#orgMsg"); if (el) el.textContent = "Saving…";
-    const hosts = organisers().concat([state.me]).filter((v, i, a) => a.indexOf(v) === i);
+    // "everyone" is the thing being fixed, so claiming narrows to you rather
+    // than adding you to a list that already has you on it
+    const hosts = everyoneIsOrganiser() ? [state.me]
+      : organisers().concat([state.me]).filter((v, i, a) => a.indexOf(v) === i);
     const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
     if (!ok) { if (el) el.textContent = "Couldn't save that. Check you're online."; return; }
     TRIP.hosts = hosts;
     renderAll();
   }
+  /* Two ways a group trip ends up with nobody minding the dates: it was made
+     before the app asked, so the list is empty, or it used to be a wedding, so
+     the list is literally everybody. Both mean one stray tap moves the trip
+     for all of you, and both are the same tap to fix. */
+  const everyoneIsOrganiser = () => {
+    const heads = (TRIP.travelers || []).length;
+    return heads > 2 && organisers().length >= heads;
+  };
   function organiserCard() {
-    if (isWedding() || organisers().length) return "";
+    if (isWedding()) return "";
+    const loose = everyoneIsOrganiser();
+    if (organisers().length && !loose) return "";
     return `<div class="card avail-set">
       <div class="r-sub" style="font-weight:800">Who's running this trip?</div>
-      <p class="section-sub" style="margin:6px 0 10px">Everyone votes, adds ideas and edits the plan. But locking in the dates moves the trip for all of you at once, so that one is down to the organiser. Say who that is and the board stops being one stray tap away from being decided.</p>
-      <button class="btn primary" id="claimOrg" style="width:100%">${state.me ? "I'm running this trip" : "Pick your name first"}</button>
+      <p class="section-sub" style="margin:6px 0 10px">${loose
+        ? `Right now all ${organisers().length} of you can lock in the dates, so the trip is one stray tap away from being decided. Take it on yourself and everyone else still votes, adds ideas and edits the plan exactly as they do now.`
+        : "Everyone votes, adds ideas and edits the plan. But locking in the dates moves the trip for all of you at once, so that one is down to the organiser. Say who that is and the board stops being one stray tap away from being decided."}</p>
+      <button class="btn primary" id="claimOrg" style="width:100%">${state.me
+        ? (loose ? "Just me, thanks" : "I'm running this trip") : "Pick your name first"}</button>
       <div class="r-sub" id="orgMsg" style="margin-top:8px"></div>
     </div>`;
   }
@@ -6103,6 +6123,10 @@
     const patch = { mode: toWedding ? "wedding" : "trip" };
     // a wedding with no hosts is a wedding nobody can administer
     if (toWedding && !((TRIP.hosts || []).length)) patch.hosts = state.me ? [state.me] : (TRIP.travelers || []).map((t) => t.id);
+    /* A wedding lists every host, which on a group trip would mean everyone
+       can lock the dates for everyone. Coming back the other way it narrows to
+       whoever is doing the switching, which is the person running the trip. */
+    if (!toWedding && state.me && (TRIP.hosts || []).length > 1) patch.hosts = [state.me];
     const ok = await Backend.updateTrip(TRIP_CODE, patch);
     if (!ok) { say("Couldn't switch it. Check you're online."); return; }
     Object.assign(TRIP, patch);
@@ -6507,7 +6531,10 @@
     settings: renderSettings, assistant: renderAssistant, announce: renderAnnounce, booking: renderBooking, groups: renderGroups, map: renderMap,
     fares: renderFares, dayof: renderDayOf, seating: renderSeating, outfits: renderOutfits,
   };
-  function renderCurrent() {
+  /* Seating charts and a Day of run sheet are wedding furniture. On a group
+     trip they are noise at best, and a signal that the app has misread what
+     this trip is at worst. */
+  function syncSheetItems() {
     if (!TRIP) return;
     // Day of is the couple's working document, so it only appears for them.
     const hostOnly = isWedding() && isHost();
@@ -6518,6 +6545,10 @@
     // Outfits is a group-trip thing. See the note on outfitsOn().
     const fitTab = $("#sheetOutfits");
     if (fitTab) fitTab.hidden = !outfitsOn();
+  }
+  function renderCurrent() {
+    if (!TRIP) return;
+    syncSheetItems();
     paintTimeOfDay();
     const active = $("#tripApp .screen.active");
     const id = active ? active.id.replace("screen-", "") : "home";
