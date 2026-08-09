@@ -1096,3 +1096,9 @@ body[data-tod="night"] .topbar {
 .dec-add-opt input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--line);
   border-radius: var(--r-sm); font-size: 14px; background: #fffdfa; color: var(--ink); }
 .dec-add-opt .btn { flex: 0 0 auto; }
+
+/* Adding yourself sits with the names, not off in a corner, because the list
+   the host typed is always missing someone. */
+.who-opt.who-add { border-style: dashed; color: var(--ai-2); font-weight: 700; }
+.who-opt.who-add .who-plus { display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  border-radius: 50%; background: rgba(92,74,153,.10); font-size: 16px; }

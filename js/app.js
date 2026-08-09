@@ -1288,8 +1288,15 @@
   }
   function openWho() {
     if (isWedding()) { openWhoWedding(); return; }
-    $("#whoOptions").innerHTML = (TRIP.travelers || []).map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">
-      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("");
+    const travs = TRIP.travelers || [];
+    /* Whoever set the trip up typed a list from memory, and that list is
+       always missing someone: the plus one, the friend who got the link
+       forwarded, the name spelled wrong. Adding yourself has to be right
+       there, not something to ask the host for. */
+    $("#whoOptions").innerHTML = travs.map((t) => `<div class="who-opt ${state.me === t.id ? "sel" : ""}" data-me="${t.id}">
+      ${avatarHTML(t, 34, 12)}${esc(t.name)}</div>`).join("")
+      + `<div class="who-opt who-add" id="whoAddMe"><span class="who-plus">＋</span>${
+        travs.length ? "I'm not on this list" : "Add yourself to the trip"}</div>`;
     $$("#whoOptions [data-me]").forEach((o) => o.addEventListener("click", () => {
       const first = !state.me;
       state.me = o.dataset.me; LS.set("me", state.me); renderWhoami();
@@ -1299,10 +1306,14 @@
     }));
     const am = $("#whoAddMe"); if (am) am.addEventListener("click", () => {
       $("#whoOptions").innerHTML = `
-        <input id="whoNewName" placeholder="Your full name" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;margin-bottom:10px" />
-        <button class="btn primary" id="whoNewSave" style="width:100%">That's me, add me to the guest list</button>
+        <input id="whoNewName" placeholder="Your full name" autocomplete="name" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;margin-bottom:10px" />
+        <button class="btn primary" id="whoNewSave" style="width:100%">That's me, add me to the ${isWedding() ? "guest list" : "trip"}</button>
         <div id="whoNewMsg" class="r-sub" style="margin-top:6px"></div>`;
       $("#whoNewName").focus();
+      $("#whoNewName").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); $("#whoNewSave").click(); }
+        if (e.key === "Escape") openWho();
+      });
       $("#whoNewSave").addEventListener("click", async () => {
         const name = $("#whoNewName").value.trim();
         if (!name) { $("#whoNewMsg").textContent = "Type your name first."; return; }
@@ -3202,6 +3213,11 @@
      decided". On a trip anyone can put a candidate up; on a wedding the
      questions belong to the couple, so only they can. */
   const canAddOption = () => (isWedding() ? isHost() : true) && !!state.me;
+  /* Whoever asked it can reword it. So can a host, which on a group trip is
+     everyone, and which matters for the questions the app seeded itself with
+     since those have no author to claim them. */
+  const canEditDecision = (d) => !!state.me && (isHost() || d.author === state.me);
+  let decEditing = null;
   function optionPlaceholder(d) {
     const t = String(d.title || "").toLowerCase();
     if (/where/.test(t)) return "Add a place, e.g. Outer Banks";
@@ -3227,6 +3243,34 @@
     if (!ok) { const m = $(`[data-decoptmsg="${decId}"]`); if (m) m.textContent = "Saved on this phone. It will sync when you're back online."; }
   }
 
+  async function saveDecision(id) {
+    const d = state.decisions.find((x) => String(x.id) === String(id));
+    if (!d) return;
+    const t = $(`[data-dectitle="${id}"]`), n = $(`[data-decnote="${id}"]`);
+    const title = (t ? t.value : "").trim();
+    if (!title) { if (t) t.focus(); return; }
+    const patch = { title: title.slice(0, 140), note: (n ? n.value : "").trim().slice(0, 300) };
+    Object.assign(d, patch);
+    decEditing = null;
+    renderDecisions();
+    await Backend.update("decisions", id, patch);
+  }
+  /* Removing an option takes its votes with it, otherwise the tally counts
+     people against something that is no longer on the ballot. */
+  async function removeOption(key) {
+    const [id, optId] = key.split("#");
+    const d = state.decisions.find((x) => String(x.id) === String(id));
+    if (!d) return;
+    const gone = (d.options || []).find((o) => o.id === optId);
+    const voters = (tally("decision", id)[optId] || []).slice();   // read before we clear them
+    if (voters.length && !confirm(`"${gone ? gone.label : "That option"}" has ${voters.length} vote${voters.length === 1 ? "" : "s"}. Remove it anyway?`)) return;
+    d.options = (d.options || []).filter((o) => o.id !== optId);
+    state.allVotes = state.allVotes.filter((v) => !(v.kind === "decision" && v.topic === id && v.choice === optId));
+    renderDecisions();
+    await Backend.update("decisions", id, { options: d.options });
+    for (const voter of voters) await Backend.castVote(TRIP_CODE, "decision", id, null, voter);
+  }
+
   function renderDecisions() {
     const s = $("#screen-decisions");
     s.innerHTML = `
@@ -3237,19 +3281,34 @@
         const mine = myVote("decision", d.id);
         const counts = tally("decision", d.id);
         const author = d.author ? (byId(d.author) || {}).name : "";
+        const editing = decEditing === d.id;
         return `<div class="card">
-          <h3 style="margin:0">${esc(d.title)}</h3>
-          ${d.note ? `<p class="section-sub" style="margin:8px 0 12px">${esc(d.note)}</p>` : `<div style="height:8px"></div>`}
+          ${editing ? `<div class="expense-add" style="margin:0 0 12px">
+            <input data-dectitle="${d.id}" value="${esc(d.title)}" placeholder="The question" />
+            <input data-decnote="${d.id}" value="${esc(d.note || "")}" placeholder="Context (optional)" />
+            <div class="btn-row">
+              <button class="btn ghost" data-deccancel="${d.id}" style="flex:1">Cancel</button>
+              <button class="btn primary" data-decsave="${d.id}" style="flex:2">Save</button>
+            </div>
+          </div>`
+          : `<div style="display:flex;align-items:flex-start;gap:8px">
+            <h3 style="margin:0;flex:1">${esc(d.title)}</h3>
+            ${canEditDecision(d) ? `<button class="tl-map" data-decedit="${d.id}" style="flex:0 0 auto">Edit</button>` : ""}
+          </div>
+          ${d.note ? `<p class="section-sub" style="margin:8px 0 12px">${esc(d.note)}</p>` : `<div style="height:8px"></div>`}`}
           <div style="display:grid;gap:8px">
             ${(d.options || []).map((o) => {
               const voters = counts[o.id] || [];
               const sel = mine === o.id;
-              return `<button class="who-opt ${sel ? "sel" : ""}" data-dec="${d.id}" data-opt="${o.id}" style="text-align:left;width:100%;align-items:flex-start">
-                <span style="font-size:18px;margin-top:1px">${sel ? "🔘" : "⚪"}</span>
-                <div style="flex:1;min-width:0"><div style="font-weight:700">${esc(o.label)}</div>
-                  ${voters.length ? `<div class="tally">${voterChips(voters)}<span class="tally-n">${voters.length}</span></div>` : ""}
-                </div>
-              </button>`;
+              return `<div style="display:flex;align-items:center;gap:6px">
+                <button class="who-opt ${sel ? "sel" : ""}" data-dec="${d.id}" data-opt="${o.id}" style="text-align:left;flex:1;min-width:0;align-items:flex-start">
+                  <span style="font-size:18px;margin-top:1px">${sel ? "🔘" : "⚪"}</span>
+                  <div style="flex:1;min-width:0"><div style="font-weight:700">${esc(o.label)}</div>
+                    ${voters.length ? `<div class="tally">${voterChips(voters)}<span class="tally-n">${voters.length}</span></div>` : ""}
+                  </div>
+                </button>
+                ${editing ? `<button class="btn danger" data-decrmopt="${d.id}#${o.id}" style="flex:0 0 auto" aria-label="Remove this option">✕</button>` : ""}
+              </div>`;
             }).join("")}
           </div>
           ${(d.options || []).length ? "" : `<p class="r-sub" style="margin:2px 0 0">Nothing to vote on yet. Put the first one up.</p>`}
@@ -3260,7 +3319,7 @@
           <div class="r-sub" data-decoptmsg="${d.id}"></div>` : ""}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
             <span class="r-sub" style="font-size:11px">${author ? "asked by " + esc(author.split(" ")[0]) : ""}</span>
-            ${d.author === state.me ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
+            ${canEditDecision(d) ? `<button class="btn danger" data-decdel="${d.id}">Remove</button>` : ""}
           </div>
           ${commentBlock("decision:" + d.id)}
         </div>`;
@@ -3288,6 +3347,10 @@
     bindComments(s);
     const dA = $("#decAdd"); if (dA) dA.addEventListener("click", addDecision);
     s.querySelectorAll("[data-decoptadd]").forEach((b) => b.addEventListener("click", () => addOption(b.dataset.decoptadd)));
+    s.querySelectorAll("[data-decedit]").forEach((b) => b.addEventListener("click", () => { decEditing = b.dataset.decedit; renderDecisions(); }));
+    s.querySelectorAll("[data-deccancel]").forEach((b) => b.addEventListener("click", () => { decEditing = null; renderDecisions(); }));
+    s.querySelectorAll("[data-decsave]").forEach((b) => b.addEventListener("click", () => saveDecision(b.dataset.decsave)));
+    s.querySelectorAll("[data-decrmopt]").forEach((b) => b.addEventListener("click", () => removeOption(b.dataset.decrmopt)));
     s.querySelectorAll("[data-decopt]").forEach((i) => i.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); addOption(i.dataset.decopt); }
     }));
