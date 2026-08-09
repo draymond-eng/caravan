@@ -691,6 +691,49 @@
     state.allVotes.filter((v) => v.kind === kind && v.topic === topic).forEach((v) => (m[v.choice] = m[v.choice] || []).push(v.voter));
     return m;
   }
+  /* Some questions have one answer and some have several. A multi-answer vote
+     keeps its picks in the one row the unique constraint allows, comma joined,
+     so it needs no migration and an old client still reads something sane. */
+  /* Which questions take several answers lives in trips.links, not a new
+     column: an insert against a column the database has not got yet fails
+     outright, and nobody should have to run a migration to ask a question. */
+  const multiIds = () => ((TRIP.links || {}).multi_dec || []);
+  const isMulti = (d) => !!d && multiIds().includes(String(d.id));
+  async function setMulti(id, on) {
+    const cur = multiIds().filter((x) => x !== String(id));
+    if (on) cur.push(String(id));
+    await saveLinks({ multi_dec: cur }, ["multi_dec"]);
+  }
+  const splitChoice = (c) => String(c == null ? "" : c).split(",").map((x) => x.trim()).filter(Boolean);
+  function myPicks(topic) { return splitChoice(myVote("decision", topic)); }
+  function tallyMulti(topic) {
+    const m = {};
+    state.allVotes.filter((v) => v.kind === "decision" && v.topic === topic).forEach((v) => {
+      splitChoice(v.choice).forEach((c) => (m[c] = m[c] || []).push(v.voter));
+    });
+    return m;
+  }
+  /* Going from many answers back to one would leave old rows holding a comma
+     list, which reads as a vote for an option that does not exist. */
+  async function collapseMultiVotes(topic) {
+    const rows = state.allVotes.filter((v) => v.kind === "decision" && v.topic === topic && splitChoice(v.choice).length > 1);
+    for (const r of rows) {
+      const first = splitChoice(r.choice)[0];
+      r.choice = first;
+      await Backend.castVote(TRIP_CODE, "decision", topic, first, r.voter);
+    }
+  }
+  async function togglePick(topic, optId) {
+    if (!state.me) { openWho(); return; }
+    const cur = myPicks(topic);
+    const next = cur.includes(optId) ? cur.filter((x) => x !== optId) : cur.concat(optId);
+    const joined = next.join(",");
+    state.allVotes = state.allVotes.filter((v) => !(v.kind === "decision" && v.topic === topic && v.voter === state.me));
+    if (joined) state.allVotes.push({ kind: "decision", topic, choice: joined, voter: state.me });
+    renderDecisions();
+    await Backend.castVote(TRIP_CODE, "decision", topic, joined || null, state.me);
+  }
+
   async function setVote(kind, topic, choice) {
     if (!state.me) { openWho(); return; }
     const cur = myVote(kind, topic);
@@ -1698,13 +1741,9 @@
   }
   async function seedUndecidedVotes(trip) {
     const jobs = [];
-    if (!trip.start_date || !trip.end_date) {
-      jobs.push(Backend.insert("decisions", {
-        trip: trip.code, title: "When should we go?",
-        note: "Pick every month that works for you. Once one wins we'll narrow it to a weekend.",
-        options: nextMonths(6), status: "open", author: "",
-      }));
-    }
+    // "when" is not a seeded question any more: the Votes tab grows an
+    // availability picker on its own whenever the trip has no dates, which
+    // beats a month-shaped poll you cannot narrow.
     if (!trip.destination && !(trip.stops || []).length) {
       jobs.push(Backend.insert("decisions", {
         trip: trip.code, title: "Where should we go?",
@@ -2320,17 +2359,19 @@
     const noWhere = !(TRIP.stops || []).length && !TRIP.destination;
     if (!noDates && !noWhere) return "";
     const missing = noDates && noWhere ? "when or where" : noDates ? "when" : "where";
-    const titles = [noDates ? "When should we go?" : null, noWhere ? "Where should we go?" : null].filter(Boolean);
-    const live = (state.decisions || []).filter((d) => titles.includes(d.title));
-    const votes = live.reduce((n, d) => n + Object.values(tally("decision", d.id)).reduce((m, v) => m + v.length, 0), 0);
+    const live = (state.decisions || []).filter((d) => d.title === "Where should we go?");
+    const answered = new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter)).size;
+    const votes = live.reduce((n, d) => n + Object.values(tallyMulti(d.id)).reduce((m, v) => m + v.length, 0), 0) + answered;
     const heads = (TRIP.travelers || []).length;
+    const top = noDates ? bestWeeks(1)[0] : null;
     return `<div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fffaf0,#fdf4e4)">
-      <h3>🗳️ ${live.length ? `First things first: ${missing}` : `You haven't settled ${missing} yet`}</h3>
-      <p class="section-sub" style="margin:4px 0 12px">${live.length
-        ? `The vote is up. ${votes ? `<b>${votes}</b> ${votes === 1 ? "vote is" : "votes are"} in${heads ? ` from ${heads} on the trip` : ""}.` : "Nobody has voted yet."} Once it lands, put it in Settings and the countdown, the booking deadlines and the weather all start working.`
-        : "That is fine this early. Put it to the group and decide it together, then fill it in and everything else here starts working."}</p>
+      <h3>🗳️ First things first: ${missing}</h3>
+      <p class="section-sub" style="margin:4px 0 12px">${
+        top ? `<b>${weekLabel(top.id)}</b> is ahead so far, ${top.who.length} of ${heads || top.who.length} free. ` : ""}${
+        votes ? `<b>${votes}</b> ${votes === 1 ? "answer is" : "answers are"} in.` : "Nobody has weighed in yet."} ${
+        noDates ? "Open the months that could work and tick the weeks you're free." : "Add the places you'd actually go, then everyone votes."}</p>
       <div class="btn-row">
-        <button class="btn primary" id="undecidedAsk" style="flex:2">${live.length ? "🗳️ Open the vote" : "🗳️ Ask the group"}</button>
+        <button class="btn primary" id="undecidedAsk" style="flex:2">${noDates ? "🗓️ Say when you're free" : "🗳️ Open the vote"}</button>
         <button class="btn ghost" data-go="settings" style="flex:1">Fill it in</button>
       </div>
       <div class="r-sub" id="undecidedMsg" style="margin-top:8px"></div>
@@ -2338,14 +2379,12 @@
   }
   async function startUndecidedVote() {
     const msg = $("#undecidedMsg");
-    const noDates = !datesKnown();
-    const title = noDates ? "When should we go?" : "Where should we go?";
-    if ((state.decisions || []).some((d) => d.title === title)) { show("decisions"); return; }
-    // the trip should have opened with this, so an older one just gets it now
-    if (msg) msg.textContent = "Starting it…";
-    await seedUndecidedVotes({ code: TRIP_CODE, start_date: noDates ? "" : TRIP.start_date,
-      end_date: noDates ? "" : TRIP.end_date, destination: noDates ? "x" : "", stops: [] });
-    await hydrate("decisions");
+    // dates need no seeding: the Votes tab carries the availability picker
+    if (datesKnown() && !(state.decisions || []).some((d) => d.title === "Where should we go?")) {
+      if (msg) msg.textContent = "Starting it…";
+      await seedUndecidedVotes({ code: TRIP_CODE, start_date: TRIP.start_date, end_date: TRIP.end_date, destination: "", stops: [] });
+      await hydrate("decisions");
+    }
     show("decisions");
   }
 
@@ -3249,11 +3288,18 @@
     const t = $(`[data-dectitle="${id}"]`), n = $(`[data-decnote="${id}"]`);
     const title = (t ? t.value : "").trim();
     if (!title) { if (t) t.focus(); return; }
+    const mu = $(`[data-decmulti="${id}"]`);
     const patch = { title: title.slice(0, 140), note: (n ? n.value : "").trim().slice(0, 300) };
     Object.assign(d, patch);
+    const wantMulti = mu ? !!mu.checked : isMulti(d);
     decEditing = null;
     renderDecisions();
     await Backend.update("decisions", id, patch);
+    if (wantMulti !== isMulti(d)) {
+      await setMulti(id, wantMulti);
+      if (!wantMulti) await collapseMultiVotes(id);
+      renderDecisions();
+    }
   }
   /* Removing an option takes its votes with it, otherwise the tally counts
      people against something that is no longer on the ballot. */
@@ -3271,21 +3317,203 @@
     for (const voter of voters) await Backend.castVote(TRIP_CODE, "decision", id, null, voter);
   }
 
+  /* =========================================================================
+     WHEN CAN EVERYONE GO
+
+     "Which month" is too coarse to book anything and "which exact days" is
+     too much to ask six months out. So it is two taps: open the months that
+     could work, then tick the weeks inside them you are actually free. The
+     answer falls out of the overlap.
+
+     One row per person per month (kind "avail", topic the month), with the
+     weeks comma joined into the single choice the unique constraint allows.
+     No migration, and it reads as nonsense to nothing.
+     ====================================================================== */
+  const AVAIL = "avail";
+  const monthLabel = (id) => new Date(id + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  /* Weeks are Monday to Sunday and belong to the month their Thursday is in,
+     so a week is never offered twice and never split across two cards. */
+  function weeksOf(monthId) {
+    const [y, m] = monthId.split("-").map(Number);
+    const out = [];
+    const d = new Date(y, m - 1, 1);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));      // back to Monday
+    for (let i = 0; i < 6; i++) {
+      const thu = new Date(d); thu.setDate(thu.getDate() + 3);
+      if (thu.getMonth() === m - 1) {
+        const end = new Date(d); end.setDate(end.getDate() + 6);
+        out.push({
+          id: isoDay(d),
+          start: isoDay(d), end: isoDay(end),
+          label: `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        });
+      }
+      d.setDate(d.getDate() + 7);
+    }
+    return out;
+  }
+  const availMonths = () => nextMonths(6).map((x) => x.id);
+  const myWeeks = (monthId) => splitChoice(myVote(AVAIL, monthId));
+  /* Everyone's weeks, flattened: week id -> voters free that week. */
+  function weekTally() {
+    const m = {};
+    state.allVotes.filter((v) => v.kind === AVAIL).forEach((v) => {
+      splitChoice(v.choice).forEach((w) => (m[w] = m[w] || []).push(v.voter));
+    });
+    return m;
+  }
+  function bestWeeks(n) {
+    const t = weekTally();
+    return Object.keys(t)
+      .map((id) => ({ id, who: t[id] }))
+      .sort((a, b) => b.who.length - a.who.length || a.id.localeCompare(b.id))
+      .slice(0, n || 3);
+  }
+  const weekLabel = (id) => {
+    const a = new Date(id + "T12:00:00"), b = new Date(a); b.setDate(b.getDate() + 6);
+    return `${a.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${b.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  };
+  async function toggleWeek(monthId, weekId) {
+    if (!state.me) { openWho(); return; }
+    const cur = myWeeks(monthId);
+    const next = cur.includes(weekId) ? cur.filter((x) => x !== weekId) : cur.concat(weekId).sort();
+    const joined = next.join(",");
+    state.allVotes = state.allVotes.filter((v) => !(v.kind === AVAIL && v.topic === monthId && v.voter === state.me));
+    if (joined) state.allVotes.push({ kind: AVAIL, topic: monthId, choice: joined, voter: state.me });
+    renderDecisions();
+    await Backend.castVote(TRIP_CODE, AVAIL, monthId, joined || null, state.me);
+  }
+  let openMonths = null;
+  function availCard() {
+    if (datesKnown()) return "";
+    if (openMonths == null) {
+      // start with whatever you already said yes to open, so it picks up where you left off
+      openMonths = new Set(availMonths().filter((id) => myWeeks(id).length));
+    }
+    const heads = (TRIP.travelers || []).length || 1;
+    const best = bestWeeks(3).filter((w) => w.who.length > 0);
+    const answered = new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter)).size;
+    return `<div class="card avail-card">
+      <h3 style="margin:0">🗓️ When can everyone go?</h3>
+      <p class="section-sub" style="margin:6px 0 12px">Open the months that could work, then tick the weeks you're actually free. ${
+        answered ? `<b>${answered}</b> of ${heads} ${answered === 1 ? "has" : "have"} answered.` : "Nobody has answered yet."}</p>
+      ${best.length ? `<div class="avail-best">
+        <div class="r-sub" style="font-weight:800;margin-bottom:6px">Best so far</div>
+        ${best.map((w) => `<div class="avail-best-row">
+          <div style="flex:1;min-width:0"><b>${weekLabel(w.id)}</b>
+            <div class="tally" style="margin-top:2px">${voterChips(w.who)}<span class="tally-n">${w.who.length} of ${heads} free</span></div></div>
+          ${isHost() ? `<button class="btn ghost" data-availuse="${w.id}">Use it</button>` : ""}
+        </div>`).join("")}
+      </div>` : ""}
+      <div class="avail-months">
+        ${availMonths().map((id) => {
+          const open = openMonths.has(id);
+          const mine = myWeeks(id);
+          return `<div class="avail-month ${open ? "open" : ""}">
+            <button class="avail-head" data-availmonth="${id}">
+              <span class="avail-caret">▶</span>
+              <span style="flex:1;text-align:left">${monthLabel(id)}</span>
+              ${mine.length ? `<span class="avail-count">${mine.length} week${mine.length === 1 ? "" : "s"}</span>` : ""}
+            </button>
+            ${open ? `<div class="avail-weeks">
+              ${weeksOf(id).map((w) => {
+                const who = weekTally()[w.id] || [];
+                const on = mine.includes(w.id);
+                return `<button class="avail-week ${on ? "on" : ""}" data-availweek="${id}#${w.id}">
+                  <span style="font-size:17px">${on ? "☑️" : "⬜️"}</span>
+                  <span style="flex:1;text-align:left">${w.label}</span>
+                  ${who.length ? `<span class="tally" style="margin:0">${voterChips(who)}</span>` : ""}
+                </button>`;
+              }).join("")}
+            </div>` : ""}
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="r-sub" id="availMsg" style="margin-top:8px"></div>
+    </div>`;
+  }
+  /* Turning the winning week into the trip's actual dates is the whole point,
+     so it is one tap rather than a trip to Settings. */
+  async function useWeek(weekId) {
+    const a = new Date(weekId + "T12:00:00"), b = new Date(a); b.setDate(b.getDate() + 6);
+    const start = isoDay(a), end = isoDay(b);
+    const say = (t) => { const el = $("#availMsg"); if (el) el.textContent = t; };
+    if (!confirm(`Set the trip to ${weekLabel(weekId)}? Everyone sees it straight away, and you can change it in Settings.`)) return;
+    say("Setting the dates…");
+    const ok = await Backend.updateTrip(TRIP_CODE, { start_date: start, end_date: end });
+    if (!ok) { say("Couldn't save that. Check you're online."); return; }
+    TRIP.start_date = start; TRIP.end_date = end;
+    $("#brandSub").textContent = fmtRange(start, end);
+    renderAll();
+    show("home");
+  }
+
+  /* A vote that lands has to actually change the trip, or it is just a poll.
+     When a "where" question has a leader, offer to make it the destination:
+     that fills the timezone, the weather, the map and every screen that has
+     been saying it does not know where this is. */
+  const isPlaceVote = (d) => /\bwhere\b/i.test(d.title || "");
+  function leaderOf(d, counts) {
+    const ranked = (d.options || []).map((o) => ({ o, n: (counts[o.id] || []).length }))
+      .sort((a, b) => b.n - a.n);
+    if (!ranked.length || !ranked[0].n) return null;
+    const tie = ranked.length > 1 && ranked[1].n === ranked[0].n;
+    return { ...ranked[0], tie };
+  }
+  function placeWinnerRow(d, counts) {
+    if (!isPlaceVote(d) || datesKnownPlace()) return "";
+    const lead = leaderOf(d, counts);
+    if (!lead) return "";
+    const heads = (TRIP.travelers || []).length;
+    return `<div class="dec-winner">
+      <div style="flex:1;min-width:0">
+        <div class="r-sub" style="font-weight:800">${lead.tie ? "Tied so far" : "Leading"}</div>
+        <b>${esc(lead.o.label)}</b> <span class="r-sub">${lead.n} of ${heads || lead.n}</span>
+      </div>
+      ${isHost() ? `<button class="btn ghost" data-useplace="${d.id}#${lead.o.id}">Make it official</button>` : ""}
+    </div>`;
+  }
+  const datesKnownPlace = () => !!(TRIP.destination || (TRIP.stops || []).length);
+  /* Setting the destination is the recalibration: name, stop, timezone. The
+     stop is what the itinerary, stays and map hang off, so it goes in too. */
+  async function usePlace(key) {
+    const [decId, optId] = key.split("#");
+    const d = state.decisions.find((x) => String(x.id) === String(decId));
+    const opt = d && (d.options || []).find((o) => o.id === optId);
+    if (!opt) return;
+    if (!confirm(`Set this trip's destination to ${opt.label}? Everyone sees it straight away, and Settings can change it.`)) return;
+    const tz = tzForCity(opt.label) || TRIP.tz || "UTC";
+    const stops = (TRIP.stops || []).length ? TRIP.stops : [{ id: slug(opt.label) + "-0", label: opt.label }];
+    const ok = await Backend.updateTrip(TRIP_CODE, { destination: opt.label, tz, stops });
+    if (!ok) { alert("Couldn't save that. Check you're online."); return; }
+    TRIP.destination = opt.label; TRIP.tz = tz; TRIP.stops = stops;
+    // the question is answered, so it stops taking up the top of the board
+    await Backend.update("decisions", decId, { status: "decided" });
+    d.status = "decided";
+    renderAll();
+    show("home");
+  }
+
   function renderDecisions() {
     const s = $("#screen-decisions");
     s.innerHTML = `
       <div class="section-title">Votes</div>
       <div class="section-sub">${isWedding() ? "Questions from the hosts. Tap your pick, tallies update live." : "Open questions for the group. Tap your pick, tallies update live. Anyone can add one."}</div>
+      ${availCard()}
       ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b>. Tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
       ${state.decisions.length ? state.decisions.map((d) => {
+        const multi = isMulti(d);
+        const picks = multi ? myPicks(d.id) : [];
         const mine = myVote("decision", d.id);
-        const counts = tally("decision", d.id);
+        const counts = multi ? tallyMulti(d.id) : tally("decision", d.id);
         const author = d.author ? (byId(d.author) || {}).name : "";
         const editing = decEditing === d.id;
         return `<div class="card">
           ${editing ? `<div class="expense-add" style="margin:0 0 12px">
             <input data-dectitle="${d.id}" value="${esc(d.title)}" placeholder="The question" />
             <input data-decnote="${d.id}" value="${esc(d.note || "")}" placeholder="Context (optional)" />
+            <label class="dec-multi"><input type="checkbox" data-decmulti="${d.id}" ${multi ? "checked" : ""} /> Let people pick more than one</label>
             <div class="btn-row">
               <button class="btn ghost" data-deccancel="${d.id}" style="flex:1">Cancel</button>
               <button class="btn primary" data-decsave="${d.id}" style="flex:2">Save</button>
@@ -3295,14 +3523,15 @@
             <h3 style="margin:0;flex:1">${esc(d.title)}</h3>
             ${canEditDecision(d) ? `<button class="tl-map" data-decedit="${d.id}" style="flex:0 0 auto">Edit</button>` : ""}
           </div>
-          ${d.note ? `<p class="section-sub" style="margin:8px 0 12px">${esc(d.note)}</p>` : `<div style="height:8px"></div>`}`}
+          ${d.note ? `<p class="section-sub" style="margin:8px 0 12px">${esc(d.note)}</p>` : `<div style="height:8px"></div>`}
+          ${multi ? `<div class="r-sub" style="margin:-4px 0 10px">Pick as many as work for you.</div>` : ""}`}
           <div style="display:grid;gap:8px">
             ${(d.options || []).map((o) => {
               const voters = counts[o.id] || [];
-              const sel = mine === o.id;
+              const sel = multi ? picks.includes(o.id) : mine === o.id;
               return `<div style="display:flex;align-items:center;gap:6px">
-                <button class="who-opt ${sel ? "sel" : ""}" data-dec="${d.id}" data-opt="${o.id}" style="text-align:left;flex:1;min-width:0;align-items:flex-start">
-                  <span style="font-size:18px;margin-top:1px">${sel ? "🔘" : "⚪"}</span>
+                <button class="who-opt ${sel ? "sel" : ""}" data-dec="${d.id}" data-opt="${o.id}" data-multi="${multi ? 1 : 0}" style="text-align:left;flex:1;min-width:0;align-items:flex-start">
+                  <span style="font-size:18px;margin-top:1px">${multi ? (sel ? "☑️" : "⬜️") : (sel ? "🔘" : "⚪")}</span>
                   <div style="flex:1;min-width:0"><div style="font-weight:700">${esc(o.label)}</div>
                     ${voters.length ? `<div class="tally">${voterChips(voters)}<span class="tally-n">${voters.length}</span></div>` : ""}
                   </div>
@@ -3312,8 +3541,9 @@
             }).join("")}
           </div>
           ${(d.options || []).length ? "" : `<p class="r-sub" style="margin:2px 0 0">Nothing to vote on yet. Put the first one up.</p>`}
+          ${placeWinnerRow(d, counts)}
           ${canAddOption() ? `<div class="dec-add-opt">
-            <input data-decopt="${d.id}" placeholder="${esc(optionPlaceholder(d))}" />
+            <input data-decopt="${d.id}"${/where/i.test(d.title || "") ? ` data-suggest="city" autocomplete="off"` : ""} placeholder="${esc(optionPlaceholder(d))}" />
             <button class="btn ghost" data-decoptadd="${d.id}">＋ Add</button>
           </div>
           <div class="r-sub" data-decoptmsg="${d.id}"></div>` : ""}
@@ -3333,10 +3563,12 @@
           <input id="decO1" placeholder="Option 2" />
           <input id="decO2" placeholder="Option 3 (optional)" />
           <input id="decO3" placeholder="Option 4 (optional)" />
+          <label class="dec-multi"><input type="checkbox" id="decMulti" /> Let people pick more than one</label>
           <button class="btn primary" id="decAdd">Post it</button>
         </div>
       </div>` : ""}`;
-    s.querySelectorAll("[data-dec]").forEach((b) => b.addEventListener("click", () => setVote("decision", b.dataset.dec, b.dataset.opt)));
+    s.querySelectorAll("[data-dec]").forEach((b) => b.addEventListener("click", () =>
+      (b.dataset.multi === "1" ? togglePick(b.dataset.dec, b.dataset.opt) : setVote("decision", b.dataset.dec, b.dataset.opt))));
     s.querySelectorAll("[data-decdel]").forEach((b) => b.addEventListener("click", async () => {
       const row = state.decisions.find((x) => String(x.id) === String(b.dataset.decdel));
       if (!row) return;
@@ -3351,6 +3583,17 @@
     s.querySelectorAll("[data-deccancel]").forEach((b) => b.addEventListener("click", () => { decEditing = null; renderDecisions(); }));
     s.querySelectorAll("[data-decsave]").forEach((b) => b.addEventListener("click", () => saveDecision(b.dataset.decsave)));
     s.querySelectorAll("[data-decrmopt]").forEach((b) => b.addEventListener("click", () => removeOption(b.dataset.decrmopt)));
+    s.querySelectorAll("[data-availmonth]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.availmonth;
+      if (openMonths.has(id)) openMonths.delete(id); else openMonths.add(id);
+      renderDecisions();
+    }));
+    s.querySelectorAll("[data-availweek]").forEach((b) => b.addEventListener("click", () => {
+      const [m, w] = b.dataset.availweek.split("#");
+      toggleWeek(m, w);
+    }));
+    s.querySelectorAll("[data-availuse]").forEach((b) => b.addEventListener("click", () => useWeek(b.dataset.availuse)));
+    s.querySelectorAll("[data-useplace]").forEach((b) => b.addEventListener("click", () => usePlace(b.dataset.useplace)));
     s.querySelectorAll("[data-decopt]").forEach((i) => i.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); addOption(i.dataset.decopt); }
     }));
@@ -3362,8 +3605,14 @@
     const opts = [0, 1, 2, 3].map((i) => $("#decO" + i).value.trim()).filter(Boolean);
     if (!title || opts.length < 2) { alert("Add the question and at least two options."); return; }
     const options = opts.map((label, i) => ({ id: "opt" + i, label }));
-    const row = await Backend.insert("decisions", { trip: TRIP_CODE, title, note: $("#decNote").value.trim(), options, status: "open", author: state.me });
-    if (row) { state.decisions.push(row); renderDecisions(); }
+    const many = !!($("#decMulti") || {}).checked;
+    const row = await Backend.insert("decisions", { trip: TRIP_CODE, title, note: $("#decNote").value.trim(),
+      options, status: "open", author: state.me });
+    if (row) {
+      state.decisions.push(row);
+      if (many) await setMulti(row.id, true);
+      renderDecisions();
+    }
   }
 
   /* =========================================================================

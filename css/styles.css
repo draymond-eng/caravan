@@ -1102,3 +1102,34 @@ body[data-tod="night"] .topbar {
 .who-opt.who-add { border-style: dashed; color: var(--ai-2); font-weight: 700; }
 .who-opt.who-add .who-plus { display: grid; place-items: center; width: 34px; height: 34px; flex: none;
   border-radius: 50%; background: rgba(92,74,153,.10); font-size: 16px; }
+.dec-multi { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--ink-2);
+  padding: 4px 2px; cursor: pointer; }
+.dec-multi input { width: 18px; height: 18px; accent-color: var(--ai-2); }
+
+/* ---- When can everyone go ---------------------------------------------------
+   Months you open, weeks you tick. Two taps rather than a calendar grid nobody
+   fills in on a phone.
+   -------------------------------------------------------------------------- */
+.avail-card { border-color: var(--gold-soft); }
+.avail-best { background: linear-gradient(180deg,#fffaf0,#fdf4e4); border: 1px solid #f0e2c6;
+  border-radius: var(--r); padding: 12px 13px; margin-bottom: 14px; }
+.avail-best-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.avail-best-row + .avail-best-row { border-top: 1px solid rgba(178,138,52,.16); }
+.avail-months { display: grid; gap: 8px; }
+.avail-month { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--card); }
+.avail-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px;
+  background: none; border: 0; font: inherit; font-size: 14.5px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.avail-caret { color: var(--ink-3); font-size: 11px; transition: transform .2s; }
+.avail-month.open .avail-caret { transform: rotate(90deg); }
+.avail-count { font-size: 11.5px; font-weight: 800; color: var(--ai-2); background: rgba(92,74,153,.10);
+  border-radius: 999px; padding: 3px 9px; }
+.avail-weeks { border-top: 1px solid var(--line-2); padding: 6px; display: grid; gap: 4px; }
+.avail-week { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 10px;
+  background: none; border: 1px solid transparent; border-radius: var(--r-sm); font: inherit; font-size: 14px;
+  color: var(--ink); cursor: pointer; text-align: left; }
+.avail-week.on { background: rgba(92,74,153,.07); border-color: rgba(92,74,153,.22); font-weight: 700; }
+.avail-week:active { background: rgba(92,74,153,.12); }
+.dec-winner { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; padding: 11px 13px;
+  border-radius: var(--r); background: linear-gradient(180deg,#f2f8f3,#e7f1e9); border: 1px solid #d3e5d7; }
+.dec-winner b { font-size: 14.5px; }
+.dec-winner .btn { flex: 0 0 auto; }
