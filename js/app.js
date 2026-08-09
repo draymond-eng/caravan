@@ -598,7 +598,13 @@
 
     renderAll();
     renderWhoami();
-    if (!LSG.get("onboarded", false)) setTimeout(openWelcome, 500);
+    /* Seen-it was stored per device, so anyone who had ever opened one trip
+       never got the walkthrough on any other. It belongs to the trip: each one
+       is a different plan with different people. The exception is whoever just
+       built it, who has been told all this by the wizard. */
+    const built = LSG.get("made_" + TRIP.code, false);
+    if (built) LS.set("onboarded", true);
+    if (!LS.get("onboarded", false)) setTimeout(openWelcome, 500);
     else if (!state.me) setTimeout(openWho, 700);
     else setTimeout(maybeOfferInstall, 1200); // already tagged: nudge once, then snooze
     watchForInviteMoment();
@@ -1040,17 +1046,20 @@
   /* ---- welcome walkthrough (first open on this device) ---------------------- */
   const WELCOME_STEPS = [
     { emoji: "\u{1F4CD}", title: "Welcome to SquadTrip", body: () => `This is <b>${esc(TRIP.name)}</b>, your group's trip HQ. Everything in here is <b>shared live</b>: when anyone votes, plans, or adds something, the whole crew sees it instantly. No accounts, no downloads.` },
-    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `You'll pick your name from the crew list in a second. Your votes, RSVPs, and expenses get tagged to you. That's the whole login.` },
+    { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `Pick your name from the crew list in a second, or tap <b>I'm not on this list</b> and add yourself. Your votes and expenses get tagged to you. That is the whole login.` },
     { emoji: "\u{1F5D3}\uFE0F", title: "Plan it together", body: () => `The <b>Plan</b> tab is the shared itinerary. Anyone can add days and activities, and you tap <b>\uFF0B I'm in</b> on the ones you'd join. Empty plan? The <b>\u2728 AI setup</b> drafts the whole trip (itinerary, destination guide, neighborhoods) for the group to reshape.` },
-    { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b>. Everyone taps their pick and the tallies settle it.` },
-    { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, and ask the <b>\u2728 Assistant</b> anything about your trip. Have a great one.` },
+    { emoji: "\u{1F5F3}\uFE0F", title: "Decide by voting", body: () => `No more 47-message group chats. Pose questions in <b>Votes</b>, submit hotels in <b>Stays</b>, thumbs-up <b>Ideas</b>. Everyone taps their pick and the tallies settle it. Some questions take more than one answer.` },
+    { emoji: "\u{1F5D3}\uFE0F", title: "No dates yet? Say when you're free", body: () => `If the trip has no dates, <b>Votes</b> opens with a month by month picker. Open the months that could work and tick the weeks you're free. The overlap picks the week, and one tap turns it into the trip.` },
+    { emoji: "\u{1F4B0}", title: "\u2026and the boring stuff, handled", body: () => `Split expenses in <b>Budget</b> (it computes who owes who), stash confirmations in the <b>Vault</b>, drop pics in <b>Photos</b>, sort out what you're wearing in <b>Outfits</b>, and ask the <b>\u2728 Assistant</b> anything about your trip.` },
+    { emoji: "\u{1F4F1}", title: "Put it on your home screen", body: () => `It opens full screen and works with no signal, which is what you want once you're actually there. On iPhone: tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>. On Android: the <b>\u22EE</b> menu, then <b>Install app</b>. Have a great one.` },
   ];
   const WEDDING_WELCOME = [
     { emoji: "\u{1F48D}", title: "You're invited", body: () => `Welcome to <b>${esc(TRIP.name)}</b>. Everything about the wedding weekend lives here. Schedule, RSVP, where to stay, travel plans. No accounts, no downloads.` },
     { emoji: "\u{1F44B}", title: "First: say who you are", body: () => `Pick your name from the guest list, or add yourself if you're not on it yet. Your RSVP gets tagged to you. That's the whole login.` },
     { emoji: "\u{1F48C}", title: "RSVP on the Home screen", body: () => `Tap <b>Joyfully accept</b> (and how many are in your party) so the hosts can plan headcounts. You can change it any time.` },
     { emoji: "\u{1F5D3}️", title: "The weekend, in one place", body: () => `The <b>Plan</b> tab has every event: times, dress codes, locations. Tap <b>＋ I'm in</b> on the optional stuff so the hosts know who's joining.` },
-    { emoji: "✈️", title: "Travel, handled", body: () => `Drop your flight into <b>Flights</b> so shuttle groups can be organized, check <b>Stays</b> for the room block, and put your pics in <b>Photos</b> all weekend. See you there!` },
+    { emoji: "✈️", title: "Travel, handled", body: () => `Drop your flight into <b>Flights</b> so shuttle groups can be organized, check <b>Stays</b> for the room block, and put your pics in <b>Photos</b> all weekend.` },
+    { emoji: "\u{1F4F1}", title: "Put it on your home screen", body: () => `It opens full screen and works with no signal, which is what you want at the venue. On iPhone: tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>. On Android: the <b>\u22EE</b> menu, then <b>Install app</b>. See you there!` },
   ];
   const HOST_WELCOME = [
     { emoji: "\u{1F48D}", title: "You're hosting", body: () => `<b>${esc(TRIP.name)}</b> is yours to run. Guests get the invitation side: schedule, RSVP, travel. You get the planning side, and they never see it.` },
@@ -1087,7 +1096,7 @@
     });
   }
   function finishWelcome() {
-    LSG.set("onboarded", true);
+    LS.set("onboarded", true);
     $("#welcomeModal").classList.remove("open");
     if (!state.me) openWho();
     else { maybeOfferInstall(); maybeOfferInvite(); }
@@ -1690,6 +1699,12 @@
       </div>
 
       <div class="card" style="margin-top:16px">
+        <h3>❓ New here?</h3>
+        <p class="section-sub" style="margin:4px 0 10px">The two minute tour of how this works. Worth a look if someone forwarded you the link.</p>
+        <button class="btn ghost" id="showHowto" style="width:100%">How this works</button>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <h3>📍 ${isWedding() ? "Guest code" : "Trip code"}</h3>
         <p class="section-sub" style="margin:4px 0 0">${isWedding() ? "Guests" : "Friends"} join with this code (or the link below).</p>
         <div class="code-big">${esc(TRIP.code)}</div>
@@ -1739,6 +1754,7 @@
       navigator.clipboard?.writeText(url).then(() => { $("#copyLink").textContent = "Copied ✓"; setTimeout(() => $("#copyLink").textContent = "Copy link", 1500); }).catch(() => {});
     });
     const ib = $("#inviteBtn"); if (ib) ib.addEventListener("click", openInvite);
+    const sh = $("#showHowto"); if (sh) sh.addEventListener("click", openWelcome);
     tickCountdown(); renderClocks();
   }
   /* When a trip is created without dates or without a destination, that is not
