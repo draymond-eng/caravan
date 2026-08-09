@@ -3523,15 +3523,16 @@
   let availEditing = false;
   let availForced = false;      // dates are set but they want the picker back
   function availCard() {
-    /* Settling on a week is not the end of the conversation. People change
-       their minds, someone answers late, a flight gets expensive. So the
-       picker never disappears, it just gets out of the way once there are
-       dates: a line saying what they are and a way back in. */
-    if (datesKnown() && !availForced) {
+    const heads = (TRIP.travelers || []).length || 1;
+    const answered = anyAnsweredAvail().size;
+    /* Dates on the trip are not the same thing as the group having answered.
+       Someone can lock a week in while most of the crew has said nothing, and
+       hiding the board behind a "Change" tap at that moment is how a live vote
+       looks dead. So the board only folds away once everybody has actually
+       answered. Until then it stays open, dates or no dates. */
+    const settled = datesKnown() && answered >= heads;
+    if (settled && !availForced) {
       const chosen = weekTally()[TRIP.start_date];
-      const heads = (TRIP.travelers || []).length || 1;
-      const answered = anyAnsweredAvail().size;
-      const thin = answered * 2 <= heads;   // half the room or fewer is worth saying out loud
       return `<div class="card avail-set">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
@@ -3541,15 +3542,9 @@
           </div>
           <button class="btn ghost" id="availReopen" style="flex:0 0 auto">Change</button>
         </div>
-        <div class="r-sub" style="margin-top:8px">${answered
-          ? `Everyone's availability is still on file${chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again.`
-          : "Tap Change to ask everyone when they're free and pick from the overlap."}</div>
-        ${thin ? `<div class="r-sub" style="margin-top:8px;font-weight:700">Only ${answered} of ${heads} had answered when these were locked in.</div>` : ""}
-        ${canFinalize()
-          ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>`
-          : `<div class="r-sub" style="margin-top:8px">${organiserNames().length
-              ? `${esc(organiserNames().join(" and "))} can reopen the vote if these are wrong.`
-              : "The trip organiser can reopen the vote if these are wrong."} Tap Change to tick the weeks you're free either way.</div>`}
+        <div class="r-sub" style="margin-top:8px">All ${heads} have answered${
+          chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again, nothing is deleted.</div>
+        ${canFinalize() ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>` : ""}
       </div>`;
     }
     if (availEditing) {
@@ -3575,9 +3570,11 @@
       // start with whatever you already said yes to open, so it picks up where you left off
       openMonths = new Set(availMonths().filter((id) => myWeeks(id).length));
     }
-    const heads = (TRIP.travelers || []).length || 1;
     const best = bestWeeks(3).filter((w) => w.who.length > 0);
-    const answered = new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter)).size;
+    /* Dates already on the trip while the group is still answering is the
+       confusing case. Say what they are, say plainly that ticking a week is
+       not going to move them, and put the way out right there. */
+    const pending = datesKnown();
     return `<div class="card avail-card">
       <div style="display:flex;align-items:flex-start;gap:8px">
         <h3 style="margin:0;flex:1">🗓️ When can everyone go?</h3>
@@ -3585,16 +3582,21 @@
       </div>
       <p class="section-sub" style="margin:6px 0 12px">Open the months that could work, then tick the weeks you're actually free. ${
         answered ? `<b>${answered}</b> of ${heads} ${answered === 1 ? "has" : "have"} answered.` : "Nobody has answered yet."}</p>
+      ${pending ? `<div class="avail-pending">
+        <div class="r-sub" style="font-weight:800">Currently pencilled in: ${fmtRange(TRIP.start_date, TRIP.end_date)}</div>
+        <div class="r-sub" style="margin-top:4px">${answered < heads
+          ? `${heads - answered} of you still ${heads - answered === 1 ? "has" : "have"} not answered, so keep ticking. Your answer does not move the trip.`
+          : "Ticking a week does not move the trip."}${canFinalize() ? "" : ` ${organiserNames().length ? esc(organiserNames().join(" and ")) : "The organiser"} decides when it is final.`}</div>
+        ${canFinalize() ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>` : ""}
+      </div>` : ""}
       ${best.length ? `<div class="avail-best">
         <div class="r-sub" style="font-weight:800;margin-bottom:6px">Best so far</div>
         ${best.map((w) => `<div class="avail-best-row">
           <div style="flex:1;min-width:0"><b>${weekLabel(w.id)}</b>
             <div class="tally" style="margin-top:2px">${voterChips(w.who)}<span class="tally-n">${w.who.length} of ${heads} free</span></div></div>
-          ${canFinalize() ? `<button class="btn ghost" data-availuse="${w.id}">Lock it in</button>` : ""}
+          ${canFinalize() ? `<button class="btn ghost" data-availuse="${w.id}">${pending && w.id === TRIP.start_date ? "Locked in" : "Lock it in"}</button>` : ""}
         </div>`).join("")}
       </div>` : ""}
-      ${datesKnown() ? `<div class="r-sub" style="margin:-4px 0 12px">Currently set to <b>${fmtRange(TRIP.start_date, TRIP.end_date)}</b>. Picking a week below moves the whole trip.
-        <span class="tl-map" id="availKeep" style="cursor:pointer">Leave it as it is</span></div>` : ""}
       <div class="avail-months">
         ${availMonths().map((id) => {
           const open = openMonths.has(id);
@@ -3877,7 +3879,6 @@
     const ar = $("#availReopen"); if (ar) ar.addEventListener("click", () => { availForced = true; renderDecisions(); });
     const au = $("#availUnlock"); if (au) au.addEventListener("click", clearDates);
     const co = $("#claimOrg"); if (co) co.addEventListener("click", claimOrganiser);
-    const ak = $("#availKeep"); if (ak) ak.addEventListener("click", () => { availForced = false; renderDecisions(); });
     const ac = $("#availCancel"); if (ac) ac.addEventListener("click", () => { availEditing = false; renderDecisions(); });
     let pendingCount = null;
     s.querySelectorAll("[data-availcount]").forEach((b) => b.addEventListener("click", () => {

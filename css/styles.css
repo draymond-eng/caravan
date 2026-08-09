@@ -1115,6 +1115,10 @@ body[data-tod="night"] .topbar {
   border-radius: var(--r); padding: 12px 13px; margin-bottom: 14px; }
 .avail-best-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
 .avail-best-row + .avail-best-row { border-top: 1px solid rgba(178,138,52,.16); }
+/* Dates already pencilled in while the board is still live. Deliberately cooler
+   than "Best so far" so it reads as context, not as the answer. */
+.avail-pending { background: #f4f7fb; border: 1px solid #d9e3ef;
+  border-radius: var(--r); padding: 11px 13px; margin-bottom: 14px; }
 .avail-months { display: grid; gap: 8px; }
 .avail-month { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--card); }
 .avail-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px;
