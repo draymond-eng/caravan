@@ -979,7 +979,11 @@
     $("#sheetBackdrop").addEventListener("click", closeSheet);
     bindSheetGrab();
     $("#whoamiBtn").addEventListener("click", openWho);
-    $("#whoClose").addEventListener("click", () => $("#whoModal").classList.remove("open"));
+    $("#whoClose").addEventListener("click", () => {
+      $("#whoModal").classList.remove("open");
+      // whether or not they tagged themselves, this is the moment to offer it
+      setTimeout(maybeOfferInstall, 400);
+    });
     $("#whoModal").addEventListener("click", (e) => { if (e.target.id === "whoModal") $("#whoModal").classList.remove("open"); });
   }
   function closeSheet() {
@@ -1094,7 +1098,10 @@
     if (!TRIP) return;
     if (!force) {
       if (isStandalone()) return;                       // already installed
-      if (!state.me) return;                            // wait until they're tagged
+      // Normally we wait until someone is tagged, so the ask lands after the
+      // introductions. But a first-time visitor who skipped that is exactly
+      // the person who most needs this, so they get it on the way out.
+      if (!state.me && !LS.get("sawWho", false)) return;
       const snooze = LSG.get("installSnooze", 0);
       if (snooze && Date.now() < snooze) return;        // dismissed recently
       if (LSG.get("installDone", false)) return;
@@ -1330,6 +1337,7 @@
     $("#whoamiAvatar").innerHTML = t ? avatarHTML(t, 26, 10) : "👤";
   }
   function openWho() {
+    LS.set("sawWho", true);
     if (isWedding()) { openWhoWedding(); return; }
     const travs = TRIP.travelers || [];
     /* Whoever set the trip up typed a list from memory, and that list is
@@ -1572,6 +1580,12 @@
     if (isWedding() && isHost()) return hostNeedsYou();
     const cards = [];
     // votes you have not weighed in on
+    // the dates picker is a question too, and the loudest one while it is open
+    if (!datesKnown() && !myAnsweredAvail()) {
+      cards.push(actCard("rose", "When can you go?", "The trip has no dates yet",
+        "Open the months that could work and tick the weeks you're free. The overlap picks the week.",
+        "🗓️ Say when you're free", "decisions"));
+    }
     const open = state.decisions.filter((d) => d.status !== "decided");
     const mine = open.filter((d) => !myVote("decision", d.id));
     if (mine.length) {
@@ -1629,6 +1643,7 @@
 
       ${tzWarningCard()}
       ${undecidedCard()}
+      ${justSettledCard()}
       ${isWedding() ? weddingRsvpCard() : ""}
       ${latestAnnouncementCard()}
 
@@ -1644,8 +1659,7 @@
         ${needsYou()}
         <div class="countdown" id="countdown"></div>
         <div class="clocks" id="clocks"></div>
-        ${bookedAskCard()}
-        ${bookedHostCard()}
+        ${datesKnown() ? bookedAskCard() + bookedHostCard() : ""}
         ${askedCard()}`}
       ${isWedding() ? weddingYouCard() + weddingLinksCard() : ""}
 
@@ -1797,7 +1811,10 @@
       ? "3. Add your flights so we know when to expect you."
       : (datesKnown() ? "3. Check the Booking tab. It says what to book and by when." : "3. Add the dates that work for you so we can pick a weekend."));
     lines.push("");
-    lines.push("Add it to your home screen when it offers. It works without signal, which matters once we're there.");
+    lines.push("Last thing, put it on your home screen. It opens full screen and works with no signal, which matters once we're there.");
+    lines.push("");
+    lines.push("iPhone: tap Share at the bottom of Safari, scroll down, tap Add to Home Screen.");
+    lines.push("Android: tap the ⋮ menu, then Install app.");
     return lines.join("\n");
   }
 
@@ -2360,7 +2377,7 @@
     if (!noDates && !noWhere) return "";
     const missing = noDates && noWhere ? "when or where" : noDates ? "when" : "where";
     const live = (state.decisions || []).filter((d) => d.title === "Where should we go?");
-    const answered = new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter)).size;
+    const answered = anyAnsweredAvail().size;
     const votes = live.reduce((n, d) => n + Object.values(tallyMulti(d.id)).reduce((m, v) => m + v.length, 0), 0) + answered;
     const heads = (TRIP.travelers || []).length;
     const top = noDates ? bestWeeks(1)[0] : null;
@@ -2386,6 +2403,35 @@
       await hydrate("decisions");
     }
     show("decisions");
+  }
+
+  /* Deciding where is the moment the app becomes useful, and the moment a
+     group is most likely to lose momentum. So the screen names what that
+     unlocks and hands over the next thing rather than going quiet. Shown until
+     the plan has days on it, then it has done its job. */
+  function justSettledCard() {
+    if (!datesKnownPlace() || (state.days || []).length) return "";
+    if (isWedding()) return "";
+    const where = TRIP.destination || ((TRIP.stops || [])[0] || {}).label || "";
+    if (!where) return "";
+    const noStays = !state.stayOptions.some((o) => o.kind !== "block");
+    return `<div class="card settled-card">
+      <h3>📍 ${esc(where)} it is</h3>
+      <p class="section-sub" style="margin:4px 0 12px">The plan is empty, which is the right time to fill it. ${
+        datesKnown() ? "" : "Dates can land later, none of this waits on them. "}Pick one:</p>
+      <div class="settled-next">
+        <button class="settled-row" data-go="itinerary">
+          <span class="si">✨</span><span><b>Let the AI draft it</b><br><span class="r-sub">A day by day plan for ${esc(where)}, plus a guide and the neighborhoods. Everything stays editable.</span></span>
+        </button>
+        <button class="settled-row" data-go="stays">
+          <span class="si">🏨</span><span><b>${noStays ? "Put up somewhere to stay" : "Vote on where you sleep"}</b><br><span class="r-sub">${
+            noStays ? "Everyone adds a couple of places, then the group votes." : "Places are in and waiting on votes."}</span></span>
+        </button>
+        <button class="settled-row" data-go="ideas">
+          <span class="si">💡</span><span><b>Throw ideas in</b><br><span class="r-sub">The things people keep saying they want to do. Sort it out later.</span></span>
+        </button>
+      </div>
+    </div>`;
   }
 
   function tickCountdown() {
@@ -3330,6 +3376,8 @@
      No migration, and it reads as nonsense to nothing.
      ====================================================================== */
   const AVAIL = "avail";
+  const myAnsweredAvail = () => state.allVotes.some((v) => v.kind === AVAIL && v.voter === state.me && splitChoice(v.choice).length);
+  const anyAnsweredAvail = () => new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter));
   const monthLabel = (id) => new Date(id + "-01T12:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   /* Weeks are Monday to Sunday and belong to the month their Thursday is in,
@@ -3353,12 +3401,37 @@
     }
     return out;
   }
-  const availMonths = () => nextMonths(6).map((x) => x.id);
+  /* Which months are on the board is the group's call, not a fixed guess. Six
+     starting two months out is a sane default, but a trip aimed at next summer
+     or at three weeks from now needs to say so. Kept in trips.links, so
+     everyone is looking at the same board. */
+  const AVAIL_MAX = 12;
+  function availWindow() {
+    const L = TRIP.links || {};
+    const count = Math.max(2, Math.min(AVAIL_MAX, Number(L.avail_count) || 6));
+    const from = /^\d{4}-\d{2}$/.test(L.avail_from || "") ? L.avail_from : nextMonths(1)[0].id;
+    return { from, count };
+  }
+  function availMonths() {
+    const { from, count } = availWindow();
+    const [y, m] = from.split("-").map(Number);
+    const out = [];
+    const d = new Date(y, m - 1, 1);
+    for (let i = 0; i < count; i++) {
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }
   const myWeeks = (monthId) => splitChoice(myVote(AVAIL, monthId));
-  /* Everyone's weeks, flattened: week id -> voters free that week. */
+  /* Everyone's weeks, flattened: week id -> voters free that week. Scoped to
+     the months currently on the board, so widening or moving the window never
+     leaves a winning week nobody can see. Answers outside it are kept, not
+     deleted, and come back if the window moves back. */
   function weekTally() {
     const m = {};
-    state.allVotes.filter((v) => v.kind === AVAIL).forEach((v) => {
+    const inWindow = new Set(availMonths());
+    state.allVotes.filter((v) => v.kind === AVAIL && inWindow.has(v.topic)).forEach((v) => {
       splitChoice(v.choice).forEach((w) => (m[w] = m[w] || []).push(v.voter));
     });
     return m;
@@ -3385,8 +3458,28 @@
     await Backend.castVote(TRIP_CODE, AVAIL, monthId, joined || null, state.me);
   }
   let openMonths = null;
+  let availEditing = false;
   function availCard() {
     if (datesKnown()) return "";
+    if (availEditing) {
+      const { from, count } = availWindow();
+      return `<div class="card avail-card">
+        <h3 style="margin:0 0 4px">🗓️ Which months are we looking at?</h3>
+        <p class="section-sub" style="margin:0 0 12px">Everyone sees the same window, so widen it if the trip is further out than this.</p>
+        <label class="wiz-label">Start from</label>
+        <input id="availFrom" type="month" value="${esc(from)}" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:15px;background:#fffdfa;color:var(--ink)" />
+        <label class="wiz-label">How many months</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${[3, 6, 9, 12].map((n) => `<button class="chip ${count === n ? "active" : ""}" data-availcount="${n}">${n} months</button>`).join("")}
+        </div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn ghost" id="availCancel" style="flex:1">Cancel</button>
+          <button class="btn primary" id="availSave" style="flex:2">Save</button>
+        </div>
+        ${myAnsweredAvail() ? `<button class="btn danger" id="availClear" style="width:100%;margin-top:10px">Clear my answers</button>` : ""}
+        <div class="r-sub" id="availMsg" style="margin-top:8px"></div>
+      </div>`;
+    }
     if (openMonths == null) {
       // start with whatever you already said yes to open, so it picks up where you left off
       openMonths = new Set(availMonths().filter((id) => myWeeks(id).length));
@@ -3395,7 +3488,10 @@
     const best = bestWeeks(3).filter((w) => w.who.length > 0);
     const answered = new Set(state.allVotes.filter((v) => v.kind === AVAIL && splitChoice(v.choice).length).map((v) => v.voter)).size;
     return `<div class="card avail-card">
-      <h3 style="margin:0">🗓️ When can everyone go?</h3>
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <h3 style="margin:0;flex:1">🗓️ When can everyone go?</h3>
+        ${isHost() ? `<button class="tl-map" id="availEdit" style="flex:0 0 auto">Edit</button>` : ""}
+      </div>
       <p class="section-sub" style="margin:6px 0 12px">Open the months that could work, then tick the weeks you're actually free. ${
         answered ? `<b>${answered}</b> of ${heads} ${answered === 1 ? "has" : "have"} answered.` : "Nobody has answered yet."}</p>
       ${best.length ? `<div class="avail-best">
@@ -3594,6 +3690,30 @@
     }));
     s.querySelectorAll("[data-availuse]").forEach((b) => b.addEventListener("click", () => useWeek(b.dataset.availuse)));
     s.querySelectorAll("[data-useplace]").forEach((b) => b.addEventListener("click", () => usePlace(b.dataset.useplace)));
+    const ae = $("#availEdit"); if (ae) ae.addEventListener("click", () => { availEditing = true; renderDecisions(); });
+    const ac = $("#availCancel"); if (ac) ac.addEventListener("click", () => { availEditing = false; renderDecisions(); });
+    let pendingCount = null;
+    s.querySelectorAll("[data-availcount]").forEach((b) => b.addEventListener("click", () => {
+      pendingCount = Number(b.dataset.availcount);
+      s.querySelectorAll("[data-availcount]").forEach((x) => x.classList.toggle("active", x === b));
+    }));
+    const as = $("#availSave"); if (as) as.addEventListener("click", async () => {
+      const from = ($("#availFrom") || {}).value || "";
+      const count = pendingCount || availWindow().count;
+      if (!/^\d{4}-\d{2}$/.test(from)) { $("#availMsg").textContent = "Pick a month to start from."; return; }
+      $("#availMsg").textContent = "Saving…";
+      const ok = await saveLinks({ avail_from: from, avail_count: count }, ["avail_from", "avail_count"]);
+      if (!ok) { $("#availMsg").textContent = "Couldn't save. Check you're online."; return; }
+      availEditing = false; openMonths = null;
+      renderDecisions();
+    });
+    const acl = $("#availClear"); if (acl) acl.addEventListener("click", async () => {
+      const mine = state.allVotes.filter((v) => v.kind === AVAIL && v.voter === state.me);
+      state.allVotes = state.allVotes.filter((v) => !(v.kind === AVAIL && v.voter === state.me));
+      availEditing = false; openMonths = null;
+      renderDecisions();
+      for (const v of mine) await Backend.castVote(TRIP_CODE, AVAIL, v.topic, null, state.me);
+    });
     s.querySelectorAll("[data-decopt]").forEach((i) => i.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); addOption(i.dataset.decopt); }
     }));

@@ -1133,3 +1133,14 @@ body[data-tod="night"] .topbar {
   border-radius: var(--r); background: linear-gradient(180deg,#f2f8f3,#e7f1e9); border: 1px solid #d3e5d7; }
 .dec-winner b { font-size: 14.5px; }
 .dec-winner .btn { flex: 0 0 auto; }
+
+/* Deciding where is the moment the app becomes useful, and the moment momentum
+   is easiest to lose. */
+.settled-card { border-color: var(--matcha); background: linear-gradient(180deg,#f4f9f5,#eaf3ec); }
+.settled-next { display: grid; gap: 8px; }
+.settled-row { display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+  background: var(--card); border: 1px solid #d5e6d9; border-radius: var(--r); padding: 12px 13px;
+  font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); cursor: pointer; }
+.settled-row:active { background: #f2f8f3; }
+.settled-row .si { font-size: 19px; line-height: 1.2; flex: 0 0 auto; }
+.settled-row .r-sub { display: block; margin-top: 2px; }
