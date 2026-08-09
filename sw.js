@@ -1,6 +1,6 @@
 /* Caravan - service worker. App-shell caching so the app opens offline.
    Bump CACHE when you change core files. */
-const CACHE = "caravan-v73";
+const CACHE = "caravan-v74";
 const CORE = [
   "./",
   "./index.html",
@@ -27,7 +27,12 @@ self.addEventListener("install", (e) => {
 });
 
 // Let the page trigger immediate activation of a freshly-installed worker.
-self.addEventListener("message", (e) => { if (e.data === "skip-waiting") self.skipWaiting(); });
+self.addEventListener("message", (e) => {
+  if (e.data === "skip-waiting") self.skipWaiting();
+  // Let the page ask which build is actually serving it. "Is your app stale?"
+  // should be a question with an answer, not a guess.
+  if (e.data === "which-build" && e.ports && e.ports[0]) e.ports[0].postMessage(CACHE);
+});
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(

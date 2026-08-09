@@ -5976,6 +5976,34 @@
     show("home");
   }
 
+  /* Ask the worker that is actually serving the page, rather than trusting a
+     constant in a file that might itself be the stale one. */
+  function showBuild() {
+    const el = $("#stBuild"); if (!el) return;
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      el.textContent = "Running straight from the network, so this is the latest.";
+      return;
+    }
+    const ch = new MessageChannel();
+    const t = setTimeout(() => { el.textContent = "Couldn't ask the app which build it is."; }, 2000);
+    ch.port1.onmessage = (e) => { clearTimeout(t); el.textContent = `Build ${e.data}`; };
+    navigator.serviceWorker.controller.postMessage("which-build", [ch.port2]);
+  }
+  async function forceUpdate() {
+    const msg = $("#stBuildMsg");
+    const say = (t) => { if (msg) msg.textContent = t; };
+    say("Fetching the latest…");
+    try {
+      if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map((k) => caches.delete(k))); }
+      if (navigator.serviceWorker) {
+        const rs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(rs.map((r) => r.unregister()));
+      }
+    } catch (e) { console.warn("forceUpdate", e); }
+    say("Reloading…");
+    setTimeout(() => location.reload(true), 400);
+  }
+
   function renderSettings() {
     const s = $("#screen-settings");
     const inp = (id, val, ph, type = "text") =>
@@ -6065,6 +6093,14 @@
         <datalist id="tzlist2">${(Intl.supportedValuesOf ? Intl.supportedValuesOf("timeZone") : ["UTC"]).map((z) => `<option value="${z}">`).join("")}</datalist>
         <button class="btn primary" id="stSaveBasics" style="width:100%;margin-top:14px">Save basics</button>
         <div id="stBasicsMsg" class="r-sub" style="margin-top:6px"></div>
+      </div>
+
+      <div class="card">
+        <h3>🔄 App version</h3>
+        <p class="section-sub" style="margin:4px 0 10px">Phones hold on to the old app harder than you would think. This is the build actually running right now.</p>
+        <div class="r-sub" id="stBuild" style="font-weight:800">Checking…</div>
+        <button class="btn ghost" id="stForceUpdate" style="width:100%;margin-top:10px">Force the latest version</button>
+        <div id="stBuildMsg" class="r-sub" style="margin-top:8px"></div>
       </div>
 
       <div class="card">
@@ -6252,6 +6288,8 @@
       loadRate();
     });
 
+    showBuild();
+    const fu = $("#stForceUpdate"); if (fu) fu.addEventListener("click", forceUpdate);
     const sm = $("#stSwitchMode"); if (sm) sm.addEventListener("click", switchMode);
 
     $("#stAddTrav").addEventListener("click", () => {
