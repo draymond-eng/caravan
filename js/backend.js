@@ -51,8 +51,19 @@
     try { const { data, error } = await client.from("trips").select("*").eq("code", code).maybeSingle(); if (error) throw error; return data; }
     catch (e) { console.warn("getTrip", e); lastError = errText(e); return null; }
   }
+  /* The Supabase client does NOT throw when a write is rejected. It resolves
+     with { error }. Awaiting one and moving on therefore reports success for a
+     write that never happened, which silently loses the change and skips the
+     retry queue entirely. Every mutation goes through here so that can only be
+     got wrong in one place. */
+  async function did(q) {
+    const r = await q;
+    if (r && r.error) throw r.error;
+    return r;
+  }
+
   async function updateTrip(code, patch) {
-    try { await client.from("trips").update(patch).eq("code", code); return true; }
+    try { await did(client.from("trips").update(patch).eq("code", code)); return true; }
     catch (e) { writeFailed("updateTrip", e); enqueue({ kind: "updateTrip", code, patch }); return false; }
   }
 
@@ -153,33 +164,33 @@
     }
   }
   async function update(table, id, patch) {
-    try { await client.from(table).update(patch).eq("id", id); return true; }
+    try { await did(client.from(table).update(patch).eq("id", id)); return true; }
     catch (e) { writeFailed("update " + table, e); enqueue({ kind: "update", table, id, patch }); return false; }
   }
   async function remove(table, id) {
-    try { await client.from(table).delete().eq("id", id); return true; }
+    try { await did(client.from(table).delete().eq("id", id)); return true; }
     catch (e) { writeFailed("remove " + table, e); enqueue({ kind: "remove", table, id }); return false; }
   }
 
   /* ---- Votes (upsert one per person/topic) ---------------------------------- */
   async function castVote(trip, kind, topic, choice, voter) {
     try {
-      if (choice == null) await client.from("votes").delete().match({ trip, kind, topic, voter });
-      else await client.from("votes").upsert({ trip, kind, topic, choice, voter }, { onConflict: "trip,kind,topic,voter" });
+      if (choice == null) await did(client.from("votes").delete().match({ trip, kind, topic, voter }));
+      else await did(client.from("votes").upsert({ trip, kind, topic, choice, voter }, { onConflict: "trip,kind,topic,voter" }));
       return true;
     } catch (e) { writeFailed("castVote", e); enqueue({ kind: "vote", trip, k: kind, topic, choice, voter }); return false; }
   }
 
   /* ---- Bulk helpers --------------------------------------------------------- */
   async function clearTable(table, trip) {
-    try { await client.from(table).delete().eq("trip", trip); return true; }
+    try { await did(client.from(table).delete().eq("trip", trip)); return true; }
     catch (e) { console.warn("clearTable " + table, e); return false; }
   }
   async function deleteTrip(code) {
     try {
       const tables = ["days", "votes", "expenses", "decisions", "stay_options", "ideas", "flights", "notes", "confirmations", "photos", "guides"];
-      for (const t of tables) await client.from(t).delete().eq("trip", code);
-      await client.from("trips").delete().eq("code", code);
+      for (const t of tables) await did(client.from(t).delete().eq("trip", code));
+      await did(client.from("trips").delete().eq("code", code));
       return true;
     } catch (e) { console.warn("deleteTrip", e); return false; }
   }
@@ -208,11 +219,11 @@
 
   /* ---- Push subscriptions --------------------------------------------------- */
   async function savePushSub(row) {
-    try { await client.from("push_subs").upsert(row, { onConflict: "endpoint" }); return true; }
+    try { await did(client.from("push_subs").upsert(row, { onConflict: "endpoint" })); return true; }
     catch (e) { console.warn("savePushSub", e); return false; }
   }
   async function removePushSub(endpoint) {
-    try { await client.from("push_subs").delete().eq("endpoint", endpoint); return true; }
+    try { await did(client.from("push_subs").delete().eq("endpoint", endpoint)); return true; }
     catch (e) { console.warn("removePushSub", e); return false; }
   }
 
