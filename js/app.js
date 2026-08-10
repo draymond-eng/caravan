@@ -84,9 +84,9 @@
         ["An assistant that knows the trip", "Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it."],
         ["Nothing gets lost", "Works on a plane. Anything you change offline syncs the moment you land."],
       ],
-      asideTitle: "Planning a wedding?",
-      aside: "There is a whole function for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
-      asideLink: ["See the wedding version", "?for=weddings"],
+      asideTitle: "Weddings and golf trips",
+      aside: "Two of these have their own front door. A wedding gets RSVPs with party sizes and meal choices, room blocks, dress codes on every event, a seating chart built from the yeses and a run of show guests never see. A golf trip leads with the tee sheet, pairings and a countdown that nags about prime slots.",
+      asideLinks: [["See the wedding version", "weddings/"], ["See the golf version", "golf/"]],
       heroLink: ["Planning a wedding?", "See the wedding version", "weddings/"],
       createLabel: "Create a trip",
     },
@@ -110,12 +110,38 @@
       heroLink: ["Not a wedding?", "See the group trip version", "/"],
       createLabel: "Start your wedding",
     },
+    /* The annual golf trip is the same app pointed at one thing. Tee times lead
+       the event list, pairings are the group tool, and the booking countdown
+       nags about prime slots and shipping clubs. None of that is new code, it
+       is the golf trip type that already exists, so this page is a front door
+       rather than a fork. */
+    golf: {
+      eyebrow: "SquadTrip for golf",
+      h1: "Same trip.<br>Same eight guys.<br><em>Every year.</em>",
+      lede: "Tee sheets, pairings, who owes who after the Nassau, and where everybody is staying. One link, no accounts, and next year you start from this year instead of a blank group chat.",
+      shots: ["plan", "votes", "money", "ai", "live", "guest"],
+      caption: "Swipe. Nobody in any of these downloaded anything.",
+      what: [
+        ["The tee sheet, not a screenshot", "Every round with its course and time, in the order you play them. Send the assistant a photo of the confirmation and it reads it in."],
+        ["Pairings that hold", "Foursomes, cars and bedrooms, built once and visible to everyone. Change a group and nobody has to re-read the thread."],
+        ["Money that closes", "Green fees, the house, the Nassau, the skins. Log who paid, see who owes who, mark it settled and it disappears."],
+        ["Dates the group agrees on", "Everyone ticks the weeks they can actually get away. The overlap decides it instead of the loudest reply."],
+        ["Booking, before it is too late", "Prime slots go months out and a group of eight needs consecutive times. The countdown says what to lock in and by when."],
+        ["Nothing gets lost", "Works with one bar on the back nine. Anything you change offline syncs when you have signal."],
+      ],
+      asideTitle: "Not a golf trip?",
+      aside: "The same app runs any group trip: ski houses, beach weeks, bachelor parties, family reunions and destination weddings. The plan, the votes and the money work the same way.",
+      asideLink: ["See the group trip version", "/"],
+      heroLink: ["Not a golf trip?", "See the group trip version", "/"],
+      createLabel: "Start the golf trip",
+    },
   };
   function whichLanding() {
     const stamped = document.body.getAttribute("data-landing");
     if (stamped && LANDINGS[stamped]) return stamped;
     const q = (new URLSearchParams(location.search).get("for") || "").toLowerCase();
     if (q === "weddings" || q === "wedding") return "wedding";
+    if (q === "golf") return "golf";
     return "general";
   }
   /* /weddings/ and /golf/ sit one level down, so anything this file builds by
@@ -148,8 +174,17 @@
       const [lead, label, href] = L.heroLink;
       hl.innerHTML = `<span>${esc(lead)}</span> <a href="${href === "/" ? (base || "./") : (base ? base + href : href)}">${esc(label)} \u203a</a>`;
     }
-    const al = $("#asideLink");
-    if (al) { al.textContent = L.asideLink[0] + " \u203a"; al.setAttribute("href", L.asideLink[1] === "/" ? (base || "./") : L.asideLink[1]); }
+    /* One aside, up to two ways out of it. The general page points at both the
+       wedding and the golf version; the flavored pages point back at general. */
+    const links = L.asideLinks || [L.asideLink];
+    [$("#asideLink"), $("#asideLink2")].forEach((el, i) => {
+      if (!el) return;
+      const spec = links[i];
+      if (!spec) { el.hidden = true; return; }
+      el.hidden = false;
+      el.textContent = spec[0] + " \u203a";
+      el.setAttribute("href", spec[1] === "/" ? (base || "./") : (base ? base + spec[1] : spec[1]));
+    });
     $$("#createBtn, #createBtn2").forEach((b) => { b.textContent = L.createLabel; });
     // a generated page already carries a proper title and description, so only
     // the query-string route needs one written for it
@@ -184,8 +219,10 @@
 
     $("#joinBtn").addEventListener("click", joinTrip);
     $("#joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") joinTrip(); });
-    $$("#createBtn, #createBtn2").forEach((b) => b.addEventListener("click", () =>
-      openWizard(whichLanding() === "wedding" ? "wedding" : "trip")));
+    $$("#createBtn, #createBtn2").forEach((b) => b.addEventListener("click", () => {
+      const from = whichLanding();
+      openWizard(from === "wedding" ? "wedding" : from === "golf" ? "golf" : "trip");
+    }));
     $$('.lp-link[href="#join"]').forEach((a) => a.addEventListener("click", (e) => {
       e.preventDefault();
       const j = $("#join"); if (j) j.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -227,6 +264,10 @@
        what it asks for, because it says so explicitly. */
     wiz.mode = mode === "wedding" ? "wedding" : "trip";
     wiz.datesTbd = false;
+    /* Arriving from the golf page means the answer to "what kind of trip" is
+       already known. It stays a normal chip on the first step, so nobody is
+       stuck with it, but nobody has to tap it either. */
+    wiz.trip_type = mode === "golf" ? "golf" : "general";
     document.body.classList.toggle("theme-wedding", wiz.mode === "wedding");
     if (!wiz.travelers.length) wiz.travelers = [""];
     $("#wizModal").classList.add("open");
