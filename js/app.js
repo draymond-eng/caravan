@@ -932,7 +932,8 @@
         const d = (state.days || []).find((x) => x.id === v.topic), t = byId(v.voter);
         if (!d || !t) return null;
         const f = fmtDate(d.date);
-        return { title: v.choice, sub: [t.name, `${f.wd} ${f.mon} ${f.day}`, d.title].filter(Boolean).join(" · ") };
+        const o = parseOutfit(v.choice);
+        return { title: o.text || (o.img ? "📷 A photo" : ""), sub: [t.name, `${f.wd} ${f.mon} ${f.day}`, d.title].filter(Boolean).join(" · ") };
       }).filter(Boolean) },
   ];
   function searchAll(q) {
@@ -2937,6 +2938,24 @@
         await Backend.updateTrip(TRIP.code, { travelers: TRIP.travelers });
         renderCrew(); renderWhoami();
       } catch (e) { $("#crewPhotoStatus").textContent = "Couldn't process that image."; }
+    });
+  }
+  /* Scale an image down to fit inside a box, keeping its shape. Clothes are
+     tall, so the square crop the avatars use would cut the shoes off. */
+  function fitPhoto(file, maxW, maxH) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, maxW / img.width, maxH / img.height);
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * k));
+        c.height = Math.max(1, Math.round(img.height * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((b) => b ? resolve(b) : reject(new Error("blob")), "image/jpeg", 0.82);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
     });
   }
   // Center-crop an image file to a square JPEG of the given size.
@@ -5877,17 +5896,35 @@
      host's dress code, which the Plan tab already carries. */
   const outfitsOn = () => !isWedding();
   const outfitsFor = (dayId) => state.allVotes.filter((v) => v.kind === OUTFIT && v.topic === dayId);
-  const outfitCount = () => (state.days || []).filter((d) => myOutfit(d.id)).length;
+  const outfitCount = () => (state.days || []).filter((d) => myOutfit(d.id).text || myOutfit(d.id).img).length;
+
+  /* An outfit is a line of text and, now, a picture. "Navy linen suit, brown
+     loafers" is clear to whoever wrote it and close to useless to everybody
+     else, which undercuts the entire point of a screen whose job is that
+     nobody turns up in the wrong thing.
+
+     Both live in the one `choice` column, because votes has exactly one, and a
+     schema change is a migration the person running the app has to remember to
+     apply. The separator is a control character no keyboard can produce, and
+     these two functions are the only code that knows the format. */
+  const OF_SEP = "\u0001";
+  const packOutfit = (text, img, path) =>
+    [String(text || "").trim().slice(0, 240), img || "", path || ""].join(OF_SEP).replace(/\u0001+$/, "");
+  function parseOutfit(choice) {
+    const raw = String(choice == null ? "" : choice);
+    const [text, img, path] = raw.split(OF_SEP);
+    return { text: text || "", img: img || "", path: path || "" };
+  }
   function myOutfit(dayId) {
     const r = outfitsFor(dayId).find((v) => v.voter === state.me);
-    return r ? r.choice : "";
+    return parseOutfit(r ? r.choice : "");
   }
-  async function setOutfit(dayId, text) {
+  async function setOutfit(dayId, text, img, path) {
     if (!state.me) { openWho(); return false; }
-    const t = String(text || "").trim().slice(0, 240);
+    const packed = packOutfit(text, img, path);
     state.allVotes = state.allVotes.filter((v) => !(v.kind === OUTFIT && v.topic === dayId && v.voter === state.me));
-    if (t) state.allVotes.push({ kind: OUTFIT, topic: dayId, choice: t, voter: state.me });
-    await Backend.castVote(TRIP_CODE, OUTFIT, dayId, t || null, state.me);
+    if (packed) state.allVotes.push({ kind: OUTFIT, topic: dayId, choice: packed, voter: state.me });
+    await Backend.castVote(TRIP_CODE, OUTFIT, dayId, packed || null, state.me);
     return true;
   }
   /* Every dress code on the day, deduped, in the order they happen. */
@@ -5920,7 +5957,7 @@
     }
     const today = isoDay(new Date());
     const mineCount = outfitCount();
-    const myDays = days.filter((d) => myOutfit(d.id));
+    const myDays = days.filter((d) => { const o = myOutfit(d.id); return o.text || o.img; });
     s.innerHTML = `
       <div class="section-title">Outfits</div>
       <div class="section-sub">What you are wearing each day, with the dress code and the weather next to it. Everyone on the trip can see these, which is the point: nobody turns up in the wrong thing.</div>
@@ -5947,11 +5984,17 @@
           <div class="of-wx" data-wx="${d.id}">Checking the weather…</div>
           ${(d.items || []).length ? `<div class="r-sub of-lineup">${(d.items || []).slice(0, 6).map((i) =>
             `${i.time ? `<b>${esc(i.time)}</b> ` : ""}${esc(i.title)}`).join("<br>")}</div>` : ""}
-          <textarea data-ofin="${d.id}" rows="2" placeholder="Navy linen suit, no tie, brown loafers…" style="width:100%;padding:11px;margin-top:10px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14.5px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:vertical">${esc(mine)}</textarea>
+          ${mine.img ? `<div class="of-shot">
+            <img src="${esc(mine.img)}" alt="What you're wearing" loading="lazy" />
+            <button class="of-shot-x" data-ofrmpic="${d.id}" title="Remove the photo">✕</button>
+          </div>` : ""}
+          <textarea data-ofin="${d.id}" rows="2" placeholder="Navy linen suit, no tie, brown loafers…" style="width:100%;padding:11px;margin-top:10px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14.5px;background:#fffdfa;color:var(--ink);font-family:inherit;resize:vertical">${esc(mine.text)}</textarea>
+          <input type="file" accept="image/*" data-ofpic="${d.id}" style="display:none" />
           <div class="btn-row" style="margin-top:8px">
-            <button class="btn primary" data-ofsave="${d.id}" style="flex:1.4">${mine ? "Update" : "Save"}</button>
-            <button class="btn ghost" data-ofai="${d.id}" style="flex:1.6">✨ What should I wear?</button>
-            ${mine ? `<button class="btn danger" data-ofclear="${d.id}" style="flex:0 0 auto">✕</button>` : ""}
+            <button class="btn primary" data-ofsave="${d.id}" style="flex:1.4">${mine.text || mine.img ? "Update" : "Save"}</button>
+            <button class="btn ghost" data-ofshot="${d.id}" style="flex:1.1">📷 ${mine.img ? "Change" : "Photo"}</button>
+            <button class="btn ghost" data-ofai="${d.id}" style="flex:1.4">✨ What should I wear?</button>
+            ${mine.text || mine.img ? `<button class="btn danger" data-ofclear="${d.id}" style="flex:0 0 auto">✕</button>` : ""}
           </div>
           ${sameAs.length ? `<div class="r-sub" style="margin-top:8px">Same as
             ${sameAs.slice(0, 4).map((x) => {
@@ -5968,9 +6011,12 @@
           ${others.length ? `<div class="of-others">
             ${(outfitOpen[d.id] ? others : others.slice(0, 3)).map((v) => {
               const t = byId(v.voter);
-              return `<div class="of-other"><span class="avatar vchip" style="background:${t.color}">${initials(t.name)}</span>
-                <div style="flex:1;min-width:0"><b>${esc(t.name.split(" ")[0])}</b> ${esc(v.choice)}</div>
-                <button class="tl-map" data-ofcopy="${d.id}#${v.voter}">Same</button></div>`;
+              const o = parseOutfit(v.choice);
+              return `<div class="of-other">${o.img
+                  ? `<img class="of-thumb" src="${esc(o.img)}" alt="${esc(t.name)}'s outfit" loading="lazy" data-ofbig="${esc(o.img)}" />`
+                  : `<span class="avatar vchip" style="background:${t.color}">${initials(t.name)}</span>`}
+                <div style="flex:1;min-width:0"><b>${esc(t.name.split(" ")[0])}</b> ${esc(o.text) || (o.img ? "<span class=\"r-sub\">see the photo</span>" : "")}</div>
+                ${o.text ? `<button class="tl-map" data-ofcopy="${d.id}#${v.voter}">Same</button>` : ""}</div>`;
             }).join("")}
             ${others.length > 3 ? `<button class="of-more" data-ofmore="${d.id}">${outfitOpen[d.id]
               ? "Show fewer" : `and ${others.length - 3} more ›`}</button>` : ""}
@@ -6059,11 +6105,34 @@
       if (save) {
         const id = save.dataset.ofsave;
         const box = $(`[data-ofin="${id}"]`);
+        const had = myOutfit(id);       // saving the words must not drop the picture
         msg(id, "Saving…");
-        const ok = await setOutfit(id, box ? box.value : "");
+        const ok = await setOutfit(id, box ? box.value : "", had.img, had.path);
         if (ok) { renderOutfits(); settle(id); msg(id, "Saved ✓"); }
         return;
       }
+      /* A photo says in one look what a sentence cannot: the actual colour, how
+         dressy it really is, whether four of you are about to wear white. */
+      const shot = t.closest("[data-ofshot]");
+      if (shot) {
+        if (!state.me) { openWho(); return; }
+        const pick = $(`[data-ofpic="${shot.dataset.ofshot}"]`);
+        if (pick) pick.click();
+        return;
+      }
+      const rmpic = t.closest("[data-ofrmpic]");
+      if (rmpic) {
+        const id = rmpic.dataset.ofrmpic;
+        const had = myOutfit(id);
+        msg(id, "Removing the photo…");
+        const box = $(`[data-ofin="${id}"]`);
+        await setOutfit(id, box ? box.value : had.text, "", "");
+        if (had.path) Backend.removeFile(had.path);   // best effort, the row is what matters
+        renderOutfits(); msg(id, "Photo removed.");
+        return;
+      }
+      const big = t.closest("[data-ofbig]");
+      if (big) { window.open(big.dataset.ofbig, "_blank", "noopener"); return; }
       const more = t.closest("[data-ofmore]");
       if (more) {
         const id = more.dataset.ofmore;
@@ -6075,18 +6144,26 @@
       if (same) {
         const [id, from] = same.dataset.ofday.split("#");
         const box = $(`[data-ofin="${id}"]`);
-        if (box) { box.value = myOutfit(from); box.focus(); msg(id, "Copied from that day. Tap Save to keep it."); }
+        if (box) { box.value = myOutfit(from).text; box.focus(); msg(id, "Copied from that day. Tap Save to keep it."); }
         return;
       }
       const clr = t.closest("[data-ofclear]");
-      if (clr) { await setOutfit(clr.dataset.ofclear, ""); renderOutfits(); return; }
+      if (clr) {
+        const id = clr.dataset.ofclear;
+        const had = myOutfit(id);
+        await setOutfit(id, "", "", "");
+        if (had.path) Backend.removeFile(had.path);
+        renderOutfits();
+        return;
+      }
 
       const copy = t.closest("[data-ofcopy]");
       if (copy) {
         const [id, voter] = copy.dataset.ofcopy.split("#");
         const row = outfitsFor(id).find((v) => v.voter === voter);
         const box = $(`[data-ofin="${id}"]`);
-        if (row && box) { box.value = row.choice; box.focus(); msg(id, "Copied into your box. Tap Save to keep it."); }
+        // their words, never their photo: a picture of someone else in it is theirs
+        if (row && box) { box.value = parseOutfit(row.choice).text; box.focus(); msg(id, "Copied into your box. Tap Save to keep it."); }
         return;
       }
       const use = t.closest("[data-ofuse]");
@@ -6108,6 +6185,45 @@
       const ai = t.closest("[data-ofai]");
       if (ai) { await suggestOutfit(ai.dataset.ofai); return; }
     });
+    /* change does not bubble the way click does in every browser, so this is a
+       capture listener on the screen rather than one per hidden input, which
+       would have to be rebound on every render. */
+    s.addEventListener("change", async (e) => {
+      const pick = e.target.closest ? e.target.closest("[data-ofpic]") : null;
+      if (!pick) return;
+      const id = pick.dataset.ofpic;
+      const file = pick.files && pick.files[0];
+      pick.value = "";                        // so picking the same file twice still fires
+      if (!file) return;
+      await attachOutfitPhoto(id, file);
+    }, true);
+  }
+  /* Shrunk in the browser before it goes anywhere. A modern phone photo is
+     several megabytes, and nobody on hotel wifi wants to download six of them
+     to find out what everyone is wearing. */
+  async function attachOutfitPhoto(dayId, file) {
+    const msg = (m) => { const el = $(`[data-ofmsg="${dayId}"]`); if (el) el.textContent = m; };
+    if (!state.me) { openWho(); return; }
+    if (!/^image\//.test(file.type || "")) { msg("That is not an image."); return; }
+    const had = myOutfit(dayId);
+    const box = $(`[data-ofin="${dayId}"]`);
+    const text = box ? box.value : had.text;
+    msg("Shrinking the photo…");
+    let blob;
+    try { blob = await fitPhoto(file, 900, 1200); }
+    catch (e) { msg("Couldn't read that image. Try another one."); return; }
+    msg("Uploading…");
+    const up = await Backend.uploadFile(TRIP_CODE, new File([blob], "outfit.jpg", { type: "image/jpeg" }));
+    if (!up) { msg("Upload failed. Check you're online and try again."); return; }
+    /* The uploaded file is never rolled back if the row write fails, because a
+       failed write is queued rather than lost and the image it points at has to
+       still be there when the queue drains. An orphaned file costs a few
+       kilobytes. Deleting one a pending write still references costs the photo. */
+    await setOutfit(dayId, text, up.url, up.path);
+    // the old one is only rubbish once the new one is on the row
+    if (had.path && had.path !== up.path) Backend.removeFile(had.path);
+    renderOutfits(); settle(dayId);
+    msg("Saved ✓");
   }
 
   /* Ask the assistant what to wear. It already has the trip in its system
@@ -6194,8 +6310,9 @@
   function outfitLine(d) {
     if (!outfitsOn()) return "";
     const mine = myOutfit(d.id);
+    const said = mine.text || (mine.img ? "a photo" : "");
     const others = outfitsFor(d.id).filter((v) => v.voter !== state.me && byId(v.voter)).length;
-    return `<div class="outfit-line" data-go="outfits">👗 <span>${mine ? `<b>You:</b> ${esc(mine)}` : "Plan what you're wearing"}${
+    return `<div class="outfit-line" data-go="outfits">👗 <span>${said ? `<b>You:</b> ${esc(said)}` : "Plan what you're wearing"}${
       others ? ` <span style="opacity:.65">· ${others} other${others === 1 ? "" : "s"} planned</span>` : ""}</span><span class="of-go">›</span></div>`;
   }
 

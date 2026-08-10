@@ -990,6 +990,20 @@ html, body { overflow-x: hidden; }
 .of-other b { color: var(--ink); }
 .of-other .tl-map { flex: 0 0 auto; cursor: pointer; }
 
+/* ---- Outfit photos ----------------------------------------------------------
+   A picture answers "is this too dressy" and "are four of us wearing white" in
+   one look, which is the whole reason the screen exists. Capped in height so a
+   portrait shot cannot push the rest of the card off the screen.
+   -------------------------------------------------------------------------- */
+.of-shot { position: relative; margin-top: 11px; border-radius: var(--r);
+  overflow: hidden; background: var(--line-2); line-height: 0; }
+.of-shot img { width: 100%; max-height: 340px; object-fit: contain; display: block; }
+.of-shot-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px;
+  border: none; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1;
+  background: rgba(20,16,12,.62); color: #fff; backdrop-filter: blur(4px); }
+.of-thumb { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px;
+  object-fit: cover; cursor: zoom-in; background: var(--line-2); }
+
 .of-wx { margin-top: 11px; padding: 10px 12px; border-radius: var(--r);
   background: linear-gradient(180deg,#f4f7fb,#eaf0f8); border: 1px solid #dbe5f1;
   color: #40506a; font-size: 12.5px; line-height: 1.5; }
