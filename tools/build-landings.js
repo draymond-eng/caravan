@@ -11,9 +11,6 @@ const PAGES = [
   { dir: "weddings", flavor: "wedding",
     title: "SquadTrip for weddings - one link for your guests",
     desc: "The schedule, dress codes, room block, shuttles and their table, in one link your guests already have open. RSVPs, seating and a run of show for you." },
-  { dir: "golf", flavor: "golf",
-    title: "SquadTrip for golf - the annual trip, in one link",
-    desc: "Tee sheets, pairings, the house and who owes who after the Nassau. One link, no accounts, and next year you start from this year instead of a blank group chat." },
 ];
 
 const CHECK = process.argv.includes("--check");
