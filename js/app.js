@@ -2613,6 +2613,59 @@
       <div class="tl-map" data-go="groups" style="cursor:pointer;margin-top:4px">Edit ${esc(setName)} ›</div>
     </div>`;
   }
+  /* ---- Recurring events -----------------------------------------------------
+     Some things on a trip are a rhythm rather than an appointment: mahjong on
+     Sunday mornings, coffee at eight every day, a round every weekday. Adding
+     the same thing to six days by hand is the sort of chore that makes people
+     stop using the plan at all.
+
+     A repeat fans out at the moment you add it, one real event per day, all
+     carrying the same series id. Nothing is computed later, so an event you
+     move or delete on one day stays moved or deleted, and the plan is always
+     literally what it says it is. Repeats only ever go forward from the day
+     you are looking at, because backfilling into days that have already been
+     planned around is not what anybody means by "every Sunday".
+     -------------------------------------------------------------------------- */
+  const dowOf = (date) => new Date(String(date) + "T12:00:00").getDay();
+  const dowName = (date) => new Date(String(date) + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" });
+  function repeatDays(rule, from) {
+    if (!rule || !from) return from ? [from] : [];
+    const dow = dowOf(from.date);
+    return (state.days || [])
+      .filter((x) => String(x.date) >= String(from.date))
+      .filter((x) => {
+        const w = dowOf(x.date);
+        if (rule === "daily") return true;
+        if (rule === "weekly") return w === dow;
+        if (rule === "weekday") return w >= 1 && w <= 5;
+        if (rule === "weekend") return w === 0 || w === 6;
+        return false;
+      })
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
+  /* The count goes in the label. "Every Sunday" on a Wednesday-to-Sunday trip
+     means one day, and finding that out after the fact is a nasty surprise. */
+  function repeatOptions(d) {
+    return [
+      { id: "", label: "Just this day" },
+      { id: "daily", label: "Every day" },
+      { id: "weekly", label: `Every ${dowName(d.date)}` },
+      { id: "weekday", label: "Every weekday" },
+      { id: "weekend", label: "Every weekend day" },
+    ].map((o) => {
+      const n = o.id ? repeatDays(o.id, d).length : 1;
+      return { ...o, n, label: o.id ? `${o.label} (${n} day${n === 1 ? "" : "s"})` : o.label };
+    }).filter((o) => !o.id || o.n > 1);   // an option that lands on one day is just "this day"
+  }
+  const seriesOf = (rep) => {
+    if (!rep) return [];
+    const out = [];
+    (state.days || []).forEach((d) => (d.items || []).forEach((it, i) => {
+      if (it.rep === rep) out.push({ day: d, idx: i });
+    }));
+    return out;
+  };
+
   function renderDayList() {
     const list = $("#dayList"); if (!list) return;
     if (!state.days.length) { list.innerHTML = emptyState("🗓️", "The plan is empty", isHost() ? "Add your first day below, or let ✨ AI draft the whole thing in about a minute. Everything stays editable." : "The " + (isWedding() ? "hosts haven't" : "group hasn't") + " added days yet. Check back soon."); return; }
@@ -2625,7 +2678,8 @@
         const meIn = myVote("rsvp", iid) === "in";
         return `<div class="tl-item ${it.type || "activity"}">
           ${it.time ? `<div class="tl-time">${esc(it.time)}</div>` : ""}
-          <div class="tl-title"><span class="type-emoji">${tm.emoji}</span>${esc(it.title)}</div>
+          <div class="tl-title"><span class="type-emoji">${tm.emoji}</span>${esc(it.title)}${
+            it.rep ? `<span class="tl-rep" title="${esc(it.repLabel || "Repeats")}">↻</span>` : ""}</div>
           ${it.where ? `<div class="tl-where">${it.type === "tee" ? "⛳️" : "📍"} ${esc(it.where)}</div>` : ""}
           ${it.dress ? `<div class="tl-dress">👔 ${esc(it.dress)}</div>` : ""}
           ${it.groupSet ? groupsInline(it.groupSet) : ""}
@@ -2662,6 +2716,9 @@
               ${setsOf().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
             </select>` : ""}
             ${isWedding() ? `<input data-idress="${d.id}" placeholder="Dress code for this event (optional)" />` : ""}
+            ${(() => { const opts = repeatOptions(d); return opts.length > 1
+              ? `<select data-irepeat="${d.id}">${opts.map((o) => `<option value="${o.id}">${o.id ? "↻ " : ""}${esc(o.label)}</option>`).join("")}</select>`
+              : ""; })()}
             <div class="btn-row">
               <button class="btn primary" data-iadd="${d.id}" style="flex:2">＋ Add</button>
               <button class="btn danger" data-rmday="${d.id}" style="flex:1">Delete day</button>
@@ -2713,34 +2770,73 @@
       where, dress: dressEl ? dressEl.value.trim() : "",
       groupSet: ($(`[data-igroup="${dayId}"]`) || {}).value || "",
     };
-    const prev = d.items || [];
-    d.items = [...prev, item];
+
+    const rule = ($(`[data-irepeat="${dayId}"]`) || {}).value || "";
+    const targets = repeatDays(rule, d);
+    if (rule && targets.length > 1) {
+      const opt = repeatOptions(d).find((o) => o.id === rule);
+      item.rep = "r" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+      item.repLabel = (opt && opt.label) || "Repeats";
+    }
+
+    /* Optimistic on every day at once, then written one day at a time. If any
+       day refuses the write, the whole thing goes back: half a series is worse
+       than none, because nobody can see which half. */
+    const before = new Map(targets.map((x) => [x.id, x.items || []]));
+    targets.forEach((x) => { x.items = [...(x.items || []), item]; });
     say("");
     renderDayList();
-    const ok = await Backend.update("days", dayId, { items: d.items });
-    if (ok) {
-      // A write that silently affects no rows looks identical to success,
-      // so read the day back and make sure the event is really there.
-      const fresh = await Backend.list("days", TRIP_CODE, "date");
-      const saved = (fresh || []).find((x) => x.id === dayId);
-      if (saved && (saved.items || []).length < d.items.length) {
-        d.items = prev; renderDayList();
-        const el = $(`[data-imsg="${dayId}"]`);
-        if (el) el.textContent = "The server did not save that. Reload the app and try once more.";
-        return;
-      }
-      if (saved) { d.items = saved.items || d.items; }
-    }
-    if (!ok) {
-      d.items = prev;
+
+    const undo = (msg) => {
+      targets.forEach((x) => { x.items = before.get(x.id); });
       renderDayList();
       const el = $(`[data-imsg="${dayId}"]`);
-      if (el) el.textContent = "Couldn't save that. Check your connection and try again.";
+      if (el) el.textContent = msg;
+    };
+
+    for (const x of targets) {
+      const ok = await Backend.update("days", x.id, { items: x.items });
+      if (!ok) { undo("Couldn't save that. Check your connection and try again."); return; }
     }
+    // A write that silently affects no rows looks identical to success, so
+    // read the days back and make sure the events are really there.
+    const fresh = await Backend.list("days", TRIP_CODE, "date");
+    for (const x of targets) {
+      const saved = (fresh || []).find((y) => y.id === x.id);
+      if (saved && (saved.items || []).length < x.items.length) {
+        undo("The server did not save that. Reload the app and try once more.");
+        return;
+      }
+      if (saved) x.items = saved.items || x.items;
+    }
+    if (targets.length > 1) {
+      // Open the days it landed on. "Added to 6 days" over a collapsed list is
+      // a claim; showing them is the receipt.
+      targets.forEach((x) => openDays.add(x.id));
+      renderDayList();
+      say(`Added to ${targets.length} days.`);
+      return;
+    }
+    renderDayList();
   }
   async function removeItem(key) {
     const [dayId, idx] = key.split("#");
     const d = state.days.find((x) => x.id === dayId); if (!d) return;
+    const it = (d.items || [])[+idx];
+    /* A repeat is one event on many days, so deleting one is a real question
+       rather than an assumption. Cancelling this Sunday is not the same as
+       calling off mahjong. */
+    const rest = it && it.rep ? seriesOf(it.rep) : [];
+    if (rest.length > 1) {
+      const all = confirm(`"${it.title}" repeats on ${rest.length} days.\n\nOK removes it from all ${rest.length}.\nCancel removes it from this day only.`);
+      if (all) {
+        const touched = [...new Set(rest.map((r) => r.day))];
+        touched.forEach((day) => { day.items = (day.items || []).filter((x) => x.rep !== it.rep); });
+        renderDayList();
+        for (const day of touched) await Backend.update("days", day.id, { items: day.items });
+        return;
+      }
+    }
     d.items = (d.items || []).filter((_, i) => i !== +idx);
     renderDayList();
     await Backend.update("days", dayId, { items: d.items });
