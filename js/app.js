@@ -84,9 +84,11 @@
         ["An assistant that knows the trip", "Drafts the whole itinerary from your dates. Send it a photo of a tee sheet and it reads it."],
         ["Nothing gets lost", "Works on a plane. Anything you change offline syncs the moment you land."],
       ],
-      asideTitle: "Weddings and golf trips",
-      aside: "Two of these have their own front door. A wedding gets RSVPs with party sizes and meal choices, room blocks, dress codes on every event, a seating chart built from the yeses and a run of show guests never see. A golf trip leads with the tee sheet, pairings and a countdown that nags about prime slots.",
-      asideLinks: [["See the wedding version", "weddings/"], ["See the golf version", "golf/"]],
+      asideTitle: "Planning a wedding?",
+      aside: "There is a whole function for it. RSVPs with party sizes and meal choices, room blocks and who has actually booked, dress codes on every event, a seating chart built from the yeses, and a run of show your guests never see.",
+      /* /golf/ exists and works, it is just not advertised from here yet. Add
+         ["See the golf version", "golf/"] to this list to put it back. */
+      asideLinks: [["See the wedding version", "weddings/"]],
       heroLink: ["Planning a wedding?", "See the wedding version", "weddings/"],
       createLabel: "Create a trip",
     },
