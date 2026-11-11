@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Move Japan 2027 into SquadTrip</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+    body { background: var(--paper, #fdf8f0); }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+    .log { font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #fffdfa; border: 1px solid var(--line, #e6ddcd); border-radius: 10px;
+      padding: 12px 13px; margin-top: 14px; max-height: 340px; overflow: auto; white-space: pre-wrap; }
+    .log b { color: #3c6b4a; }
+    .log i { color: #a8341c; font-style: normal; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row input { flex: 1; padding: 12px; border: 1px solid var(--line, #e6ddcd);
+      border-radius: 8px; font-size: 16px; text-transform: uppercase; letter-spacing: 2px; }
+    ul.what { margin: 10px 0 0; padding-left: 18px; font-size: 14px; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 style="margin:0 0 4px;font-size:26px">Move Japan 2027 in</h1>
+    <p class="section-sub" style="margin:0 0 18px">
+      A one-time copy of the old standalone app's content into a SquadTrip trip.
+      Run it once, on a trip you have just created. It only ever adds; it never
+      deletes anything that is already there.
+    </p>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">1. Which trip?</h3>
+      <p class="section-sub" style="margin:0 0 10px">The join code from the trip you made on joinsquadtrip.com.</p>
+      <div class="row">
+        <input id="code" placeholder="ABC123" maxlength="12" autocapitalize="characters" autocomplete="off" />
+        <button class="btn ghost" id="check">Check</button>
+      </div>
+      <div class="r-sub" id="found" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card" id="step2" style="display:none">
+      <h3 style="margin:0 0 8px">2. What moves across</h3>
+      <ul class="what" id="manifest"></ul>
+      <p class="section-sub" style="margin:12px 0 0">
+        The trip's own details (name, dates, timezone, the three cities and the six
+        travelers) are overwritten to match Japan 2027. Everything else is added
+        alongside whatever is already on the trip.
+      </p>
+      <button class="btn primary" id="go" style="width:100%;margin-top:14px">Bring it all across</button>
+      <div class="log" id="log" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="../js/config.js"></script>
+  <script src="japan-seed.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var $ = function (s) { return document.querySelector(s); };
+    var S = window.JAPAN_SEED, cfg = window.CARAVAN_CONFIG || {}, client = null, trip = null;
+
+    var logBox = $("#log");
+    function say(msg, kind) {
+      logBox.style.display = "block";
+      var tag = kind === "ok" ? "b" : kind === "err" ? "i" : "span";
+      logBox.insertAdjacentHTML("beforeend", "<" + tag + ">" + msg + "</" + tag + ">\n");
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    /* The anon key alone reads nothing: every policy matches on the trip code in
+       the header, exactly as the app does it. So the client is rebuilt per code. */
+    function connect(code) {
+      return window.supabase.createClient(cfg.url, cfg.anonKey, {
+        auth: { persistSession: false },
+        global: { headers: { "x-trip-code": code } },
+      });
+    }
+    /* The Supabase client resolves with { error } instead of throwing, so a
+       write that was rejected looks exactly like one that worked unless you
+       check. Every insert here goes through this. */
+    function did(q) {
+      return q.then(function (r) { if (r && r.error) throw r.error; return r; });
+    }
+
+    var slug = function (s) {
+      return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
+    };
+
+    /* ---- the mapping, in one place ---------------------------------------- */
+    var PALETTE = ["#c8452f", "#d98aa0", "#2f6f6b", "#b2873a", "#5c4a99", "#7a8c3f"];
+    function travelers() {
+      return (S.travelers || []).map(function (t, i) {
+        return { id: slug(t.name) + "-" + i, name: t.name, color: t.color || PALETTE[i % PALETTE.length] };
+      });
+    }
+    function stops() {
+      return (S.cities || []).map(function (c, i) { return { id: slug(c.name) + "-" + i, label: c.name }; });
+    }
+    // old city id ("tokyo") -> new stop id ("tokyo-0")
+    function stopMap() {
+      var m = {}, st = stops();
+      (S.cities || []).forEach(function (c, i) { m[c.id] = st[i].id; });
+      return m;
+    }
+    var TYPES = { travel: 1, sight: 1, food: 1, activity: 1, rest: 1, meet: 1, tee: 1 };
+    function days(sm) {
+      return (S.days || []).map(function (d) {
+        return {
+          date: d.date, stop: sm[d.city] || "", title: d.title || "",
+          summary: d.summary || "", meetup: d.meetup || "",
+          items: (d.items || []).map(function (i) {
+            return {
+              time: i.time || "", type: TYPES[i.type] ? i.type : "activity",
+              title: i.title || "", note: i.note || "", where: "", dress: "", groupSet: "",
+            };
+          }),
+        };
+      });
+    }
+    function decisions() {
+      return (S.decisions || []).map(function (d) {
+        return {
+          title: d.title, note: d.note || "", status: "open", author: "",
+          // the option's own note is folded into the label: SquadTrip shows the
+          // label and nothing else, and losing the reasoning would be the point
+          options: (d.options || []).map(function (o) {
+            return { id: o.id, label: o.note ? o.label + " - " + o.note : o.label };
+          }),
+        };
+      });
+    }
+    function ideas() {
+      var out = (S.ideas || []).map(function (i) {
+        return { title: i.title, note: i.note || "", tag: i.city && i.city !== "any" ? i.city : "", author: "" };
+      });
+      (S.dayTrips || []).forEach(function (name) {
+        out.push({ title: "Day trip: " + name, note: "", tag: "", author: "" });
+      });
+      if (S.music && S.music.spotifyUrl) {
+        out.push({ title: "The trip playlist", note: S.music.spotifyUrl, tag: "", author: "" });
+      }
+      return out;
+    }
+    function guides(sm) {
+      var out = (S.guide || []).map(function (g) {
+        return { kind: "guide", stop: "", emoji: g.icon || "", title: g.title, tags: [], body: g.body || "", base: "" };
+      });
+      (S.neighborhoods || []).forEach(function (n) {
+        out.push({ kind: "hood", stop: sm[n.city] || "", emoji: n.emoji || "", title: n.name,
+          tags: n.tags || [], body: n.blurb || "", base: n.base || "" });
+      });
+      // the phrasebook has no table of its own, so it rides along as one card
+      if ((S.phrases || []).length) {
+        out.push({ kind: "guide", stop: "", emoji: "🗣️", title: "Japanese worth knowing", tags: [],
+          body: S.phrases.map(function (p) { return p.en + " - " + p.jp + " (" + p.romaji + ")"; }).join("\n"), base: "" });
+      }
+      return out;
+    }
+    function notes() {
+      var out = [];
+      (S.packing || []).forEach(function (cat) {
+        (cat.items || []).forEach(function (txt) {
+          out.push({ list: "packing", text: cat.cat + ": " + txt, done: false, author: "" });
+        });
+      });
+      (S.bookingOrder || []).forEach(function (b) {
+        out.push({ list: "note", text: "[" + (b.when || b.timing || "") + "] " + b.label + (b.note ? " - " + b.note : ""), done: false, author: "" });
+      });
+      return out;
+    }
+
+    function manifest(sm) {
+      return [
+        ["The trip itself", "name, dates, Asia/Tokyo, JPY, home Chicago/ORD"],
+        ["Travelers", travelers().length + " people"],
+        ["Cities", stops().map(function (s) { return s.label; }).join(" → ")],
+        ["Days", days(sm).length + " days, " + days(sm).reduce(function (n, d) { return n + d.items.length; }, 0) + " events"],
+        ["Votes", decisions().length + " open questions"],
+        ["Ideas", ideas().length + " ideas"],
+        ["Guide", guides(sm).filter(function (g) { return g.kind === "guide"; }).length + " cards, " +
+                  guides(sm).filter(function (g) { return g.kind === "hood"; }).length + " neighborhoods"],
+        ["Lists", notes().filter(function (n) { return n.list === "packing"; }).length + " packing items, " +
+                  notes().filter(function (n) { return n.list === "note"; }).length + " booking notes"],
+      ];
+    }
+
+    /* ---- wiring ------------------------------------------------------------ */
+    $("#check").addEventListener("click", async function () {
+      var code = ($("#code").value || "").trim().toUpperCase();
+      if (!code) { $("#found").textContent = "Put the join code in first."; return; }
+      $("#found").textContent = "Looking…";
+      try {
+        client = connect(code);
+        var r = await client.from("trips").select("*").eq("code", code).maybeSingle();
+        if (r.error) throw r.error;
+        if (!r.data) { $("#found").innerHTML = "<b>No trip with that code.</b> Check it and try again."; return; }
+        trip = r.data;
+        var done = (trip.links || {}).japan_import;
+        $("#found").innerHTML = "Found <b>" + (trip.name || code) + "</b>" +
+          (done ? "<br><b style='color:#a8341c'>Already imported on " + done + ".</b> Running it again would duplicate everything." : "");
+        var sm = stopMap();
+        $("#manifest").innerHTML = manifest(sm).map(function (p) {
+          return "<li><b>" + p[0] + "</b> — " + p[1] + "</li>";
+        }).join("");
+        $("#step2").style.display = "block";
+        $("#go").disabled = !!done;
+        $("#go").style.opacity = done ? .5 : 1;
+      } catch (e) {
+        $("#found").innerHTML = "<b>Couldn't reach the database.</b> " +
+          "If this says Load failed, the Supabase project is probably paused. (" + (e.message || e) + ")";
+      }
+    });
+
+    $("#go").addEventListener("click", async function () {
+      var btn = $("#go");
+      btn.disabled = true; btn.style.opacity = .6; btn.textContent = "Moving it across…";
+      logBox.innerHTML = "";
+      var code = trip.code, sm = stopMap(), n = 0;
+      try {
+        say("Trip details and crew…");
+        await did(client.from("trips").update({
+          name: S.meta.title,
+          destination: "Japan",
+          start_date: S.meta.landJapan, end_date: S.meta.endDate,
+          tz: S.meta.tripTimezone || "Asia/Tokyo",
+          currency: (S.meta.currency || {}).code || "JPY",
+          home_currency: "USD",
+          home_city: "Chicago, USA", home_airport: "ORD",
+          home_tz: S.meta.homeTimezone || "America/Chicago",
+          travelers: travelers(), stops: stops(),
+        }).eq("code", code));
+        say("  ✓ " + travelers().length + " travelers, " + stops().length + " cities", "ok");
+
+        // Inserted in batches so one rejected row cannot be mistaken for success,
+        // and so the log says exactly how far it got if something does fail.
+        var jobs = [
+          ["days", days(sm)],
+          ["decisions", decisions()],
+          ["ideas", ideas()],
+          ["guides", guides(sm)],
+          ["notes", notes()],
+        ];
+        for (var j = 0; j < jobs.length; j++) {
+          var table = jobs[j][0], rows = jobs[j][1];
+          if (!rows.length) continue;
+          say(table + "…");
+          var withTrip = rows.map(function (r) { var o = {}; for (var k in r) o[k] = r[k]; o.trip = code; return o; });
+          await did(client.from(table).insert(withTrip));
+          n += withTrip.length;
+          say("  ✓ " + withTrip.length + " rows", "ok");
+        }
+
+        var links = trip.links || {};
+        links.japan_import = new Date().toISOString().slice(0, 10);
+        await did(client.from("trips").update({ links: links }).eq("code", code));
+
+        say("");
+        say("Done. " + n + " rows across. Open the trip and it is all there.", "ok");
+        btn.textContent = "Finished";
+        var a = document.createElement("a");
+        a.className = "btn primary"; a.style.cssText = "width:100%;margin-top:12px;display:block;text-align:center";
+        a.href = "../index.html?t=" + code; a.textContent = "Open the trip";
+        btn.parentNode.appendChild(a);
+      } catch (e) {
+        say("");
+        say("Stopped: " + (e.message || e), "err");
+        say("Nothing after this point was written. Fix the cause and run it again on a fresh trip, " +
+            "since the rows that did land are still there.", "err");
+        btn.disabled = false; btn.style.opacity = 1; btn.textContent = "Try again";
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
