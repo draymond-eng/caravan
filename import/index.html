@@ -40,7 +40,17 @@
     </div>
 
     <div class="card" id="step2" style="display:none">
-      <h3 style="margin:0 0 8px">2. What moves across</h3>
+      <h3 style="margin:0 0 8px">2. When does it start?</h3>
+      <p class="section-sub" style="margin:0 0 10px">
+        The itinerary was written for Apr 15. Change this and every day shifts with it,
+        keeping the same order and the same length. You can still move individual days
+        in the app afterwards.
+      </p>
+      <input id="start" type="date" value="2027-04-14"
+        style="width:100%;padding:12px;border:1px solid var(--line,#e6ddcd);border-radius:8px;font-size:16px" />
+      <div class="r-sub" id="span" style="margin-top:8px"></div>
+
+      <h3 style="margin:18px 0 8px">3. What moves across</h3>
       <ul class="what" id="manifest"></ul>
       <p class="section-sub" style="margin:12px 0 0">
         The trip's own details (name, dates, timezone, the three cities and the six
@@ -105,10 +115,25 @@
       return m;
     }
     var TYPES = { travel: 1, sight: 1, food: 1, activity: 1, rest: 1, meet: 1, tee: 1 };
+
+    /* The itinerary was written against one set of dates and the trip may now
+       sit on another. Rather than re-date eleven days by hand, everything moves
+       by the same number of days: the order and the shape of the trip are the
+       part that was carefully worked out, not the calendar it was pinned to. */
+    function shiftBy() {
+      var want = ($("#start") || {}).value || S.meta.landJapan;
+      return Math.round((new Date(want + "T12:00:00") - new Date(S.meta.landJapan + "T12:00:00")) / 864e5);
+    }
+    function moved(date, n) {
+      var d = new Date(date + "T12:00:00");
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    }
     function days(sm) {
+      var n = shiftBy();
       return (S.days || []).map(function (d) {
         return {
-          date: d.date, stop: sm[d.city] || "", title: d.title || "",
+          date: moved(d.date, n), stop: sm[d.city] || "", title: d.title || "",
           summary: d.summary || "", meetup: d.meetup || "",
           items: (d.items || []).map(function (i) {
             return {
@@ -172,8 +197,10 @@
     }
 
     function manifest(sm) {
+      var n = shiftBy(), ds = days(sm);
       return [
-        ["The trip itself", "name, dates, Asia/Tokyo, JPY, home Chicago/ORD"],
+        ["The trip itself", "name, " + ds[0].date + " to " + ds[ds.length - 1].date +
+          ", Asia/Tokyo, JPY, home Chicago/ORD"],
         ["Travelers", travelers().length + " people"],
         ["Cities", stops().map(function (s) { return s.label; }).join(" → ")],
         ["Days", days(sm).length + " days, " + days(sm).reduce(function (n, d) { return n + d.items.length; }, 0) + " events"],
@@ -187,6 +214,17 @@
     }
 
     /* ---- wiring ------------------------------------------------------------ */
+    function redraw(sm) {
+      var n = shiftBy(), ds = days(sm);
+      $("#span").innerHTML = n === 0
+        ? "Keeping the original dates: <b>" + ds[0].date + "</b> to <b>" + ds[ds.length - 1].date + "</b>."
+        : "Moving all " + ds.length + " days " + Math.abs(n) + " day" + (Math.abs(n) === 1 ? "" : "s") +
+          (n < 0 ? " earlier" : " later") + ": <b>" + ds[0].date + "</b> to <b>" + ds[ds.length - 1].date + "</b>.";
+      $("#manifest").innerHTML = manifest(sm).map(function (p) {
+        return "<li><b>" + p[0] + "</b> — " + p[1] + "</li>";
+      }).join("");
+    }
+
     $("#check").addEventListener("click", async function () {
       var code = ($("#code").value || "").trim().toUpperCase();
       if (!code) { $("#found").textContent = "Put the join code in first."; return; }
@@ -201,9 +239,8 @@
         $("#found").innerHTML = "Found <b>" + (trip.name || code) + "</b>" +
           (done ? "<br><b style='color:#a8341c'>Already imported on " + done + ".</b> Running it again would duplicate everything." : "");
         var sm = stopMap();
-        $("#manifest").innerHTML = manifest(sm).map(function (p) {
-          return "<li><b>" + p[0] + "</b> — " + p[1] + "</li>";
-        }).join("");
+        redraw(sm);
+        $("#start").addEventListener("change", function () { redraw(sm); });
         $("#step2").style.display = "block";
         $("#go").disabled = !!done;
         $("#go").style.opacity = done ? .5 : 1;
@@ -223,7 +260,7 @@
         await did(client.from("trips").update({
           name: S.meta.title,
           destination: "Japan",
-          start_date: S.meta.landJapan, end_date: S.meta.endDate,
+          start_date: moved(S.meta.landJapan, shiftBy()), end_date: moved(S.meta.endDate, shiftBy()),
           tz: S.meta.tripTimezone || "Asia/Tokyo",
           currency: (S.meta.currency || {}).code || "JPY",
           home_currency: "USD",
