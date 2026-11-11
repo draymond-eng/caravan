@@ -144,10 +144,30 @@
         };
       });
     }
+    /* Dates live in the prose too. "Apr 25 return: what time's the Haneda
+       flight?" is wrong the moment the trip moves a day, and a vote that
+       contradicts the itinerary above it is worse than no vote. Only a month
+       name followed by a day number is touched, and only within the dates the
+       trip actually covers, so ordinary numbers are left alone. */
+    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function reDate(text, n) {
+      if (!n || !text) return text || "";
+      var year = Number(S.meta.landJapan.slice(0, 4));
+      return String(text).replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})\b/g,
+        function (whole, mon, day) {
+          var m = MONTHS.indexOf(mon);
+          if (m < 0) return whole;
+          var d = new Date(year, m, Number(day), 12);
+          if (d.getMonth() !== m || d.getDate() !== Number(day)) return whole;   // not a real date
+          d.setDate(d.getDate() + n);
+          return MONTHS[d.getMonth()] + " " + d.getDate();
+        });
+    }
     function decisions() {
+      var n = shiftBy();
       return (S.decisions || []).map(function (d) {
         return {
-          title: d.title, note: d.note || "", status: "open", author: "",
+          title: reDate(d.title, n), note: reDate(d.note || "", n), status: "open", author: "",
           // the option's own note is folded into the label: SquadTrip shows the
           // label and nothing else, and losing the reasoning would be the point
           options: (d.options || []).map(function (o) {

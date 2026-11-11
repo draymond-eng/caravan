@@ -606,6 +606,7 @@
     LSG.set("mytrips", mine.slice(0, 8));
 
     await hydrate("all");
+    await retireMootQuestions();
     startSync();
 
     renderAll();
@@ -1834,6 +1835,22 @@
       }));
     }
     if (jobs.length) { try { await Promise.all(jobs); } catch (e) { console.warn("seed votes", e); } }
+  }
+
+  /* A trip created without a destination gets "Where should we go?" put up for
+     it. If the answer then arrives some other way, by someone filling in
+     Settings or by the trip being imported wholesale, that question is left
+     sitting open with no options on it, asking a group that is already booking
+     flights where they would like to go. Nothing reopens it, so it is retired
+     rather than hidden: an empty question nobody can answer is not a vote. */
+  async function retireMootQuestions() {
+    if (!(TRIP.destination || (TRIP.stops || []).length)) return;
+    const moot = (state.decisions || []).filter((d) =>
+      d.title === "Where should we go?" && d.status !== "decided" && !((d.options || []).length));
+    for (const d of moot) {
+      const ok = await Backend.update("decisions", d.id, { status: "decided" });
+      if (ok) d.status = "decided";
+    }
   }
 
   /* =========================================================================
@@ -3657,12 +3674,19 @@
   function availCard() {
     const heads = (TRIP.travelers || []).length || 1;
     const answered = anyAnsweredAvail().size;
-    /* Dates on the trip are not the same thing as the group having answered.
-       Someone can lock a week in while most of the crew has said nothing, and
-       hiding the board behind a "Change" tap at that moment is how a live vote
-       looks dead. So the board only folds away once everybody has actually
-       answered. Until then it stays open, dates or no dates. */
-    const settled = datesKnown() && answered >= heads;
+    /* Three states, not two.
+
+       No dates: the board is the whole point, so it is open.
+
+       Dates, and some of the group has answered but not all: a dates vote is
+       live and somebody locked a week in early. The board stays open, because
+       hiding a running vote behind a "Change" tap is how it looks dead.
+
+       Dates, and nobody has ever answered: there is no vote. The trip was
+       simply created with dates. Asking which months suit everyone is then a
+       question about a decision that was never in doubt, and it reads as the
+       app not knowing what trip it is on. Folded away. */
+    const settled = datesKnown() && (answered === 0 || answered >= heads);
     if (settled && !availForced) {
       const chosen = weekTally()[TRIP.start_date];
       return `<div class="card avail-set">
@@ -3674,9 +3698,10 @@
           </div>
           <button class="btn ghost" id="availReopen" style="flex:0 0 auto">Change</button>
         </div>
-        <div class="r-sub" style="margin-top:8px">All ${heads} have answered${
-          chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again, nothing is deleted.</div>
-        ${canFinalize() ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>` : ""}
+        <div class="r-sub" style="margin-top:8px">${answered === 0
+          ? "Nobody needs to vote on this. Tap Change if the dates turn out to be wrong and you want to ask the group."
+          : `All ${heads} have answered${chosen ? `, and ${chosen.length} said this week works` : ""}. Tap Change to look again, nothing is deleted.`}</div>
+        ${canFinalize() && answered > 0 ? `<button class="btn danger" id="availUnlock" style="width:100%;margin-top:10px">Reopen the dates vote</button>` : ""}
       </div>`;
     }
     if (availEditing) {
@@ -3936,7 +3961,14 @@
       ${organiserCard()}
       ${availCard()}
       ${!state.me ? `<div class="card" style="border-color:var(--sakura-deep);background:#fdf3f5"><b>Tag yourself first</b>. Tap "Who are you?" up top. <button class="btn primary" id="decWho" style="margin-top:10px;width:100%">Set who I am</button></div>` : ""}
-      ${state.decisions.length ? state.decisions.map((d) => {
+      ${(() => {
+        /* A question that was retired without ever having options has nothing
+           to render: no choices, no tally, no result. Showing it anyway is how
+           a trip ends up asking where to go while everyone is booking flights
+           to Tokyo. Settled questions that people actually answered still show,
+           because the answer is the point. */
+        const shown = state.decisions.filter((d) => !(d.status === "decided" && !((d.options || []).length)));
+        return shown.length ? shown.map((d) => {
         const multi = isMulti(d);
         const picks = multi ? myPicks(d.id) : [];
         const mine = myVote("decision", d.id);
@@ -3987,7 +4019,8 @@
           </div>
           ${commentBlock("decision:" + d.id)}
         </div>`;
-      }).join("") : emptyState("🗳️", "Nothing to vote on yet", isHost() ? "Pose a question below: where to eat, which day for the big excursion, whatever the group keeps going back and forth on. Everyone taps a pick and the tally settles it." : "When a question goes up, you'll vote on it here.")}
+      }).join("") : emptyState("🗳️", "Nothing to vote on yet", isHost() ? "Pose a question below: where to eat, which day for the big excursion, whatever the group keeps going back and forth on. Everyone taps a pick and the tally settles it." : "When a question goes up, you'll vote on it here.");
+      })()}
       ${isHost() ? `<div class="card">
         <h3>Ask the group</h3>
         <div class="expense-add">
