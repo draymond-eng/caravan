@@ -59,7 +59,6 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overscroll-behavior-y: none;
 }
 /* The warm dusk wash: apricot glow top-left, violet haze top-right.
 
@@ -976,7 +975,18 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 
 /* Nothing on the landing may scroll sideways. The full-bleed hero uses vw, so
    a stray overflow anywhere would shift every section under it out of line. */
+/* overscroll-behavior belongs on the element that actually scrolls, and that
+   is html, not body.
+
+   On body it was silently killing the mouse wheel. overflow-x: hidden forces
+   an element's overflow-y from visible to auto, so body became a scroll
+   container with nothing to scroll; overscroll-behavior-y: none then forbade
+   it from handing the gesture up to the document. A wheel over the page hit a
+   dead end and did nothing, while the keyboard still worked because it
+   targets the document directly. Moving the rule up keeps what it was for,
+   no rubber-band past the ends, without the dead end. */
 html, body { overflow-x: hidden; }
+html { overscroll-behavior-y: none; }
 .lp, .lp-sec, .lp-strip { overscroll-behavior-x: contain; }
 /* The other page is offered in the hero, not four screens down. */
 .lp-herolink { margin: 26px 0 0; font-size: 14px; color: rgba(246,241,232,.72); }
