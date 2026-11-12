@@ -3876,7 +3876,7 @@
     const el = $("#orgMsg"); if (el) el.textContent = "Saving…";
     // "everyone" is the thing being fixed, so claiming narrows to you rather
     // than adding you to a list that already has you on it
-    const hosts = everyoneIsOrganiser() ? [state.me]
+    const hosts = (everyoneIsOrganiser() || organiserMissing()) ? [state.me]
       : organisers().concat([state.me]).filter((v, i, a) => a.indexOf(v) === i);
     const ok = await Backend.updateTrip(TRIP_CODE, { hosts });
     if (!ok) { if (el) el.textContent = "Couldn't save that. Check you're online."; return; }
@@ -3891,17 +3891,28 @@
     const heads = (TRIP.travelers || []).length;
     return heads > 2 && organisers().length >= heads;
   };
+  /* An organiser who is not on the traveler list cannot act and cannot be
+     asked to. That happens whenever the list is replaced wholesale, and left
+     alone it is worse than having no organiser at all: nobody can lock
+     anything in and nothing in the app admits why. */
+  const organiserMissing = () => {
+    const ids = new Set((TRIP.travelers || []).map((t) => t.id));
+    return organisers().length > 0 && !organisers().some((id) => ids.has(id));
+  };
   function organiserCard() {
     if (isWedding()) return "";
     const loose = everyoneIsOrganiser();
-    if (organisers().length && !loose) return "";
+    const gone = organiserMissing();
+    if (organisers().length && !loose && !gone) return "";
     return `<div class="card avail-set">
       <div class="r-sub" style="font-weight:800">Who's running this trip?</div>
-      <p class="section-sub" style="margin:6px 0 10px">${loose
+      <p class="section-sub" style="margin:6px 0 10px">${gone
+        ? "Whoever was running this trip is no longer on the traveler list, so nobody can lock in the dates or make a place official. Take it on and everyone else carries on exactly as they are."
+        : loose
         ? `Right now all ${organisers().length} of you can lock in the dates, so the trip is one stray tap away from being decided. Take it on yourself and everyone else still votes, adds ideas and edits the plan exactly as they do now.`
         : "Everyone votes, adds ideas and edits the plan. But locking in the dates moves the trip for all of you at once, so that one is down to the organiser. Say who that is and the board stops being one stray tap away from being decided."}</p>
       <button class="btn primary" id="claimOrg" style="width:100%">${state.me
-        ? (loose ? "Just me, thanks" : "I'm running this trip") : "Pick your name first"}</button>
+        ? (loose || gone ? "I'll run it" : "I'm running this trip") : "Pick your name first"}</button>
       <div class="r-sub" id="orgMsg" style="margin-top:8px"></div>
     </div>`;
   }

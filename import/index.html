@@ -290,6 +290,11 @@
           home_city: "Chicago, USA", home_airport: "ORD",
           home_tz: S.meta.homeTimezone || "America/Chicago",
           travelers: travelers(), stops: stops(),
+          /* The traveler ids are all new, so whoever was on record as organiser
+             no longer exists. Left as it was it would be a dangling id: nobody
+             can finalise anything and the app has no reason to ask. Cleared, so
+             the Votes tab asks who is running the trip and one tap settles it. */
+          hosts: [],
         }).eq("code", code));
         say("  ✓ " + travelers().length + " travelers, " + stops().length + " cities", "ok");
 
