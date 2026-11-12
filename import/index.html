@@ -257,7 +257,10 @@
         trip = r.data;
         var done = (trip.links || {}).japan_import;
         $("#found").innerHTML = "Found <b>" + (trip.name || code) + "</b>" +
-          (done ? "<br><b style='color:#a8341c'>Already imported on " + done + ".</b> Running it again would duplicate everything." : "");
+          (done ? "<br><b style='color:#a8341c'>Already imported on " + done + ".</b> " +
+            "Running it again would duplicate every day, vote and guide card, so the button is off. " +
+            "If the import was wrong, the clean fix is a brand new trip on joinsquadtrip.com and this page pointed at that code. " +
+            "Nothing here can un-write the first one." : "");
         var sm = stopMap();
         redraw(sm);
         $("#start").addEventListener("change", function () { redraw(sm); });
