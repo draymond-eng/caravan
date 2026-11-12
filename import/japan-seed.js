@@ -23,8 +23,8 @@ const JAPAN_SEED = {
     tagline: "Six friends, ten nights in Japan",
     departUS: "2027-04-14",       // wheels up from the US (countdown target)
     landJapan: "2027-04-15",      // land Haneda, Thursday afternoon
-    endDate: "2027-04-25",        // fly home Sunday
-    nights: 10,
+    endDate: "2027-04-24",        // fly home Sunday
+    nights: 9,
     homeTimezone: "America/Chicago", // most of the group flies from Chicago
     tripTimezone: "Asia/Tokyo",
     currency: { code: "JPY", symbol: "¥", perUSD: 164 }, // yen near weak end - in our favor
@@ -60,19 +60,19 @@ const JAPAN_SEED = {
   stays: [
     { city: "tokyo",  label: "Tokyo",  nights: "Apr 15–19 · 4 nights", checkIn: "2027-04-15", checkOut: "2027-04-19" },
     { city: "hakone", label: "Hakone", nights: "Apr 19–20 · 1 night",  checkIn: "2027-04-19", checkOut: "2027-04-20" },
-    { city: "kyoto",  label: "Kyoto",  nights: "Apr 20–25 · 5 nights", checkIn: "2027-04-20", checkOut: "2027-04-25" },
+    { city: "kyoto",  label: "Kyoto",  nights: "Apr 20–24 · 4 nights", checkIn: "2027-04-20", checkOut: "2027-04-24" },
   ],
 
   /* ---- Flights / arrivals board ------------------------------------------- */
   flights: [
-    { label: "Chicago group (4)", who: [], dir: "arrive", airport: "HND", date: "2027-04-15", time: "afternoon", flight: "", note: "4 travelers out of Chicago (ORD). Separate booking." },
+    { label: "Chicago group (4)", who: [], dir: "arrive", airport: "HND", date: "2027-04-15", time: "15:25", flight: "UA 881", note: "ORD 12:15pm → HND 3:25pm, 13h10m nonstop, 787-10. Lands Thu Apr 15." },
     { label: "DC group (2)",      who: [], dir: "arrive", airport: "HND", date: "2027-04-15", time: "afternoon", flight: "", note: "2 travelers out of DC. Separate booking. Converge Thu afternoon." },
-    { label: "Everyone home",     who: ["dj","laura","ali","draymond","curtis","alexis"], dir: "depart", airport: "HND", date: "2027-04-25", time: "", flight: "", note: "Fly home from Haneda (not Kansai - no nonstop from Osaka; going out through KIX = ~18h vs ~11.5h)." },
+    { label: "Everyone home",     who: ["dj","laura","ali","draymond","curtis","alexis"], dir: "depart", airport: "HND", date: "2027-04-24", time: "17:15", flight: "UA 882", note: "UA 882, HND 5:15pm → ORD 3:15pm same day, 12h nonstop. Fly home from Haneda (not Kansai - no nonstop from Osaka; going out through KIX = ~18h vs ~11.5h)." },
   ],
   flightsNote: "Round-trip Haneda for everyone. Who's in the Chicago 4 vs the DC 2? → assign in-app once bookings are set.",
 
   /* ---- Fares: routes to watch + a target to book at ----------------------- */
-  fareDates: { depart: "2027-04-14", return: "2027-04-25" },
+  fareDates: { depart: "2027-04-14", return: "2027-04-24" },
   fareTarget: 1400, // USD/person - book when it hits this
   fareRoutes: [
     { id: "ORD-HND", label: "Chicago → Tokyo", from: "ORD", to: "HND", who: "Chicago 4" },
@@ -251,19 +251,9 @@ const JAPAN_SEED = {
         { time: "19:00", type: "food", title: "Cook at the house", note: "A market run and a night in - the couples' night-in of the trip. (Argues for a Kyoto stay with a kitchen!)", lat: 35.0037, lng: 135.7760 },
       ],
     },
+    
     {
-      date: "2027-04-23", city: "kyoto", title: "Nara by day, Osaka by night",
-      summary: "Todai-ji, the deer, Kasuga Taisha - then straight over to Osaka for Dotonbori at night, back to Kyoto around eleven.",
-      meetup: "Kyoto Station, JR Nara Line - 8:30am",
-      items: [
-        { time: "09:15", type: "sight", title: "Todai-ji & the deer", note: "One of the world's largest wooden buildings + a giant bronze Buddha. Buy 'shika senbei' - the deer bow for them.", lat: 34.6889, lng: 135.8398 },
-        { time: "11:30", type: "sight", title: "Kasuga Taisha", note: "Lantern-lined shrine in the forest - thousands of bronze and stone lanterns.", lat: 34.6811, lng: 135.8483 },
-        { time: "18:00", type: "food", title: "Dotonbori, Osaka", note: "Takoyaki, okonomiyaki, kushikatsu, the Glico sign. The one big Osaka night. → see Decisions: is the late night worth it?", lat: 34.6687, lng: 135.5013 },
-        { time: "23:00", type: "travel", title: "Back to Kyoto (~11pm)", note: "~15–30 min on the train. Late but worth it.", lat: 35.0037, lng: 135.7760 },
-      ],
-    },
-    {
-      date: "2027-04-24", city: "kyoto", title: "Slow last day + the big kaiseki",
+      date: "2027-04-23", city: "kyoto", title: "Slow last day + the big kaiseki",
       summary: "A slow last day with a private guide, Nijo Castle, the Philosopher's Path, then the one big kaiseki dinner - Kikunoi or Hyotei.",
       meetup: "Hotel lobby - relaxed morning start with the guide",
       items: [
@@ -273,11 +263,11 @@ const JAPAN_SEED = {
       ],
     },
     {
-      date: "2027-04-25", city: "kyoto", title: "Home - 7:30 Nozomi to Haneda",
-      summary: "The 7:30 Nozomi to Tokyo, then Haneda, then home. ⚠️ If the Haneda departure is before noon, the morning train doesn't work - we'd need a final Tokyo night.",
+      date: "2027-04-24", city: "kyoto", title: "Last morning in Kyoto, then home",
+      summary: "UA 882 leaves Haneda at 5:15pm, so there is a real last morning. Coffee, pack, one more thing you missed, then the midday Nozomi. Be at Haneda by 3pm.",
       meetup: "Kyoto Station - in time for the 7:30 Nozomi",
       items: [
-        { time: "07:30", type: "travel", title: "Nozomi Kyoto → Tokyo", note: "~2h15 back to Tokyo, then transfer to Haneda. Confirm the flight time first (see Decisions).", lat: 34.9858, lng: 135.7588 },
+        { time: "11:30", type: "travel", title: "Nozomi Kyoto → Tokyo", note: "~2h15 back to Tokyo, then transfer to Haneda. Confirm the flight time first (see Decisions).", lat: 34.9858, lng: 135.7588 },
         { time: "", type: "travel", title: "Haneda → home", note: "Round-trip out of Haneda. Be at the airport 3 hours early for international.", lat: 35.5494, lng: 139.7798 },
       ],
     },
@@ -386,7 +376,7 @@ const JAPAN_SEED = {
       ],
     },
     {
-      id: "d-return", title: "Apr 25 return: what time's the Haneda flight?", status: "open",
+      id: "d-return", title: "Is everyone on UA 882 home, or are some of us separate?", status: "open",
       note: "The one real logistics unknown. If the flight's before noon, the 7:30 Nozomi from Kyoto doesn't work - we'd need a final Tokyo night on the 24th.",
       options: [
         { id: "afternoon", label: "Afternoon flight - plan holds", note: "Morning Nozomi works fine." },
