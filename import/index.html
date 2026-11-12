@@ -203,6 +203,27 @@
       }
       return out;
     }
+    /* Flights are per person: one row each way, and everyone fills in their own
+       from the Flights tab. The two that are already booked go in so the board
+       is not empty, and so the shape of it is obvious to whoever looks next. */
+    function flights() {
+      var ids = {};
+      (S.travelers || []).forEach(function (t, i) { ids[t.id] = slug(t.name) + "-" + i; });
+      var booked = [
+        { who: "draymond", dir: "arrive", flight_no: "UA 881", time: "15:25", date: S.meta.landJapan,
+          note: "ORD 12:15pm, 13h10m nonstop, 787-10." },
+        { who: "ali", dir: "arrive", flight_no: "UA 881", time: "15:25", date: S.meta.landJapan,
+          note: "ORD 12:15pm, 13h10m nonstop, 787-10." },
+        { who: "draymond", dir: "depart", flight_no: "UA 882", time: "17:15", date: S.meta.endDate,
+          note: "Lands ORD 3:15pm the same day, 12h nonstop." },
+        { who: "ali", dir: "depart", flight_no: "UA 882", time: "17:15", date: S.meta.endDate,
+          note: "Lands ORD 3:15pm the same day, 12h nonstop." },
+      ];
+      return booked.filter(function (f) { return ids[f.who]; }).map(function (f) {
+        return { traveler: ids[f.who], dir: f.dir, airline: "United", flight_no: f.flight_no,
+                 airport: "HND", date: f.date, time: f.time, note: f.note };
+      });
+    }
     function notes() {
       var out = [];
       (S.packing || []).forEach(function (cat) {
@@ -230,6 +251,7 @@
                   guides(sm).filter(function (g) { return g.kind === "hood"; }).length + " neighborhoods"],
         ["Lists", notes().filter(function (n) { return n.list === "packing"; }).length + " packing items, " +
                   notes().filter(function (n) { return n.list === "note"; }).length + " booking notes"],
+        ["Flights", flights().length + " already booked, UA 881 out and UA 882 back. Everyone else adds their own."],
       ];
     }
 
@@ -306,6 +328,7 @@
           ["ideas", ideas()],
           ["guides", guides(sm)],
           ["notes", notes()],
+          ["flights", flights()],
         ];
         for (var j = 0; j < jobs.length; j++) {
           var table = jobs[j][0], rows = jobs[j][1];

@@ -276,6 +276,24 @@ const JAPAN_SEED = {
   /* ---- DECISIONS: open questions the group votes on ----------------------- */
   /* status: open|leaning|decided. Votes are stored per-device (see note in UI). */
   decisions: [
+    { id: "d-rooms", title: "Where do we sleep: one place for six, or separate rooms?",
+      status: "open",
+      note: "This one gates everything in Stays, so it is worth settling before anyone starts sending links. A whole house or apartment is usually cheaper and better for hanging out; hotel rooms are easier to book and easier to escape to.",
+      options: [
+        { id: "together", label: "One house or apartment, all six", note: "Cook, hang out, one bill to split." },
+        { id: "rooms", label: "Separate hotel rooms", note: "Easier to book, more privacy, breakfast included." },
+        { id: "mix", label: "Depends on the city", note: "House in Kyoto, ryokan in Hakone, hotel in Tokyo." },
+      ] },
+    { id: "d-spend", title: "Roughly what are we each spending, all in?",
+      status: "open",
+      note: "Flights, beds, food, trains, the lot. Nobody is being held to it. It just means we are shopping in the same bracket instead of finding out at the ryokan.",
+      options: [
+        { id: "lean",  label: "Around $3,500", note: "Business hotels, trains, great cheap food." },
+        { id: "mid",   label: "Around $4,500", note: "The baseline these notes were costed at." },
+        { id: "plus",  label: "Around $6,000", note: "Nicer rooms, the kaiseki, no flinching." },
+        { id: "open",  label: "Whatever it takes", note: "Let's just do it properly." },
+      ] },
+
     {
       id: "d-pace", title: "How hard do we go?", status: "open",
       note: "Sets the whole tone. There's no wrong answer - but we should all be on the same page before we book.",
@@ -322,31 +340,9 @@ const JAPAN_SEED = {
         { id: "chill", label: "Chill", note: "Dinner, a soak, and bed." },
       ],
     },
-    {
-      id: "d-kamakura", title: "Kamakura day: split up or stick together?", status: "open",
-      note: "The plan has the surfer paddling out at Kugenuma while the other five do the Great Buddha + bamboo, then everyone regroups for lunch.",
-      options: [
-        { id: "split", label: "Split - surf vs temples", note: "Regroup for lunch + Enoshima." },
-        { id: "together", label: "All together", note: "One plan, no one solo." },
-        { id: "weather", label: "Decide day-of", note: "Let the surf/weather call it." },
-      ],
-    },
-    {
-      id: "d-teamlab", title: "teamLab: Planets or Borderless?", status: "open",
-      note: "Both are jaw-dropping digital-art museums in Tokyo - we do one. BOOK timed tickets either way.",
-      options: [
-        { id: "planets", label: "Planets", note: "Barefoot through water + light rooms (Toyosu). Wear rollable pants." },
-        { id: "borderless", label: "Borderless", note: "Wander-and-get-lost maze of rooms (Azabudai)." },
-      ],
-    },
-    {
-      id: "d-osaka", title: "Nara by day + Osaka by night - worth the ~11pm return?", status: "open",
-      note: "Todai-ji and the deer, then over to Dotonbori for the street-food madness, back to Kyoto around eleven. Big day, big payoff.",
-      options: [
-        { id: "yes", label: "Yes - Dotonbori's a must", note: "Do the full day." },
-        { id: "no", label: "Nara only, easy Kyoto night", note: "Skip the late Osaka run." },
-      ],
-    },
+    
+    
+    
     {
       id: "d-kimono", title: "Kimono / yukata day in Kyoto?", status: "open",
       note: "Rent traditional dress for a day wandering the Higashiyama stone lanes. Unreal photos.",
@@ -356,25 +352,8 @@ const JAPAN_SEED = {
         { id: "skip", label: "Skip it", note: "Not our thing." },
       ],
     },
-    {
-      id: "d-craft", title: "Kyoto craft workshop - which one?", status: "open",
-      note: "A hands-on afternoon before we cook together at the house. We pick one for the group.",
-      options: [
-        { id: "pottery", label: "Pottery", note: "Throw a bowl to take home." },
-        { id: "indigo", label: "Indigo dyeing (aizome)", note: "Dye your own scarf/tenugui." },
-        { id: "knife", label: "Knife making", note: "Finish + sharpen your own blade." },
-        { id: "wood", label: "Woodwork", note: "Chopsticks / small joinery." },
-      ],
-    },
-    {
-      id: "d-kaiseki", title: "The big kaiseki dinner - where?", status: "open",
-      note: "The one splurge meal. Both are legendary and 300+ years old - and both book out weeks ahead, so we decide early.",
-      options: [
-        { id: "kikunoi", label: "Kikunoi", note: "3 Michelin stars, Higashiyama." },
-        { id: "hyotei", label: "Hyotei", note: "400+ years old, near Nanzenji." },
-        { id: "either", label: "Whichever we can book", note: "First one with 6 seats wins." },
-      ],
-    },
+    
+    
     {
       id: "d-return", title: "Is everyone on UA 882 home, or are some of us separate?", status: "open",
       note: "The one real logistics unknown. If the flight's before noon, the 7:30 Nozomi from Kyoto doesn't work - we'd need a final Tokyo night on the 24th.",
