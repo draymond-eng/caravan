@@ -144,38 +144,6 @@
         };
       });
     }
-    /* Dates live in the prose too. "Apr 25 return: what time's the Haneda
-       flight?" is wrong the moment the trip moves a day, and a vote that
-       contradicts the itinerary above it is worse than no vote. Only a month
-       name followed by a day number is touched, and only within the dates the
-       trip actually covers, so ordinary numbers are left alone. */
-    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    function reDate(text, n) {
-      if (!n || !text) return text || "";
-      var year = Number(S.meta.landJapan.slice(0, 4));
-      return String(text).replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})\b/g,
-        function (whole, mon, day) {
-          var m = MONTHS.indexOf(mon);
-          if (m < 0) return whole;
-          var d = new Date(year, m, Number(day), 12);
-          if (d.getMonth() !== m || d.getDate() !== Number(day)) return whole;   // not a real date
-          d.setDate(d.getDate() + n);
-          return MONTHS[d.getMonth()] + " " + d.getDate();
-        });
-    }
-    function decisions() {
-      var n = shiftBy();
-      return (S.decisions || []).map(function (d) {
-        return {
-          title: reDate(d.title, n), note: reDate(d.note || "", n), status: "open", author: "",
-          // the option's own note is folded into the label: SquadTrip shows the
-          // label and nothing else, and losing the reasoning would be the point
-          options: (d.options || []).map(function (o) {
-            return { id: o.id, label: o.note ? o.label + " - " + o.note : o.label };
-          }),
-        };
-      });
-    }
     function ideas() {
       var out = (S.ideas || []).map(function (i) {
         return { title: i.title, note: i.note || "", tag: i.city && i.city !== "any" ? i.city : "", author: "" };
@@ -245,7 +213,7 @@
         ["Travelers", travelers().length + " people"],
         ["Cities", stops().map(function (s) { return s.label; }).join(" → ")],
         ["Days", days(sm).length + " days, " + days(sm).reduce(function (n, d) { return n + d.items.length; }, 0) + " events"],
-        ["Votes", decisions().length + " open questions"],
+        ["Votes", "nothing. The tab starts empty and anyone can ask the group a question"],
         ["Ideas", ideas().length + " ideas"],
         ["Guide", guides(sm).filter(function (g) { return g.kind === "guide"; }).length + " cards, " +
                   guides(sm).filter(function (g) { return g.kind === "hood"; }).length + " neighborhoods"],
@@ -324,7 +292,6 @@
         // and so the log says exactly how far it got if something does fail.
         var jobs = [
           ["days", days(sm)],
-          ["decisions", decisions()],
           ["ideas", ideas()],
           ["guides", guides(sm)],
           ["notes", notes()],

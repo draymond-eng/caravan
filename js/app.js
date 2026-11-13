@@ -1661,6 +1661,17 @@
           "Places are in. The group is waiting on votes before anyone books.",
           "🏨 Go to Stays", "stays"));
       }
+      /* A stop nobody has suggested anywhere for prompts nothing at all, so a
+         trip with no accommodation anywhere told you it was all caught up.
+         That is the emptiest a trip can be and the one thing most worth doing,
+         and the first person through the door is exactly who should see it. */
+      const bare = (TRIP.stops || []).filter((st) =>
+        !state.stayOptions.some((o) => o.stop === st.id && o.kind !== "block"));
+      if (bare.length) {
+        cards.push(actCard("green", "Where we sleep", `Nowhere suggested yet for ${bare.map((x) => esc(x.label)).join(", ")}`,
+          "Anyone can put places up and the group votes. Worth getting in early: the good places go first.",
+          "🏨 Add a place", "stays"));
+      }
     }
     /* Nothing outstanding is worth saying out loud too, but only when it is
        true. Having voted yourself is not the same as the trip being settled,
