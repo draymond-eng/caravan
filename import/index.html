@@ -58,6 +58,8 @@
         alongside whatever is already on the trip.
       </p>
       <button class="btn primary" id="go" style="width:100%;margin-top:14px">Bring it all across</button>
+      <button class="btn ghost" id="fix" style="width:100%;margin-top:10px;display:none">Bring it up to date</button>
+      <div class="r-sub" id="fixWhy" style="margin-top:8px;display:none"></div>
       <div class="log" id="log" style="display:none"></div>
     </div>
   </div>
@@ -223,6 +225,62 @@
       ];
     }
 
+    /* A trip imported before today is not broken, it is just behind: it has the
+       starter questions that are no longer imported, and it has no flights
+       because the import did not carry them yet. Making someone rebuild a trip
+       from scratch to fix that is the tool failing to do its job.
+
+       Deliberately narrow. It removes only questions whose titles match what
+       the old import itself wrote, so anything the group has since asked is
+       untouched, and it adds flights only where that person has none. */
+    var OLD_QUESTIONS = ["How hard do we go?", "If we splurge big on ONE thing, it's\u2026",
+      "The Hakone onsen night - in or out?", "How many nights do we all eat together?",
+      "What's our night-out energy?", "Kamakura day: split up or stick together?",
+      "teamLab: Planets or Borderless?",
+      "Nara by day + Osaka by night - worth the ~11pm return?",
+      "Kimono / yukata day in Kyoto?", "Kyoto craft workshop - which one?",
+      "The big kaiseki dinner - where?", "Apr 25 return: what time's the Haneda flight?",
+      "Is everyone on UA 882 home, or are some of us separate?",
+      "Where do we sleep: one place for six, or separate rooms?",
+      "Roughly what are we each spending, all in?"];
+
+    async function surveyRepair(code) {
+      var d = await client.from("decisions").select("*").eq("trip", code);
+      if (d.error) throw d.error;
+      var f = await client.from("flights").select("*").eq("trip", code);
+      if (f.error) throw f.error;
+      var mine = (d.data || []).filter(function (x) { return OLD_QUESTIONS.indexOf(x.title) !== -1; });
+      var theirs = (d.data || []).filter(function (x) { return OLD_QUESTIONS.indexOf(x.title) === -1; });
+      var have = {};
+      (f.data || []).forEach(function (x) { have[x.traveler + "|" + x.dir] = 1; });
+      var missing = flights().filter(function (x) { return !have[x.traveler + "|" + x.dir]; });
+      return { drop: mine, keep: theirs, addFlights: missing };
+    }
+
+    async function runRepair(code) {
+      var plan = await surveyRepair(code);
+      logBox.innerHTML = "";
+      if (!plan.drop.length && !plan.addFlights.length) {
+        say("Nothing to change. This trip is already up to date.", "ok");
+        return;
+      }
+      if (plan.drop.length) {
+        say("Removing " + plan.drop.length + " starter question" + (plan.drop.length === 1 ? "" : "s") + "\u2026");
+        for (var i = 0; i < plan.drop.length; i++) {
+          await did(client.from("decisions").delete().eq("id", plan.drop[i].id));
+        }
+        say("  \u2713 gone" + (plan.keep.length ? ", and the " + plan.keep.length + " the group added are untouched" : ""), "ok");
+      }
+      if (plan.addFlights.length) {
+        say("Adding the booked flights\u2026");
+        var rows = plan.addFlights.map(function (r) { var o = {}; for (var k in r) o[k] = r[k]; o.trip = code; return o; });
+        await did(client.from("flights").insert(rows));
+        say("  \u2713 " + rows.length + " rows, UA 881 out and UA 882 back", "ok");
+      }
+      say("");
+      say("Done. Open the trip, it is current now.", "ok");
+    }
+
     /* ---- wiring ------------------------------------------------------------ */
     function redraw(sm) {
       var n = shiftBy(), ds = days(sm);
@@ -257,9 +315,41 @@
         $("#step2").style.display = "block";
         $("#go").disabled = !!done;
         $("#go").style.opacity = done ? .5 : 1;
+        if (done) {
+          var plan = await surveyRepair(code);
+          var needs = plan.drop.length || plan.addFlights.length;
+          $("#fix").style.display = needs ? "block" : "none";
+          $("#fixWhy").style.display = "block";
+          $("#fixWhy").innerHTML = needs
+            ? "This one was imported before the latest changes. Bringing it up to date removes <b>" +
+              plan.drop.length + "</b> starter question" + (plan.drop.length === 1 ? "" : "s") +
+              " and adds <b>" + plan.addFlights.length + "</b> flight row" + (plan.addFlights.length === 1 ? "" : "s") +
+              ". Nothing else is touched, and no day, idea or guide card is rewritten."
+            : "This trip is already up to date. Nothing to do.";
+        } else {
+          $("#fix").style.display = "none";
+          $("#fixWhy").style.display = "none";
+        }
       } catch (e) {
         $("#found").innerHTML = "<b>Couldn't reach the database.</b> " +
           "If this says Load failed, the Supabase project is probably paused. (" + (e.message || e) + ")";
+      }
+    });
+
+    $("#fix").addEventListener("click", async function () {
+      var btn = $("#fix");
+      btn.disabled = true; btn.style.opacity = .6; btn.textContent = "Bringing it up to date\u2026";
+      try {
+        await runRepair(trip.code);
+        btn.textContent = "Finished";
+        var a = document.createElement("a");
+        a.className = "btn primary"; a.style.cssText = "width:100%;margin-top:12px;display:block;text-align:center";
+        a.href = "../index.html?t=" + trip.code; a.textContent = "Open the trip";
+        btn.parentNode.appendChild(a);
+      } catch (e) {
+        say("");
+        say("Stopped: " + (e.message || e), "err");
+        btn.disabled = false; btn.style.opacity = 1; btn.textContent = "Try again";
       }
     });
 
